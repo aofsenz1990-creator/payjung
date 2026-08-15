@@ -39,10 +39,12 @@ export async function GET(request: NextRequest) {
     },
   }
 
+  const deep = request.nextUrl.searchParams.get('deep')
+
   // ค่าเริ่มต้นตอบทันทีโดยไม่แตะฐานข้อมูล จะได้ตรวจการตั้งค่าได้แม้ตอนฐานข้อมูลค้าง
-  if (request.nextUrl.searchParams.get('deep') !== '1') {
+  if (deep !== '1' && deep !== 'seq') {
     return NextResponse.json(
-      { ...base, hint: 'เติม ?deep=1 เพื่อวัดเวลาจริงของฐานข้อมูล' },
+      { ...base, hint: 'เติม ?deep=1 (ยิงพร้อมกัน) หรือ ?deep=seq (วัดทีละคำสั่ง)' },
       { headers: { 'cache-control': 'no-store' } }
     )
   }
@@ -71,7 +73,7 @@ export async function GET(request: NextRequest) {
   ]
 
   // โหมดวัดทีละคำสั่ง เพื่อหาว่าค้างที่คำสั่งไหน
-  if (request.nextUrl.searchParams.get('deep') === 'seq') {
+  if (deep === 'seq') {
     const results: Record<string, unknown> = {}
     for (const [name, run] of CASES) results[name] = await timed(run)
     return NextResponse.json(
