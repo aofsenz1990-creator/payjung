@@ -68,7 +68,11 @@ export default async function ShopAccountPage() {
       </div>
 
       <p className="mb-6 rounded-xl border border-ink-700/70 bg-ink-850/70 px-4 py-3 text-xs leading-relaxed text-mute backdrop-blur-sm">
-        เครดิตเติมได้โดยติดต่อทางร้านเท่านั้น (ดูช่องทางติดต่อด้านล่างหน้าเว็บ) —{' '}
+        ต้องการเครดิตเพิ่ม? โอนเงินแล้วแจ้งพร้อมสลิปได้ที่หน้า{' '}
+        <Link href="/shop/topup" className="text-brand-400 underline">
+          เติมเครดิต
+        </Link>{' '}
+        ทางร้านจะตรวจสอบและเติมให้ —{' '}
         <Link href="/shop" className="text-brand-400 underline">
           เลือกเกมที่จะเติม
         </Link>

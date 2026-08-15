@@ -32,6 +32,12 @@ export const SITE_KEYS = [
   },
   { key: 'shop_tagline', label: 'ข้อความใต้ชื่อร้าน', placeholder: 'เติมเกมไว ราคาถูก บริการ 24 ชม.' },
   { key: 'announcement', label: 'ประกาศแถบบนสุด', placeholder: 'เว้นว่างถ้าไม่ต้องการแสดง' },
+  { key: 'bank_name', label: 'ธนาคารที่ให้ลูกค้าโอนเข้า', placeholder: 'เช่น กสิกรไทย' },
+  { key: 'bank_account_no', label: 'เลขที่บัญชี', placeholder: 'xxx-x-xxxxx-x' },
+  { key: 'bank_account_name', label: 'ชื่อบัญชี', placeholder: 'ชื่อ-นามสกุล เจ้าของบัญชี' },
+  { key: 'promptpay', label: 'พร้อมเพย์ (ถ้ามี)', placeholder: 'เบอร์โทร หรือเลขบัตรประชาชน' },
+  { key: 'payment_qr', label: 'QR Code รับเงิน', placeholder: '', image: true as const },
+  { key: 'topup_note', label: 'ข้อความแจ้งลูกค้าตอนเติมเครดิต', placeholder: 'เช่น โอนแล้วแนบสลิป รอไม่เกิน 10 นาที' },
   { key: 'contact_line', label: 'LINE (ใส่ @id หรือลิงก์ก็ได้)', placeholder: '@payjung' },
   {
     key: 'contact_line_qr',

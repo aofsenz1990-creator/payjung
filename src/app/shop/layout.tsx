@@ -62,6 +62,9 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
                 <span className="font-bold text-good">{money(customer.credit)}</span>
                 <span className="text-xs text-mute"> บาท</span>
               </Link>
+              <Link href="/shop/topup" className="btn-primary btn-sm">
+                + เติมเครดิต
+              </Link>
               <form action={shopLogoutAction}>
                 <button type="submit" className="btn-ghost btn-sm">
                   ออก

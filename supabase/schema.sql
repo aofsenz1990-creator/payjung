@@ -175,6 +175,22 @@ create table if not exists news (
     created_at timestamptz not null default now()
   );
 
+create table if not exists credit_requests (
+    id serial primary key,
+    customer_id int not null references customers(id) on delete cascade,
+    amount numeric(12,2) not null default 0,
+    slip_path text,
+    note text,
+    status text not null default 'pending',
+    reject_reason text,
+    reviewed_by uuid references profiles(id) on delete set null,
+    reviewed_at timestamptz,
+    created_at timestamptz not null default now()
+  );
+
+create index if not exists credit_requests_status_idx
+     on credit_requests (status, created_at desc);
+
 create table if not exists claims (
     id serial primary key,
     customer_id int references customers(id) on delete set null,
