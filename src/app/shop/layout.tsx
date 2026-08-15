@@ -28,7 +28,12 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-20 bg-ink-950 bg-cover bg-center bg-no-repeat"
+        /*
+          จอแคบ (มือถือ) ใช้ความกว้างเต็มแล้วชิดบน เพื่อให้เห็นลายที่อยู่ริมภาพครบ
+          ถ้าใช้ cover บนจอแคบ ภาพแนวนอนจะถูกครอบจนเหลือแต่ตรงกลางที่ว่างเปล่า
+          จอกว้างค่อยใช้ cover ให้เต็มพื้นที่
+        */
+        className="pointer-events-none fixed inset-0 -z-20 bg-ink-950 bg-[length:100%_auto] bg-top bg-no-repeat md:bg-cover md:bg-center"
         style={{ backgroundImage: `url(${shopBackground(settings)})` }}
       />
       {/* ฝ้าทับให้ตัวหนังสืออ่านง่าย ปรับความเข้มได้จากหลังร้าน */}

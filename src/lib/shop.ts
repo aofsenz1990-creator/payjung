@@ -62,9 +62,9 @@ export function shopBackground(settings: SiteSettings) {
  * เขียนคลาสเต็ม ๆ ไว้ทุกตัว เพราะ Tailwind ต้องเห็นชื่อคลาสตรง ๆ ในโค้ดถึงจะสร้าง CSS ให้
  */
 const OVERLAY_CLASSES = {
-  light: 'from-ink-950/30 via-ink-950/50 to-ink-950/78',
-  medium: 'from-ink-950/55 via-ink-950/75 to-ink-950/92',
-  dark: 'from-ink-950/78 via-ink-950/90 to-ink-950/97',
+  light: 'from-ink-950/10 via-ink-950/30 to-ink-950/65',
+  medium: 'from-ink-950/30 via-ink-950/50 to-ink-950/80',
+  dark: 'from-ink-950/60 via-ink-950/78 to-ink-950/92',
 } as const
 
 export function shopOverlayClass(settings: SiteSettings) {
