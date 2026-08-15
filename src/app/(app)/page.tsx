@@ -3,6 +3,7 @@ import { q, q1 } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
 import { dateTime, money, monthLabel, num, recentMonths, safeMonth, todayISO } from '@/lib/format'
 import { BarChart, RankBars } from '@/components/Charts'
+import { MenuPermissions, loadStaff } from '@/components/MenuPermissions'
 import { MonthPicker } from '@/components/MonthPicker'
 import {
   Badge,
@@ -134,6 +135,9 @@ export default async function DashboardPage({
                 (select count(*) from customers)::int as customers`
       ),
     ])
+
+  // การ์ดกำหนดสิทธิ์เมนูแสดงเฉพาะผู้ดูแลระบบ พนักงานไม่ต้องเสียเวลาโหลด
+  const staff = showMoney ? await loadStaff() : []
 
   const t = totals ?? {
     today_revenue: 0,
@@ -316,6 +320,13 @@ export default async function DashboardPage({
           </div>
         )}
       </div>
+
+      {/* กำหนดสิทธิ์เมนูของพนักงาน — เฉพาะผู้ดูแลระบบ */}
+      {showMoney ? (
+        <div className="mt-6">
+          <MenuPermissions staff={staff} compact />
+        </div>
+      ) : null}
     </>
   )
 }
