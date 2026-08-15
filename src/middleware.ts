@@ -1,7 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/setup']
+// /shop คือหน้าเว็บสำหรับลูกค้า มีระบบล็อกอินของตัวเองแยกจากหลังร้าน
+const PUBLIC_PATHS = ['/login', '/setup', '/shop']
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl

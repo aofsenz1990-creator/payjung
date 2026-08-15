@@ -4,6 +4,7 @@ import { requirePage } from '@/lib/auth'
 import { deleteCustomerAction, saveCustomerAction } from '@/lib/actions/catalog'
 import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
+import { CreditPanel, loadCreditCustomers } from '@/components/CreditPanel'
 import { Empty, PageHeader, SectionTitle } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
@@ -30,7 +31,7 @@ export default async function CustomersPage({
   const { edit, q: keyword } = await searchParams
   const search = (keyword ?? '').trim()
 
-  const [customers, editing] = await Promise.all([
+  const [customers, editing, creditCustomers] = await Promise.all([
     q<CustomerRow>(
       `select c.id, c.name, c.phone, c.contact, c.game_uid, c.note,
               coalesce(t.orders, 0)::int as orders,
@@ -51,6 +52,7 @@ export default async function CustomersPage({
           [Number(edit)]
         )
       : Promise.resolve(null),
+    loadCreditCustomers(),
   ])
 
   return (
@@ -227,6 +229,10 @@ export default async function CustomersPage({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <CreditPanel customers={creditCustomers} isAdmin={isAdmin} />
       </div>
     </>
   )

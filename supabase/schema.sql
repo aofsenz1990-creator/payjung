@@ -85,6 +85,15 @@ create table if not exists customers (
     created_at timestamptz not null default now()
   );
 
+alter table customers add column if not exists credit numeric(12,2) not null default 0;
+
+alter table customers add column if not exists auth_user_id uuid;
+
+alter table customers add column if not exists web_enabled boolean not null default false;
+
+create unique index if not exists customers_auth_uniq
+     on customers (auth_user_id) where auth_user_id is not null;
+
 create table if not exists sales (
     id serial primary key,
     code text not null unique,
@@ -114,6 +123,39 @@ alter table sales add column if not exists customer_name text;
 alter table sales add column if not exists source text;
 
 create index if not exists sales_source_idx on sales (source);
+
+alter table sales add column if not exists channel text not null default 'shop';
+
+create table if not exists credit_transactions (
+    id serial primary key,
+    customer_id int not null references customers(id) on delete cascade,
+    kind text not null,
+    amount numeric(12,2) not null,
+    balance_after numeric(12,2) not null,
+    note text,
+    sale_id int references sales(id) on delete set null,
+    created_by uuid references profiles(id) on delete set null,
+    created_at timestamptz not null default now()
+  );
+
+create index if not exists credit_tx_customer_idx
+     on credit_transactions (customer_id, created_at desc);
+
+create table if not exists news (
+    id serial primary key,
+    title text not null,
+    body text,
+    image_url text,
+    link_url text,
+    is_published boolean not null default true,
+    pinned boolean not null default false,
+    created_at timestamptz not null default now()
+  );
+
+create table if not exists site_settings (
+    key text primary key,
+    value text
+  );
 
 create index if not exists sales_sold_at_idx on sales (sold_at desc);
 

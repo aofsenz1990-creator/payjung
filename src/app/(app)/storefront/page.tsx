@@ -8,7 +8,9 @@ import {
   toggleGamePublishedAction,
   toggleProductPublishedAction,
 } from '@/lib/actions/storefront'
-import { money, num } from '@/lib/format'
+import { deleteNewsAction, saveNewsAction, saveSiteSettingsAction } from '@/lib/actions/shop'
+import { getSiteSettings, SITE_KEYS } from '@/lib/shop'
+import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
 
@@ -48,6 +50,17 @@ type ProductRow = {
   provider_sku: string | null
 }
 
+type NewsRow = {
+  id: number
+  title: string
+  body: string | null
+  image_url: string | null
+  link_url: string | null
+  is_published: boolean
+  pinned: boolean
+  created_at: string
+}
+
 const AUTH_LABELS: Record<string, string> = {
   bearer: 'Bearer Token (ส่งใน Authorization)',
   apikey: 'API Key (ส่งใน header)',
@@ -63,7 +76,8 @@ export default async function StorefrontPage({
   await requireAdmin()
   const { provider: editProvider, game: editGame } = await searchParams
 
-  const [providers, games, products, editingProvider, editingGame] = await Promise.all([
+  const [providers, games, products, editingProvider, editingGame, news, settings] =
+    await Promise.all([
     q<Provider>(
       `select p.id, p.name, p.base_url, p.auth_type, (p.api_key is not null) as has_key,
               p.note, p.priority, p.is_active,
@@ -100,7 +114,12 @@ export default async function StorefrontPage({
           [Number(editGame)]
         )
       : Promise.resolve(null),
-  ])
+      q<NewsRow>(
+        `select id, title, body, image_url, link_url, is_published, pinned, created_at
+           from news order by pinned desc, created_at desc`
+      ),
+      getSiteSettings(),
+    ])
 
   const publishedGames = games.filter((g) => g.is_published).length
   const publishedProducts = products.filter((p) => p.is_published).length
@@ -113,11 +132,14 @@ export default async function StorefrontPage({
         subtitle="ตั้งค่าเกม รูปภาพ และแพ็กเกจที่จะแสดงบนหน้าเว็บสำหรับลูกค้า พร้อมผูกกับผู้ให้บริการ API ที่จะเติมให้"
       />
 
-      <div className="mb-6 rounded-xl border border-brand-500/30 bg-brand-500/10 px-4 py-3 text-xs leading-relaxed text-brand-400">
-        <b>สถานะ:</b> ส่วนจัดการข้อมูลพร้อมใช้แล้ว — ตั้งค่าเกม รูป ราคา แพ็กเกจ
-        และผูกผู้ให้บริการ API ได้เลย ส่วนหน้าเว็บที่ลูกค้าเข้ามากดซื้อเอง
-        กับการยิงคำสั่งเติมไปยัง API จริง ยังไม่ได้เปิดใช้งาน
-        รอข้อมูลผู้ให้บริการที่ร้านสมัครไว้ก่อน
+      <div className="mb-6 rounded-xl border border-good/30 bg-good/10 px-4 py-3 text-xs leading-relaxed text-good">
+        <b>หน้าเว็บลูกค้าเปิดใช้งานแล้ว</b> —{' '}
+        <a href="/shop" target="_blank" rel="noreferrer" className="underline">
+          เปิดดูหน้าเว็บ ↗
+        </a>{' '}
+        ลูกค้าค้นหาเกม เลือกแพ็กเกจ ใส่จำนวน แล้วกดซื้อโดยตัดจากเครดิตที่ร้านเติมให้
+        (เติมเครดิตได้ที่เมนู <b>รายชื่อลูกค้า</b>) ส่วนการยิงคำสั่งไปยัง API
+        ของผู้ให้บริการยังไม่ได้ต่อ — ตอนนี้บิลจากเว็บจะขึ้นสถานะ “รอดำเนินการ” ให้ร้านเติมเอง
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -597,6 +619,128 @@ export default async function StorefrontPage({
             </table>
           </div>
         )}
+      </div>
+
+      {/* ---------------- ข่าวสาร + ช่องทางติดต่อ ---------------- */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-[24rem_1fr]">
+        <div className="space-y-6">
+          <div className="card h-fit">
+            <SectionTitle>ตั้งค่าหน้าเว็บ &amp; ช่องทางติดต่อ</SectionTitle>
+            <ActionForm action={saveSiteSettingsAction} className="space-y-3">
+              {SITE_KEYS.map((s) => (
+                <div key={s.key}>
+                  <label className="label" htmlFor={`setting_${s.key}`}>
+                    {s.label}
+                  </label>
+                  <input
+                    id={`setting_${s.key}`}
+                    name={`setting_${s.key}`}
+                    className="input"
+                    defaultValue={settings[s.key] ?? ''}
+                    placeholder={s.placeholder}
+                  />
+                </div>
+              ))}
+              <SubmitButton className="btn-primary w-full">บันทึกการตั้งค่า</SubmitButton>
+            </ActionForm>
+          </div>
+
+          <div className="card h-fit">
+            <SectionTitle>เพิ่มข่าวสาร</SectionTitle>
+            <ActionForm action={saveNewsAction} className="space-y-3" resetOnSuccess>
+              <div>
+                <label className="label" htmlFor="title">
+                  หัวข้อ
+                </label>
+                <input id="title" name="title" className="input" required />
+              </div>
+              <div>
+                <label className="label" htmlFor="body">
+                  เนื้อหา
+                </label>
+                <textarea id="body" name="body" className="input" rows={3} />
+              </div>
+              <div>
+                <label className="label" htmlFor="news_image">
+                  ลิงก์รูป
+                </label>
+                <input id="news_image" name="image_url" className="input" placeholder="https://..." />
+              </div>
+              <div>
+                <label className="label" htmlFor="link_url">
+                  ลิงก์เมื่อกด (ถ้ามี)
+                </label>
+                <input id="link_url" name="link_url" className="input" placeholder="https://..." />
+              </div>
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    name="is_published"
+                    defaultChecked
+                    className="size-4 rounded border-ink-600 bg-ink-850"
+                  />
+                  แสดงบนเว็บ
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    name="pinned"
+                    className="size-4 rounded border-ink-600 bg-ink-850"
+                  />
+                  ปักหมุดขึ้นก่อน
+                </label>
+              </div>
+              <SubmitButton className="btn-primary w-full">เพิ่มข่าว</SubmitButton>
+            </ActionForm>
+          </div>
+        </div>
+
+        <div className="card">
+          <SectionTitle right={<span className="text-xs text-mute">{num(news.length)} ข่าว</span>}>
+            ข่าวสารที่แสดงด้านล่างหน้าเว็บ
+          </SectionTitle>
+          {news.length === 0 ? (
+            <Empty>ยังไม่มีข่าวสาร เพิ่มข่าวแรกจากฟอร์มด้านซ้าย</Empty>
+          ) : (
+            <div className="space-y-3">
+              {news.map((n) => (
+                <div
+                  key={n.id}
+                  className="flex gap-3 rounded-xl border border-ink-700 bg-ink-850 p-3"
+                >
+                  {n.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={n.image_url}
+                      alt={n.title}
+                      className="size-16 shrink-0 rounded-lg object-cover"
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-white">{n.title}</span>
+                      {n.pinned ? <Badge tone="brand">ปักหมุด</Badge> : null}
+                      {n.is_published ? (
+                        <Badge tone="good">แสดงอยู่</Badge>
+                      ) : (
+                        <Badge>ซ่อนอยู่</Badge>
+                      )}
+                    </div>
+                    {n.body ? (
+                      <p className="mt-1 line-clamp-2 text-xs text-mute">{n.body}</p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-mute">{dateOnly(n.created_at)}</p>
+                  </div>
+                  <form action={deleteNewsAction} className="shrink-0">
+                    <input type="hidden" name="id" value={n.id} />
+                    <ConfirmButton message={`ลบข่าว "${n.title}"?`}>ลบ</ConfirmButton>
+                  </form>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </>
   )

@@ -81,6 +81,14 @@ export const SCHEMA_STATEMENTS: string[] = [
     created_at timestamptz not null default now()
   )`,
 
+  // ระบบเครดิต — ร้านเป็นคนเติมเครดิตให้ลูกค้าเอง แล้วลูกค้าใช้เครดิตกดซื้อบนหน้าเว็บ
+  `alter table customers add column if not exists credit numeric(12,2) not null default 0`,
+  // ผูกกับบัญชี Supabase Auth เพื่อให้ลูกค้าเข้าเว็บได้ (ร้านเป็นคนสร้างบัญชีให้)
+  `alter table customers add column if not exists auth_user_id uuid`,
+  `alter table customers add column if not exists web_enabled boolean not null default false`,
+  `create unique index if not exists customers_auth_uniq
+     on customers (auth_user_id) where auth_user_id is not null`,
+
   `create table if not exists sales (
     id serial primary key,
     code text not null unique,
@@ -110,6 +118,41 @@ export const SCHEMA_STATEMENTS: string[] = [
   // ลูกค้ามาจากช่องทางไหน เช่น Facebook, LINE, หน้าร้าน
   `alter table sales add column if not exists source text`,
   `create index if not exists sales_source_idx on sales (source)`,
+  // บิลนี้มาจากไหน: shop = พนักงานลงเอง, web = ลูกค้ากดซื้อเองบนหน้าเว็บ
+  `alter table sales add column if not exists channel text not null default 'shop'`,
+
+  // สมุดบัญชีเครดิตของลูกค้า ทุกการเปลี่ยนแปลงต้องมีบรรทัดบันทึกไว้เสมอ
+  `create table if not exists credit_transactions (
+    id serial primary key,
+    customer_id int not null references customers(id) on delete cascade,
+    kind text not null,
+    amount numeric(12,2) not null,
+    balance_after numeric(12,2) not null,
+    note text,
+    sale_id int references sales(id) on delete set null,
+    created_by uuid references profiles(id) on delete set null,
+    created_at timestamptz not null default now()
+  )`,
+  `create index if not exists credit_tx_customer_idx
+     on credit_transactions (customer_id, created_at desc)`,
+
+  // ข่าวสารที่แสดงด้านล่างหน้าเว็บ
+  `create table if not exists news (
+    id serial primary key,
+    title text not null,
+    body text,
+    image_url text,
+    link_url text,
+    is_published boolean not null default true,
+    pinned boolean not null default false,
+    created_at timestamptz not null default now()
+  )`,
+
+  // ค่าตั้งค่าทั่วไปของหน้าเว็บ เช่น ช่องทางติดต่อ ข้อความประกาศ
+  `create table if not exists site_settings (
+    key text primary key,
+    value text
+  )`,
 
   `create index if not exists sales_sold_at_idx on sales (sold_at desc)`,
   `create index if not exists sales_customer_idx on sales (customer_id)`,

@@ -1,0 +1,179 @@
+'use client'
+
+import { useState } from 'react'
+import { ActionForm, SubmitButton, type ActionState } from '@/components/ActionForm'
+
+export type BuyPackage = {
+  id: number
+  name: string
+  sell_price: number
+  image_url: string | null
+  track_stock: boolean
+  stock_qty: number
+}
+
+const baht = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/** เลือกแพ็กเกจ ใส่จำนวน แล้วกดสั่งซื้อโดยตัดจากเครดิต */
+export function BuyForm({
+  action,
+  packages,
+  credit,
+  signedIn,
+  defaultGameUid,
+}: {
+  action: (formData: FormData) => Promise<ActionState>
+  packages: BuyPackage[]
+  credit: number
+  signedIn: boolean
+  defaultGameUid?: string | null
+}) {
+  const [productId, setProductId] = useState<number | null>(packages[0]?.id ?? null)
+  const [qty, setQty] = useState(1)
+
+  const selected = packages.find((p) => p.id === productId) ?? null
+  const total = selected ? selected.sell_price * qty : 0
+  const notEnough = signedIn && total > credit
+  const outOfStock = Boolean(selected?.track_stock && selected.stock_qty < qty)
+
+  return (
+    <ActionForm action={action} className="space-y-5">
+      <input type="hidden" name="product_id" value={productId ?? ''} />
+      <input type="hidden" name="qty" value={qty} />
+
+      <div>
+        <p className="label">เลือกแพ็กเกจ</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {packages.map((p) => {
+            const active = p.id === productId
+            const soldOut = p.track_stock && p.stock_qty <= 0
+            return (
+              <button
+                key={p.id}
+                type="button"
+                disabled={soldOut}
+                onClick={() => setProductId(p.id)}
+                className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
+                  soldOut
+                    ? 'cursor-not-allowed border-ink-800 bg-ink-900 opacity-50'
+                    : active
+                      ? 'border-brand-500 bg-brand-600/15'
+                      : 'border-ink-700 bg-ink-850 hover:border-ink-600'
+                }`}
+              >
+                {p.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={p.image_url}
+                    alt={p.name}
+                    className="size-12 shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-ink-900 text-xl">
+                    💎
+                  </span>
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-white">{p.name}</span>
+                  <span className="block text-sm text-brand-400">
+                    {baht.format(p.sell_price)} บาท
+                  </span>
+                  {p.track_stock ? (
+                    <span className="block text-xs text-mute">
+                      {soldOut ? 'สินค้าหมด' : `เหลือ ${p.stock_qty} ชิ้น`}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="label" htmlFor="game_account">
+            ไอดีเกม / UID ที่จะเติม
+          </label>
+          <input
+            id="game_account"
+            name="game_account"
+            className="input"
+            defaultValue={defaultGameUid ?? ''}
+            placeholder="เช่น 123456789"
+            required
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="qty">
+            จำนวนแพ็ก
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-ghost px-3"
+              onClick={() => setQty((v) => Math.max(1, v - 1))}
+            >
+              −
+            </button>
+            <input
+              id="qty"
+              type="number"
+              min={1}
+              max={99}
+              className="input text-center"
+              value={qty}
+              onChange={(e) => setQty(Math.max(1, Math.min(99, Number(e.target.value) || 1)))}
+            />
+            <button type="button" className="btn-ghost px-3" onClick={() => setQty((v) => Math.min(99, v + 1))}>
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-ink-700 bg-ink-850 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm text-mute">
+              ยอดที่ต้องจ่าย{' '}
+              <span className="ml-1 text-xl font-bold text-white">{baht.format(total)}</span>{' '}
+              <span className="text-sm">บาท</span>
+            </p>
+            {signedIn ? (
+              <p className="mt-1 text-xs text-mute">
+                เครดิตคงเหลือ {baht.format(credit)} บาท
+                {total > 0 && !notEnough ? (
+                  <span className="text-good"> · เหลือหลังหัก {baht.format(credit - total)}</span>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+
+          {signedIn ? (
+            <SubmitButton
+              className="btn-primary"
+              disabled={!selected || notEnough || outOfStock}
+              pendingLabel="กำลังสั่งซื้อ..."
+            >
+              สั่งซื้อด้วยเครดิต
+            </SubmitButton>
+          ) : (
+            <a href="/shop/login" className="btn-primary">
+              เข้าสู่ระบบเพื่อสั่งซื้อ
+            </a>
+          )}
+        </div>
+
+        {notEnough ? (
+          <p className="mt-3 text-sm text-bad">
+            ⚠ เครดิตไม่พอ ขาดอีก {baht.format(total - credit)} บาท — ติดต่อร้านเพื่อเติมเครดิต
+          </p>
+        ) : null}
+        {outOfStock ? (
+          <p className="mt-3 text-sm text-bad">⚠ จำนวนที่เลือกมากกว่าสินค้าที่เหลืออยู่</p>
+        ) : null}
+      </div>
+    </ActionForm>
+  )
+}
