@@ -1,9 +1,8 @@
 -- Pay Jung — โครงสร้างฐานข้อมูลทั้งหมด
 --
--- ไฟล์นี้สร้างจาก src/lib/schema.ts ซึ่งเป็นต้นฉบับจริงที่แอปใช้
--- ปกติ "ไม่ต้องรันเอง" เพราะแอปสร้างตารางให้อัตโนมัติตอนต่อฐานข้อมูลครั้งแรก
---
--- ทุกคำสั่งเป็นแบบรันซ้ำได้ (IF NOT EXISTS) จึงวางรันกี่ครั้งก็ไม่พัง
+-- สร้างจาก src/lib/schema.ts ซึ่งเป็นต้นฉบับจริงที่แอปใช้
+-- ปกติไม่ต้องรันเอง แอปสร้างตารางให้อัตโนมัติตอนต่อฐานข้อมูล
+-- ทุกคำสั่งรันซ้ำได้ (IF NOT EXISTS)
 create table if not exists profiles (
     id uuid primary key,
     email text,
@@ -75,6 +74,29 @@ alter table products add column if not exists sort_order int not null default 10
 alter table products add column if not exists provider_id int references api_providers(id) on delete set null;
 
 alter table products add column if not exists provider_sku text;
+
+alter table products add column if not exists provider_game_id text;
+
+alter table products add column if not exists provider_server_id text not null default '0';
+
+create table if not exists provider_catalog (
+    id serial primary key,
+    provider_id int not null references api_providers(id) on delete cascade,
+    game_id text not null,
+    game_name text not null,
+    server_id text not null default '0',
+    server_name text,
+    pack_code text not null,
+    pack_name text not null,
+    pack_desc text,
+    pack_price numeric(12,2) not null default 0,
+    synced_at timestamptz not null default now()
+  );
+
+create unique index if not exists provider_catalog_uniq
+     on provider_catalog (provider_id, game_id, server_id, pack_code);
+
+create index if not exists provider_catalog_game_idx on provider_catalog (provider_id, game_name);
 
 create table if not exists customers (
     id serial primary key,
@@ -205,7 +227,7 @@ alter table stock_movements enable row level security;
 
 alter table expenses enable row level security;
 
--- เกมยอดนิยมที่ใส่ให้ตั้งต้น (ลบทิ้งได้)
+-- เกมยอดนิยมตั้งต้น
 insert into games (name, publisher) values ('Free Fire', 'Garena') on conflict do nothing;
 insert into games (name, publisher) values ('RoV / Arena of Valor', 'Garena') on conflict do nothing;
 insert into games (name, publisher) values ('PUBG Mobile', 'Tencent') on conflict do nothing;

@@ -72,6 +72,27 @@ export const SCHEMA_STATEMENTS: string[] = [
   `alter table products add column if not exists sort_order int not null default 100`,
   `alter table products add column if not exists provider_id int references api_providers(id) on delete set null`,
   `alter table products add column if not exists provider_sku text`,
+  // รหัสเกมและเซิร์ฟเวอร์ฝั่งผู้ให้บริการ (24BUYM ต้องใช้ครบทั้งสามค่าตอนสั่งเติม)
+  `alter table products add column if not exists provider_game_id text`,
+  `alter table products add column if not exists provider_server_id text not null default '0'`,
+
+  // รายการสินค้าที่ดึงมาจากผู้ให้บริการ เก็บไว้ให้เลือกจับคู่โดยไม่ต้องยิง API ซ้ำ
+  `create table if not exists provider_catalog (
+    id serial primary key,
+    provider_id int not null references api_providers(id) on delete cascade,
+    game_id text not null,
+    game_name text not null,
+    server_id text not null default '0',
+    server_name text,
+    pack_code text not null,
+    pack_name text not null,
+    pack_desc text,
+    pack_price numeric(12,2) not null default 0,
+    synced_at timestamptz not null default now()
+  )`,
+  `create unique index if not exists provider_catalog_uniq
+     on provider_catalog (provider_id, game_id, server_id, pack_code)`,
+  `create index if not exists provider_catalog_game_idx on provider_catalog (provider_id, game_name)`,
 
   `create table if not exists customers (
     id serial primary key,

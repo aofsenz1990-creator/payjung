@@ -12,6 +12,7 @@ import {
 import { deleteNewsAction, saveNewsAction, saveSiteSettingsAction } from '@/lib/actions/shop'
 import { getSiteSettings, SITE_KEYS } from '@/lib/shop'
 import { ProviderForm } from '@/components/ProviderForm'
+import { importGameAction, syncCatalogAction } from '@/lib/actions/catalogSync'
 import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
@@ -53,6 +54,18 @@ type ProductRow = {
   provider_sku: string | null
 }
 
+type CatalogGame = {
+  provider_id: number
+  game_id: string
+  game_name: string
+  packs: number
+  servers: number
+  min_price: number
+  max_price: number
+  imported: number
+  synced_at: string
+}
+
 type NewsRow = {
   id: number
   title: string
@@ -79,7 +92,7 @@ export default async function StorefrontPage({
   await requireAdmin()
   const { provider: editProvider, game: editGame } = await searchParams
 
-  const [providers, games, products, editingProvider, editingGame, news, settings] =
+  const [providers, games, products, editingProvider, editingGame, news, settings, catalog] =
     await Promise.all([
     q<Provider>(
       `select p.id, p.name, p.kind, p.base_url, p.auth_type, (p.api_key is not null) as has_key,
@@ -122,6 +135,20 @@ export default async function StorefrontPage({
            from news order by pinned desc, created_at desc`
       ),
       getSiteSettings(),
+      q<CatalogGame>(
+        `select c.provider_id, c.game_id, min(c.game_name) as game_name,
+                count(*)::int as packs,
+                count(distinct c.server_id)::int as servers,
+                min(c.pack_price)::float8 as min_price,
+                max(c.pack_price)::float8 as max_price,
+                max(c.synced_at) as synced_at,
+                (select count(*) from products pr
+                  where pr.provider_id = c.provider_id
+                    and pr.provider_game_id = c.game_id)::int as imported
+           from provider_catalog c
+          group by c.provider_id, c.game_id
+          order by min(c.game_name)`
+      ),
     ])
 
   const publishedGames = games.filter((g) => g.is_published).length
@@ -304,6 +331,110 @@ export default async function StorefrontPage({
           )}
         </div>
       </div>
+
+      {/* ---------------- รายการสินค้าจากผู้ให้บริการ ---------------- */}
+      {providers.length > 0 ? (
+        <div className="card mb-6">
+          <SectionTitle
+            right={
+              catalog.length > 0 ? (
+                <span className="text-xs text-mute">
+                  {num(catalog.length)} เกม · ดึงล่าสุด {dateOnly(catalog[0].synced_at)}
+                </span>
+              ) : undefined
+            }
+          >
+            รายการเกมจากผู้ให้บริการ
+          </SectionTitle>
+
+          <div className="mb-4 rounded-xl border border-ink-700 bg-ink-850 p-3">
+            <ActionForm action={syncCatalogAction}>
+              <div className="flex flex-wrap gap-2">
+                <select name="provider_id" className="input w-auto flex-1" required defaultValue="">
+                  <option value="" disabled>
+                    — เลือกผู้ให้บริการ —
+                  </option>
+                  {providers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <SubmitButton className="btn-primary" pendingLabel="กำลังดึง...">
+                  ⬇ ดึงรายการเกมทั้งหมด
+                </SubmitButton>
+              </div>
+            </ActionForm>
+            <p className="mt-2 text-xs leading-relaxed text-mute">
+              ดึงเกม เซิร์ฟเวอร์ และแพ็กเกจทั้งหมดที่ผู้ให้บริการเปิดขายอยู่มาเก็บไว้
+              แล้วกดนำเข้าทีละเกมได้เลย ไม่ต้องพิมพ์รหัสเกม/รหัสแพ็กเกจเอง
+            </p>
+          </div>
+
+          {catalog.length === 0 ? (
+            <Empty>ยังไม่ได้ดึงรายการ — กดปุ่มด้านบนเพื่อดึงจากผู้ให้บริการ</Empty>
+          ) : (
+            <div className="table-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>เกมฝั่งผู้ให้บริการ</th>
+                    <th className="text-right">แพ็กเกจ</th>
+                    <th className="text-right">ช่วงราคาทุน</th>
+                    <th>สถานะในระบบเรา</th>
+                    <th className="text-right">นำเข้า</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalog.map((g) => (
+                    <tr key={`${g.provider_id}-${g.game_id}`}>
+                      <td>
+                        <span className="block font-medium text-white">{g.game_name}</span>
+                        <span className="block font-mono text-xs text-mute">
+                          game_id {g.game_id}
+                          {g.servers > 1 ? ` · ${num(g.servers)} เซิร์ฟเวอร์` : ''}
+                        </span>
+                      </td>
+                      <td className="text-right">{num(g.packs)}</td>
+                      <td className="text-right text-mute">
+                        {money(g.min_price)} – {money(g.max_price)}
+                      </td>
+                      <td>
+                        {g.imported > 0 ? (
+                          <Badge tone="good">นำเข้าแล้ว {num(g.imported)}</Badge>
+                        ) : (
+                          <Badge tone="warn">ยังไม่นำเข้า</Badge>
+                        )}
+                      </td>
+                      <td>
+                        <ActionForm action={importGameAction}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <input type="hidden" name="provider_id" value={g.provider_id} />
+                            <input type="hidden" name="game_id" value={g.game_id} />
+                            <input
+                              name="markup"
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              className="input w-24 py-1 text-xs"
+                              placeholder="บวกกำไร"
+                              defaultValue={0}
+                              title="บวกกำไรต่อแพ็ก (บาท) — ปล่อย 0 = ขายเท่าทุน"
+                            />
+                            <SubmitButton className="btn-ghost btn-sm" pendingLabel="...">
+                              นำเข้า
+                            </SubmitButton>
+                          </div>
+                        </ActionForm>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* ---------------- เกมบนหน้าเว็บ ---------------- */}
       <div className="mb-6 grid gap-6 lg:grid-cols-[24rem_1fr]">
