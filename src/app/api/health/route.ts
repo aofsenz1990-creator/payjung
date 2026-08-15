@@ -24,10 +24,19 @@ async function timed<T>(fn: () => Promise<T>) {
   }
 }
 
+/** รหัสโปรเจกต์ Supabase ที่ใช้อยู่จริง อ่านจาก URL เช่น https://abcdefgh.supabase.co -> abcdefgh */
+function supabaseProjectRef() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  return url?.match(/https:\/\/([a-z0-9]+)\.supabase\./)?.[1] ?? null
+}
+
 export async function GET(request: NextRequest) {
   const target = dbTarget()
+  const ref = supabaseProjectRef()
   const base = {
     vercelRegion: process.env.VERCEL_REGION ?? 'local',
+    supabaseProjectRef: ref,
+    supabaseDashboard: ref ? `https://supabase.com/dashboard/project/${ref}` : null,
     database: target,
     envPresent: {
       DATABASE_URL: Boolean(process.env.DATABASE_URL),
