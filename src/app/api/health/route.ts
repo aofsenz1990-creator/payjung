@@ -48,6 +48,38 @@ export async function GET(request: NextRequest) {
   }
 
   const today = todayISO()
+  const monthStart = `${today.slice(0, 7)}-01`
+
+  const CASES: Array<[string, () => Promise<unknown>]> = [
+    ['sumFilter', () =>
+      q(`select coalesce(sum(total) filter (where d = $1::date), 0)::float8 as t
+           from (select total, (sold_at at time zone 'Asia/Bangkok')::date as d
+                   from sales where status = 'paid') s`, [today])],
+    ['generateSeries', () =>
+      q(`select to_char(g.day, 'DD') as label, coalesce(sum(s.total), 0)::float8 as value
+           from generate_series($1::date, ($1::date + interval '1 month' - interval '1 day'),
+                                interval '1 day') as g(day)
+           left join (select total, (sold_at at time zone 'Asia/Bangkok')::date as d
+                        from sales where status = 'paid') s on s.d = g.day::date
+          group by g.day order by g.day`, [monthStart])],
+    ['countGames', () => q('select count(*)::int as n from games')],
+    ['countProducts', () => q('select count(*)::int as n from products')],
+    ['countCustomers', () => q('select count(*)::int as n from customers')],
+    ['countSales', () => q('select count(*)::int as n from sales')],
+    ['countMovements', () => q('select count(*)::int as n from stock_movements')],
+    ['countExpenses', () => q('select count(*)::int as n from expenses')],
+  ]
+
+  // โหมดวัดทีละคำสั่ง เพื่อหาว่าค้างที่คำสั่งไหน
+  if (request.nextUrl.searchParams.get('deep') === 'seq') {
+    const results: Record<string, unknown> = {}
+    for (const [name, run] of CASES) results[name] = await timed(run)
+    return NextResponse.json(
+      { ...base, mode: 'sequential', results },
+      { headers: { 'cache-control': 'no-store' } }
+    )
+  }
+
   const connect = await timed(() => q('select 1 as ok'))
   const simpleRead = await timed(() => q('select count(*)::int as n from profiles'))
 
