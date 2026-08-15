@@ -206,6 +206,13 @@ export const SCHEMA_STATEMENTS: string[] = [
   )`,
   `create index if not exists expenses_spent_on_idx on expenses (spent_on desc)`,
 
+  // เก็บกวาดผลจากบั๊กเก่า: ลูกค้าที่ล็อกอินหน้าเว็บเคยถูกสร้างเป็น "พนักงาน" อัตโนมัติ
+  // ลบเฉพาะแถวที่เป็น staff และผูกกับบัญชีลูกค้าอยู่ ไม่แตะบัญชีผู้ดูแลระบบ
+  // บิลที่เคยบันทึกไว้ไม่หาย เพราะ sales.created_by ตั้งเป็น on delete set null
+  `delete from profiles p
+    where p.role = 'staff'
+      and exists (select 1 from customers c where c.auth_user_id = p.id)`,
+
   // ตารางทั้งหมดถูกอ่าน/เขียนผ่านเซิร์ฟเวอร์ของแอปด้วย connection string โดยตรงเท่านั้น
   // เปิด RLS ไว้โดยไม่สร้าง policy เพื่อกันไม่ให้ anon key ของ Supabase แตะข้อมูลได้เลย
   `alter table profiles enable row level security`,

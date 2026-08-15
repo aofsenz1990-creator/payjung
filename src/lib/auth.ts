@@ -71,21 +71,10 @@ export const getSession = cache(async function getSession(): Promise<SessionUser
     throw err
   }
 
-  if (!profile) {
-    const email = user.email ?? ''
-    await q(
-      `insert into profiles (id, email, display_name, role)
-       values ($1, $2, $3, 'staff') on conflict (id) do nothing`,
-      [user.id, email, email.split('@')[0] || 'ผู้ใช้ใหม่']
-    )
-    return {
-      id: user.id,
-      email,
-      name: email.split('@')[0] || 'ผู้ใช้ใหม่',
-      role: 'staff',
-      pages: resolvePages('staff', null),
-    }
-  }
+  // ไม่มีแถวใน profiles = ไม่ใช่คนของร้าน (เช่นลูกค้าที่ล็อกอินหน้าเว็บ)
+  // ห้ามสร้างให้อัตโนมัติเด็ดขาด ไม่งั้นลูกค้าจะกลายเป็นพนักงานและเห็นข้อมูลหลังร้านทั้งหมด
+  // การเพิ่มพนักงานต้องทำผ่านหน้า "ผู้ใช้งานระบบ" เท่านั้น
+  if (!profile) return null
 
   if (!profile.is_active) return null
 

@@ -58,15 +58,9 @@ export async function middleware(request: NextRequest) {
     return redirected
   }
 
-  if (user && pathname === '/login') {
-    const target = request.nextUrl.clone()
-    target.pathname = '/'
-    target.search = ''
-    const redirected = NextResponse.redirect(target)
-    for (const cookie of response.cookies.getAll()) redirected.cookies.set(cookie)
-    return redirected
-  }
-
+  // ไม่เด้งออกจากหน้า login เองแม้จะมี session เพราะ session อาจเป็นของ "ลูกค้า"
+  // ที่ล็อกอินหน้าเว็บไว้ ซึ่งไม่มีสิทธิ์เข้าหลังร้าน ถ้าเด้งไปหน้าแรกจะวนกลับมาไม่จบ
+  // ปล่อยให้หน้า login เช็กเองว่าเป็นพนักงานจริงไหมแล้วค่อยพาเข้าไป
   return response
 }
 

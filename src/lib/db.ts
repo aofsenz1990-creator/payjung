@@ -87,26 +87,10 @@ function withTimeout<T>(promise: Promise<T>, ms = 12_000): Promise<T> {
 }
 
 /**
- * คอลัมน์ที่เพิ่มล่าสุด ใช้เป็นหมุดบอกว่าโครงสร้างเป็นเวอร์ชันปัจจุบันแล้วหรือยัง
- * เวลาเพิ่มคอลัมน์ใหม่ใน schema.ts ให้อัปเดตตรงนี้ด้วย ระบบจะได้รู้ว่าต้องรัน DDL ซ้ำ
+ * เวอร์ชันของโครงสร้างฐานข้อมูล
+ * แก้ schema.ts เมื่อไหร่ให้เปลี่ยนเลขนี้ด้วย ระบบจะรัน DDL ชุดใหม่ให้อัตโนมัติครั้งเดียว
  */
-const SCHEMA_MARKER = { table: 'products', column: 'provider_game_id' }
-
-// ตารางที่ต้องมีครบ ถ้าเพิ่มตารางใหม่ใน schema.ts ต้องเติมชื่อที่นี่ด้วย
-const EXPECTED_TABLES = [
-  'profiles',
-  'games',
-  'products',
-  'customers',
-  'sales',
-  'stock_movements',
-  'expenses',
-  'api_providers',
-  'credit_transactions',
-  'news',
-  'site_settings',
-  'provider_catalog',
-]
+const SCHEMA_VERSION = '2026-08-15.7'
 
 // สร้างตารางครั้งแรกที่ instance ถูกเรียก แล้วแคชไว้ (CREATE ... IF NOT EXISTS จึงรันซ้ำได้)
 let schemaReady: Promise<void> | null = null
@@ -118,19 +102,23 @@ function ensureSchema() {
 
       // เช็กก่อนด้วยคำสั่งเดียวว่าตารางครบแล้วหรือยัง
       // ถ้าครบก็ข้ามการสร้างไปเลย ไม่ต้องยิง DDL ยาว ๆ ทุกครั้งที่ instance เย็น
-      const list = EXPECTED_TABLES.map((t) => `'${t}'`).join(', ')
-      const [{ tables, marker }] = await sql.unsafe<{ tables: number; marker: number }[]>(
-        `select
-           (select count(*)::int from pg_tables
-             where schemaname = 'public' and tablename in (${list})) as tables,
-           (select count(*)::int from information_schema.columns
-             where table_schema = 'public' and table_name = '${SCHEMA_MARKER.table}'
-               and column_name = '${SCHEMA_MARKER.column}') as marker`
-      )
-      if (tables >= EXPECTED_TABLES.length && marker === 1) return
+      // เช็กด้วยคำสั่งเดียวว่าโครงสร้างเป็นเวอร์ชันล่าสุดแล้วหรือยัง
+      try {
+        const rows = await sql.unsafe<{ value: string | null }[]>(
+          `select value from site_settings where key = 'schema_version'`
+        )
+        if (rows[0]?.value === SCHEMA_VERSION) return
+      } catch {
+        // ยังไม่มีตาราง site_settings = ฐานข้อมูลใหม่เอี่ยม ให้สร้างทั้งชุด
+      }
 
-      // ครั้งแรกเท่านั้น — รวมทุก statement ยิงรอบเดียวแบบ simple query
+      // รวมทุก statement ยิงรอบเดียวแบบ simple query (เป็นทรานแซกชันเดียว)
       await sql.unsafe(SCHEMA_STATEMENTS.join(';\n')).simple()
+      await sql.unsafe(
+        `insert into site_settings (key, value) values ('schema_version', $1)
+         on conflict (key) do update set value = excluded.value`,
+        [SCHEMA_VERSION]
+      )
     })().catch((err) => {
       schemaReady = null // ให้ลองใหม่ได้ในรีเควสต์ถัดไป
       throw err
