@@ -6,9 +6,11 @@ import {
   lineLink,
   registrationOpen,
   shopBackground,
+  shopCover,
   shopOverlayClass,
 } from '@/lib/shop'
 import { ContactBar } from '@/components/ContactBar'
+import { ShopCover } from '@/components/ShopCover'
 import { shopLogoutAction } from '@/lib/actions/shop'
 import { BrandLogo, BrandWordmark } from '@/components/Brand'
 import { money } from '@/lib/format'
@@ -44,6 +46,8 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
           {settings.announcement}
         </div>
       ) : null}
+
+      <ShopCover src={shopCover(settings)} />
 
       <header className="sticky top-0 z-30 border-b border-ink-800/60 bg-ink-950/60 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">

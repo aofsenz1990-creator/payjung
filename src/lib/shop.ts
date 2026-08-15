@@ -15,6 +15,12 @@ export const SITE_KEYS = [
     ],
   },
   {
+    key: 'shop_cover',
+    label: 'ภาพแบนเนอร์ด้านบนสุด (Cover)',
+    placeholder: '',
+    image: true as const,
+  },
+  {
     key: 'shop_bg',
     label: 'ภาพพื้นหลังหน้าเว็บ',
     placeholder: '',
@@ -61,6 +67,13 @@ export const DEFAULT_SHOP_BG = '/shop-bg.jpg'
 
 export function shopBackground(settings: SiteSettings) {
   return settings.shop_bg || DEFAULT_SHOP_BG
+}
+
+/** แบนเนอร์ด้านบนสุดของหน้าเว็บ — ถ้ายังไม่ได้อัปโหลดเอง ใช้ไฟล์ที่ติดมากับระบบ */
+export const DEFAULT_SHOP_COVER = '/shop-cover.jpg'
+
+export function shopCover(settings: SiteSettings) {
+  return settings.shop_cover || DEFAULT_SHOP_COVER
 }
 
 /**

@@ -10,7 +10,7 @@ import {
   toggleProductPublishedAction,
 } from '@/lib/actions/storefront'
 import { deleteNewsAction, saveNewsAction, saveSiteSettingsAction } from '@/lib/actions/shop'
-import { DEFAULT_SHOP_BG, getSiteSettings, SITE_KEYS } from '@/lib/shop'
+import { DEFAULT_SHOP_BG, DEFAULT_SHOP_COVER, getSiteSettings, SITE_KEYS } from '@/lib/shop'
 import { ImageInput } from '@/components/ImageInput'
 import { ProviderForm } from '@/components/ProviderForm'
 import { importGameAction, syncCatalogAction } from '@/lib/actions/catalogSync'
@@ -716,13 +716,22 @@ export default async function StorefrontPage({
                     <ImageInput
                       name={`${s.key}_data`}
                       urlName={`setting_${s.key}`}
-                      maxDimension={s.key === 'shop_bg' ? 1920 : 800}
-                      forceJpeg={s.key === 'shop_bg'}
-                      previewClassName={s.key === 'shop_bg' ? 'h-24 w-40' : 'size-24'}
-                      currentUrl={settings[s.key] ?? (s.key === 'shop_bg' ? DEFAULT_SHOP_BG : null)}
+                      maxDimension={s.key === 'shop_bg' || s.key === 'shop_cover' ? 1920 : 800}
+                      forceJpeg={s.key === 'shop_bg' || s.key === 'shop_cover'}
+                      previewClassName={s.key === 'shop_bg' || s.key === 'shop_cover' ? 'h-24 w-40' : 'size-24'}
+                      currentUrl={
+                        settings[s.key] ??
+                        (s.key === 'shop_bg'
+                          ? DEFAULT_SHOP_BG
+                          : s.key === 'shop_cover'
+                            ? DEFAULT_SHOP_COVER
+                            : null)
+                      }
                       label=""
                       hint={
-                        s.key === 'shop_bg'
+                        s.key === 'shop_cover'
+                          ? 'แบนเนอร์ด้านบนสุดของหน้าเว็บ แนะนำภาพแนวนอนยาว ๆ ประมาณ 2000 x 350 px'
+                          : s.key === 'shop_bg'
                           ? 'ภาพนี้จะเป็นพื้นหลังของหน้าเว็บลูกค้า แนะนำภาพแนวนอนที่ตรงกลางไม่มีลาย'
                           : 'อัปโหลดรูป QR จากแอป LINE — ลูกค้ากดที่ปุ่ม LINE ท้ายเว็บแล้วจะเห็น QR นี้'
                       }
