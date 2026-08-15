@@ -6,10 +6,12 @@ import {
   saveGameStorefrontAction,
   saveProviderAction,
   toggleGamePublishedAction,
+  testProviderAction,
   toggleProductPublishedAction,
 } from '@/lib/actions/storefront'
 import { deleteNewsAction, saveNewsAction, saveSiteSettingsAction } from '@/lib/actions/shop'
 import { getSiteSettings, SITE_KEYS } from '@/lib/shop'
+import { BUYM_DEFAULT_BASE } from '@/lib/providers/24buym'
 import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
@@ -19,6 +21,7 @@ export const dynamic = 'force-dynamic'
 type Provider = {
   id: number
   name: string
+  kind: string
   base_url: string | null
   auth_type: string
   has_key: boolean
@@ -79,7 +82,7 @@ export default async function StorefrontPage({
   const [providers, games, products, editingProvider, editingGame, news, settings] =
     await Promise.all([
     q<Provider>(
-      `select p.id, p.name, p.base_url, p.auth_type, (p.api_key is not null) as has_key,
+      `select p.id, p.name, p.kind, p.base_url, p.auth_type, (p.api_key is not null) as has_key,
               p.note, p.priority, p.is_active,
               (select count(*) from products pr where pr.provider_id = p.id)::int as products
          from api_providers p order by p.priority, p.name`
@@ -102,7 +105,7 @@ export default async function StorefrontPage({
     ),
     editProvider
       ? q1<Provider>(
-          `select id, name, base_url, auth_type, (api_key is not null) as has_key,
+          `select id, name, kind, base_url, auth_type, (api_key is not null) as has_key,
                   note, priority, is_active
              from api_providers where id = $1`,
           [Number(editProvider)]
@@ -213,6 +216,20 @@ export default async function StorefrontPage({
               />
             </div>
             <div>
+              <label className="label" htmlFor="kind">
+                ชนิดของ API
+              </label>
+              <select
+                id="kind"
+                name="kind"
+                className="input"
+                defaultValue={editingProvider?.kind ?? '24buym'}
+              >
+                <option value="24buym">24BUYM (รองรับเต็มรูปแบบ)</option>
+                <option value="custom">อื่น ๆ (เก็บข้อมูลไว้ก่อน)</option>
+              </select>
+            </div>
+            <div>
               <label className="label" htmlFor="base_url">
                 ที่อยู่ API
               </label>
@@ -220,9 +237,12 @@ export default async function StorefrontPage({
                 id="base_url"
                 name="base_url"
                 className="input"
-                defaultValue={editingProvider?.base_url ?? ''}
-                placeholder="https://api.example.com/v1"
+                defaultValue={editingProvider?.base_url ?? BUYM_DEFAULT_BASE}
+                placeholder={BUYM_DEFAULT_BASE}
               />
+              <p className="mt-1 text-xs text-mute">
+                ของ 24BUYM ใช้ค่านี้ได้เลย ไม่ต้องแก้
+              </p>
             </div>
             <div>
               <label className="label" htmlFor="auth_type">
@@ -256,7 +276,8 @@ export default async function StorefrontPage({
                 }
               />
               <p className="mt-1 text-xs text-mute">
-                เก็บไว้ในฐานข้อมูลและใช้เฉพาะฝั่งเซิร์ฟเวอร์ ไม่ถูกส่งออกไปที่เบราว์เซอร์
+                24BUYM เรียกคีย์นี้ว่า <b>USER_KEY</b> — เก็บในฐานข้อมูลและใช้เฉพาะฝั่งเซิร์ฟเวอร์
+                ไม่ถูกส่งออกไปที่เบราว์เซอร์
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -308,6 +329,35 @@ export default async function StorefrontPage({
           >
             ผู้ให้บริการ API ที่ต่อไว้
           </SectionTitle>
+
+          {/* ทดสอบว่าคีย์ใช้ได้จริงไหม */}
+          {providers.length > 0 ? (
+            <div className="mb-5 rounded-xl border border-ink-700 bg-ink-850 p-3">
+              <p className="mb-2 text-sm font-medium text-slate-100">🔌 ทดสอบการเชื่อมต่อ</p>
+              <ActionForm action={testProviderAction}>
+                <div className="flex flex-wrap gap-2">
+                  <select name="id" className="input w-auto flex-1" required defaultValue="">
+                    <option value="" disabled>
+                      — เลือกผู้ให้บริการ —
+                    </option>
+                    {providers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.kind})
+                      </option>
+                    ))}
+                  </select>
+                  <SubmitButton className="btn-primary" pendingLabel="กำลังต่อ...">
+                    ทดสอบเดี๋ยวนี้
+                  </SubmitButton>
+                </div>
+              </ActionForm>
+              <p className="mt-2 text-xs leading-relaxed text-mute">
+                ระบบจะเรียก <code className="text-slate-300">getAccount</code> และ{' '}
+                <code className="text-slate-300">get_product_game</code> เพื่อเช็กว่าคีย์ใช้ได้
+                และดูว่าเครดิตฝั่งผู้ให้บริการเหลือเท่าไหร่
+              </p>
+            </div>
+          ) : null}
           {providers.length === 0 ? (
             <Empty>
               ยังไม่มีผู้ให้บริการ — เพิ่มเจ้าแรกจากฟอร์มด้านซ้าย เพิ่มได้หลายเจ้าพร้อมกัน
@@ -320,7 +370,7 @@ export default async function StorefrontPage({
                   <tr>
                     <th>ชื่อ</th>
                     <th>ที่อยู่ API</th>
-                    <th>ยืนยันตัวตน</th>
+                    <th>ชนิด</th>
                     <th>คีย์</th>
                     <th className="text-right">แพ็กเกจที่ผูก</th>
                     <th className="text-right">ลำดับ</th>
@@ -338,7 +388,7 @@ export default async function StorefrontPage({
                       <td className="max-w-[16rem] truncate font-mono text-xs text-mute">
                         {p.base_url ?? '-'}
                       </td>
-                      <td className="text-xs text-slate-300">{p.auth_type}</td>
+                      <td className="text-xs text-slate-300">{p.kind}</td>
                       <td>
                         {p.has_key ? (
                           <Badge tone="good">ตั้งแล้ว</Badge>

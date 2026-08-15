@@ -2,12 +2,60 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { q } from '@/lib/db'
+import { q, q1 } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
+import { BuymError, getAccount, getProducts } from '@/lib/providers/24buym'
 import { bool, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
 
 const AUTH_TYPES = ['bearer', 'apikey', 'basic', 'none']
+const PROVIDER_KINDS = ['custom', '24buym']
+
+/**
+ * ทดสอบว่าคีย์ใช้งานได้จริงไหม โดยเรียก endpoint ดูข้อมูลบัญชี
+ * คีย์ไม่เคยออกจากฝั่งเซิร์ฟเวอร์ ผลลัพธ์ที่ส่งกลับมีแค่ชื่อบัญชีกับเครดิตคงเหลือ
+ */
+export async function testProviderAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const id = int(formData, 'id')
+  if (!id) return { error: 'กรุณาเลือกผู้ให้บริการ' }
+
+  const provider = await q1<{
+    name: string
+    base_url: string | null
+    api_key: string | null
+    kind: string
+  }>('select name, base_url, api_key, kind from api_providers where id = $1', [id])
+
+  if (!provider) return { error: 'ไม่พบผู้ให้บริการนี้' }
+  if (!provider.api_key) return { error: `"${provider.name}" ยังไม่ได้ตั้งคีย์ — กดแก้ไขแล้ววางคีย์ก่อน` }
+  if (provider.kind !== '24buym') {
+    return {
+      error: `ยังไม่รองรับการทดสอบอัตโนมัติของชนิด "${provider.kind}" — ตอนนี้รองรับเฉพาะ 24BUYM`,
+    }
+  }
+
+  try {
+    const account = await getAccount(provider.base_url, provider.api_key)
+    if (!account.success) {
+      return { error: `ปลายทางตอบกลับว่าไม่สำเร็จ — ${account.message ?? 'ไม่ระบุสาเหตุ'}` }
+    }
+
+    const products = await getProducts(provider.base_url, provider.api_key)
+    const games = products.products?.length ?? 0
+    const packs = (products.products ?? []).reduce((a, g) => a + (g.packages?.length ?? 0), 0)
+
+    return {
+      ok:
+        `เชื่อมต่อสำเร็จ ✓ บัญชี "${account.username ?? '-'}" (uid ${account.uid ?? '-'}) ` +
+        `เครดิตคงเหลือฝั่งผู้ให้บริการ ${Number(account.points ?? 0).toLocaleString('th-TH')} — ` +
+        `ดึงรายการสินค้าได้ ${games} เกม ${packs} แพ็กเกจ`,
+    }
+  } catch (err) {
+    if (err instanceof BuymError) return { error: err.message }
+    return { error: friendlyError(err, 'ทดสอบการเชื่อมต่อไม่สำเร็จ') }
+  }
+}
 
 /* --------------------------- ผู้ให้บริการ API --------------------------- */
 
@@ -19,6 +67,7 @@ export async function saveProviderAction(formData: FormData): Promise<ActionStat
   const authType = AUTH_TYPES.includes(str(formData, 'auth_type'))
     ? str(formData, 'auth_type')
     : 'bearer'
+  const kind = PROVIDER_KINDS.includes(str(formData, 'kind')) ? str(formData, 'kind') : 'custom'
   const apiKey = str(formData, 'api_key')
   const note = optStr(formData, 'note')
   const priority = int(formData, 'priority', 100)
@@ -35,16 +84,16 @@ export async function saveProviderAction(formData: FormData): Promise<ActionStat
       await q(
         `update api_providers
             set name = $1, base_url = $2, auth_type = $3, note = $4,
-                priority = $5, is_active = $6,
+                priority = $5, is_active = $6, kind = $9,
                 api_key = case when $7 = '' then api_key else $7 end
           where id = $8`,
-        [name, baseUrl, authType, note, priority, isActive, apiKey, Number(id)]
+        [name, baseUrl, authType, note, priority, isActive, apiKey, Number(id), kind]
       )
     } else {
       await q(
-        `insert into api_providers (name, base_url, auth_type, api_key, note, priority, is_active)
-         values ($1, $2, $3, nullif($4, ''), $5, $6, $7)`,
-        [name, baseUrl, authType, apiKey, note, priority, isActive]
+        `insert into api_providers (name, base_url, auth_type, api_key, note, priority, is_active, kind)
+         values ($1, $2, $3, nullif($4, ''), $5, $6, $7, $8)`,
+        [name, baseUrl, authType, apiKey, note, priority, isActive, kind]
       )
     }
   } catch (err) {

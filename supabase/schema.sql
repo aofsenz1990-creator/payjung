@@ -2,7 +2,6 @@
 --
 -- ไฟล์นี้สร้างจาก src/lib/schema.ts ซึ่งเป็นต้นฉบับจริงที่แอปใช้
 -- ปกติ "ไม่ต้องรันเอง" เพราะแอปสร้างตารางให้อัตโนมัติตอนต่อฐานข้อมูลครั้งแรก
--- มีไว้เผื่อกรณีอยากตรวจสอบ หรืออยากสร้างเองผ่าน Supabase > SQL Editor
 --
 -- ทุกคำสั่งเป็นแบบรันซ้ำได้ (IF NOT EXISTS) จึงวางรันกี่ครั้งก็ไม่พัง
 create table if not exists profiles (
@@ -29,6 +28,8 @@ create table if not exists api_providers (
   );
 
 create unique index if not exists api_providers_name_uniq on api_providers (lower(name));
+
+alter table api_providers add column if not exists kind text not null default 'custom';
 
 create table if not exists games (
     id serial primary key,

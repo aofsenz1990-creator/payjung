@@ -32,6 +32,8 @@ export const SCHEMA_STATEMENTS: string[] = [
     created_at timestamptz not null default now()
   )`,
   `create unique index if not exists api_providers_name_uniq on api_providers (lower(name))`,
+  // ชนิดของ API เพื่อให้รู้ว่าต้องคุยด้วยรูปแบบไหน เช่น '24buym'
+  `alter table api_providers add column if not exists kind text not null default 'custom'`,
 
   `create table if not exists games (
     id serial primary key,
