@@ -90,7 +90,7 @@ function withTimeout<T>(promise: Promise<T>, ms = 12_000): Promise<T> {
  * คอลัมน์ที่เพิ่มล่าสุด ใช้เป็นหมุดบอกว่าโครงสร้างเป็นเวอร์ชันปัจจุบันแล้วหรือยัง
  * เวลาเพิ่มคอลัมน์ใหม่ใน schema.ts ให้อัปเดตตรงนี้ด้วย ระบบจะได้รู้ว่าต้องรัน DDL ซ้ำ
  */
-const SCHEMA_MARKER = { table: 'sales', column: 'slip_path' }
+const SCHEMA_MARKER = { table: 'sales', column: 'source' }
 
 // ตารางที่ต้องมีครบ ถ้าเพิ่มตารางใหม่ใน schema.ts ต้องเติมชื่อที่นี่ด้วย
 const EXPECTED_TABLES = [

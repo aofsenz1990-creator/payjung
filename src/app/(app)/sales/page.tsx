@@ -29,6 +29,7 @@ export default async function SalesPage() {
       item_name: string
       game: string | null
       customer: string | null
+      source: string | null
       game_account: string | null
       qty: number
       total: number
@@ -38,7 +39,7 @@ export default async function SalesPage() {
       payment_method: string
       seller: string | null
     }>(
-      `select s.id, s.code, s.sold_at, s.item_name, g.name as game, c.name as customer,
+      `select s.id, s.code, s.sold_at, s.item_name, g.name as game, coalesce(c.name, s.customer_name) as customer, s.source,
               s.game_account, s.qty, s.total::float8 as total, s.profit::float8 as profit, s.slip_path,
               s.status, s.payment_method, u.display_name as seller
          from sales s
@@ -143,6 +144,11 @@ export default async function SalesPage() {
                       <span className="block text-slate-300">{s.customer ?? 'ลูกค้าทั่วไป'}</span>
                       {s.game_account ? (
                         <span className="block text-xs text-mute">{s.game_account}</span>
+                      ) : null}
+                      {s.source ? (
+                        <span className="mt-0.5 inline-block text-xs text-brand-400">
+                          มาจาก {s.source}
+                        </span>
                       ) : null}
                     </td>
                     <td className="text-right">{num(s.qty)}</td>

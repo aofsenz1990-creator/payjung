@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { ActionForm, SubmitButton, type ActionState } from '@/components/ActionForm'
 import { SlipInput } from '@/components/SlipInput'
-import { PAYMENT_METHODS } from '@/lib/constants'
+import { CUSTOMER_SOURCES, PAYMENT_METHODS } from '@/lib/constants'
 
 export type GameOption = { id: number; name: string }
 export type ProductOption = {
@@ -40,6 +40,8 @@ export function SaleForm({
   const [qty, setQty] = useState('1')
   const [price, setPrice] = useState('')
   const [cost, setCost] = useState('')
+  const [customerName, setCustomerName] = useState('')
+  const [source, setSource] = useState('')
   const [hasSlip, setHasSlip] = useState(false)
   // เปลี่ยน key เพื่อล้างรูปที่แนบไว้หลังบันทึกบิลผ่าน กันเผลอใช้สลิปเดิมซ้ำกับบิลถัดไป
   const [slipKey, setSlipKey] = useState(0)
@@ -52,6 +54,8 @@ export function SaleForm({
     setQty('1')
     setPrice('')
     setCost('')
+    setCustomerName('')
+    setSource('')
   }, [])
 
   const gameProducts = useMemo(
@@ -182,15 +186,45 @@ export function SaleForm({
       </div>
 
       <div>
-        <label className="label" htmlFor="customer_id">
+        <label className="label" htmlFor="customer_name">
           ลูกค้า
         </label>
-        <select id="customer_id" name="customer_id" className="input" defaultValue="">
-          <option value="">ลูกค้าทั่วไป (ไม่ระบุ)</option>
+        {/* พิมพ์ชื่อได้อิสระ ถ้าตรงกับลูกค้าที่มีอยู่ ระบบจะผูกให้เองเพื่อสะสมยอดซื้อ */}
+        <input
+          id="customer_name"
+          name="customer_name"
+          className="input"
+          list="customer-list"
+          autoComplete="off"
+          value={customerName}
+          onChange={(e) => setCustomerName(e.target.value)}
+          placeholder="พิมพ์ชื่อ หรือเลือกจากรายชื่อเดิม"
+        />
+        <datalist id="customer-list">
           {customers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-              {c.game_uid ? ` · ${c.game_uid}` : ''}
+            <option key={c.id} value={c.name}>
+              {c.game_uid ?? ''}
+            </option>
+          ))}
+        </datalist>
+        <p className="mt-1 text-xs text-mute">เว้นว่างได้ถ้าเป็นลูกค้าทั่วไป</p>
+      </div>
+
+      <div>
+        <label className="label" htmlFor="source">
+          ลูกค้ามาจากช่องทางไหน
+        </label>
+        <select
+          id="source"
+          name="source"
+          className="input"
+          value={source}
+          onChange={(e) => setSource(e.target.value)}
+        >
+          <option value="">— ไม่ระบุ —</option>
+          {CUSTOMER_SOURCES.map((s) => (
+            <option key={s} value={s}>
+              {s}
             </option>
           ))}
         </select>

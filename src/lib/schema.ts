@@ -76,6 +76,12 @@ export const SCHEMA_STATEMENTS: string[] = [
   // ที่อยู่ไฟล์สลิปโอนเงินใน Supabase Storage (bucket "slips")
   `alter table sales add column if not exists slip_path text`,
 
+  // ชื่อลูกค้าที่พิมพ์เอง ใช้เมื่อไม่ได้เลือกจากรายชื่อลูกค้าที่มีอยู่
+  `alter table sales add column if not exists customer_name text`,
+  // ลูกค้ามาจากช่องทางไหน เช่น Facebook, LINE, หน้าร้าน
+  `alter table sales add column if not exists source text`,
+  `create index if not exists sales_source_idx on sales (source)`,
+
   `create index if not exists sales_sold_at_idx on sales (sold_at desc)`,
   `create index if not exists sales_customer_idx on sales (customer_id)`,
   `create index if not exists sales_game_idx on sales (game_id)`,

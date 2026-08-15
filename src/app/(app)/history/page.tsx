@@ -7,7 +7,7 @@ import { dateOnly, money, monthLabel, num, recentMonths, timeOnly, todayISO } fr
 import { ConfirmButton } from '@/components/ActionForm'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { Empty, MoneyStat, PageHeader, SectionTitle, StatusBadge } from '@/components/ui'
-import { SALE_STATUS } from '@/lib/constants'
+import { CUSTOMER_SOURCES, SALE_STATUS } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +33,7 @@ export default async function HistoryPage({
       item_name: string
       game: string | null
       customer: string | null
+      source: string | null
       game_account: string | null
       qty: number
       unit_price: number
@@ -44,7 +45,7 @@ export default async function HistoryPage({
       note: string | null
       slip_path: string | null
     }>(
-      `select s.id, s.code, s.sold_at, s.item_name, g.name as game, c.name as customer,
+      `select s.id, s.code, s.sold_at, s.item_name, g.name as game, coalesce(c.name, s.customer_name) as customer, s.source,
               s.game_account, s.qty, s.unit_price::float8 as unit_price, s.total::float8 as total,
               s.profit::float8 as profit, s.status, s.payment_method,
               u.display_name as seller, s.note, s.slip_path
@@ -168,7 +169,20 @@ export default async function HistoryPage({
             ))}
           </select>
         </div>
-        <div className="md:col-span-2 lg:col-span-4">
+        <div>
+          <label className="label" htmlFor="source">
+            มาจากช่องทาง
+          </label>
+          <select id="source" name="source" className="input" defaultValue={filters.source}>
+            <option value="all">ทุกช่องทาง</option>
+            {CUSTOMER_SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="md:col-span-2 lg:col-span-3">
           <label className="label" htmlFor="q">
             ค้นหา (เลขบิล / รายการ / ไอดีเกม / ชื่อลูกค้า / หมายเหตุ)
           </label>
@@ -280,6 +294,11 @@ export default async function HistoryPage({
                       <span className="block text-slate-300">{r.customer ?? 'ลูกค้าทั่วไป'}</span>
                       {r.game_account ? (
                         <span className="block text-xs text-mute">{r.game_account}</span>
+                      ) : null}
+                      {r.source ? (
+                        <span className="mt-0.5 inline-block text-xs text-brand-400">
+                          มาจาก {r.source}
+                        </span>
                       ) : null}
                     </td>
                     <td className="text-right">{num(r.qty)}</td>

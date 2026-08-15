@@ -34,7 +34,8 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
 
   const gameId = optInt(formData, 'game_id')
   const productId = optInt(formData, 'product_id')
-  const customerId = optInt(formData, 'customer_id')
+  const customerName = optStr(formData, 'customer_name')
+  const source = optStr(formData, 'source')
   const qty = Math.max(int(formData, 'qty', 1), 1)
   const unitPrice = decimal(formData, 'unit_price')
   const paymentMethod = str(formData, 'payment_method') || 'เงินสด'
@@ -50,6 +51,17 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
   let slipPath: string | null = null
 
   try {
+    // ถ้าชื่อที่พิมพ์ตรงกับลูกค้าที่มีอยู่ ให้ผูกกับลูกค้าคนนั้น ยอดซื้อสะสมจะได้เดินต่อ
+    // ถ้าไม่ตรง ก็เก็บชื่อไว้กับบิลเฉย ๆ ไม่ต้องสร้างลูกค้าใหม่ให้รกรายชื่อ
+    let customerId: number | null = null
+    if (customerName) {
+      const found = await q1<{ id: number }>(
+        'select id from customers where lower(name) = lower($1) limit 1',
+        [customerName]
+      )
+      customerId = found?.id ?? null
+    }
+
     if (productId) {
       const product = await q1<{
         id: number
@@ -98,8 +110,10 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
           `with s as (
              insert into sales (code, sold_at, customer_id, game_id, product_id, item_name,
                                 game_account, qty, unit_price, unit_cost, total, cost_total,
-                                profit, payment_method, status, note, created_by, slip_path)
-             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                                profit, payment_method, status, note, created_by, slip_path,
+                                customer_name, source)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+                     $18, $19, $20)
              returning id, code, product_id, qty, unit_cost, status
            ),
            upd as (
@@ -136,6 +150,8 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
             note,
             user.id,
             slipPath,
+            customerName,
+            source,
           ]
         )
         refreshSalesViews()

@@ -1,5 +1,6 @@
 import 'server-only'
 import { safeMonth } from './format'
+import { CUSTOMER_SOURCES } from './constants'
 
 export type HistoryFilters = {
   month: string // 'all' หรือ YYYY-MM
@@ -8,6 +9,7 @@ export type HistoryFilters = {
   gameId: number | null
   customerId: number | null
   status: string // 'all' | paid | pending | cancelled
+  source: string // 'all' หรือชื่อช่องทาง เช่น Facebook
   keyword: string
 }
 
@@ -29,6 +31,7 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
     gameId: id('game'),
     customerId: id('customer'),
     status: ['paid', 'pending', 'cancelled'].includes(one('status')) ? one('status') : 'all',
+    source: (CUSTOMER_SOURCES as readonly string[]).includes(one('source')) ? one('source') : 'all',
     keyword: one('q'),
   }
 }
@@ -64,6 +67,10 @@ export function buildWhere(f: HistoryFilters) {
     params.push(f.status)
     clauses.push(`s.status = $${params.length}`)
   }
+  if (f.source !== 'all') {
+    params.push(f.source)
+    clauses.push(`s.source = $${params.length}`)
+  }
   if (f.keyword) {
     params.push(`%${f.keyword}%`)
     const i = params.length
@@ -92,6 +99,7 @@ export function filtersToQuery(f: HistoryFilters, extra: Record<string, string> 
   if (f.gameId) sp.set('game', String(f.gameId))
   if (f.customerId) sp.set('customer', String(f.customerId))
   if (f.status !== 'all') sp.set('status', f.status)
+  if (f.source !== 'all') sp.set('source', f.source)
   if (f.keyword) sp.set('q', f.keyword)
   for (const [k, v] of Object.entries(extra)) sp.set(k, v)
   return sp.toString()

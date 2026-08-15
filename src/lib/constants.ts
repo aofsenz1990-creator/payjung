@@ -7,6 +7,16 @@ export const PAYMENT_METHODS = [
   'อื่น ๆ',
 ] as const
 
+/** ลูกค้ามาจากช่องทางไหน — แก้รายการนี้ได้ตามช่องทางที่ร้านใช้จริง */
+export const CUSTOMER_SOURCES = [
+  'Facebook',
+  'LINE',
+  'หน้าร้าน',
+  'TikTok',
+  'Instagram',
+  'อื่น ๆ',
+] as const
+
 export const EXPENSE_CATEGORIES = [
   'ค่าเช่าร้าน',
   'ค่าน้ำ/ค่าไฟ',

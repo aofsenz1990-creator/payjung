@@ -122,7 +122,8 @@ export default async function DashboardPage({
         profit: number
         status: string
       }>(
-        `select s.id, s.code, s.sold_at, s.item_name, g.name as game, c.name as customer,
+        `select s.id, s.code, s.sold_at, s.item_name, g.name as game,
+                coalesce(c.name, s.customer_name) as customer,
                 s.qty, s.total::float8 as total, s.profit::float8 as profit, s.status
            from sales s
            left join games g on g.id = s.game_id

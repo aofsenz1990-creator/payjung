@@ -77,6 +77,12 @@ create table if not exists sales (
 
 alter table sales add column if not exists slip_path text;
 
+alter table sales add column if not exists customer_name text;
+
+alter table sales add column if not exists source text;
+
+create index if not exists sales_source_idx on sales (source);
+
 create index if not exists sales_sold_at_idx on sales (sold_at desc);
 
 create index if not exists sales_customer_idx on sales (customer_id);
