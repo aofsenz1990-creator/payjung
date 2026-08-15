@@ -17,14 +17,29 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
   const [settings, customer] = await Promise.all([getSiteSettings(), getShopCustomer()])
 
   return (
-    <div className="flex min-h-screen flex-col bg-ink-950">
+    <div className="relative flex min-h-screen flex-col">
+      {/*
+        พื้นหลังของหน้าเว็บลูกค้า — วางไฟล์ไว้ที่ public/shop-bg.jpg
+        ถ้าไม่มีไฟล์ก็จะเห็นเป็นพื้นสีเข้มตามปกติ ไม่พัง
+        ตรึงไว้กับหน้าจอเพื่อไม่ให้เลื่อนตามเนื้อหา และไม่ใช้ background-attachment: fixed
+        เพราะบนมือถือจะกระตุก
+      */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-20 bg-ink-950 bg-[url('/shop-bg.jpg')] bg-cover bg-center bg-no-repeat"
+      />
+      {/* ฝ้าทับให้ตัวหนังสืออ่านง่าย เข้มขึ้นเรื่อย ๆ ตอนเลื่อนลงไปหาเนื้อหาด้านล่าง */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 bg-linear-to-b from-ink-950/55 via-ink-950/75 to-ink-950/92"
+      />
       {settings.announcement ? (
         <div className="bg-linear-to-r from-brand-600 to-grape-600 px-4 py-2 text-center text-sm font-medium text-white">
           {settings.announcement}
         </div>
       ) : null}
 
-      <header className="sticky top-0 z-30 border-b border-ink-800 bg-ink-950/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-ink-800/60 bg-ink-950/60 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link href="/shop">
             <BrandLogo className="w-32 sm:w-40" compactFallback />
@@ -63,7 +78,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
 
-      <footer className="mt-10 border-t border-ink-800 bg-ink-900">
+      <footer className="relative mt-10 border-t border-ink-800/60 bg-ink-900/70 backdrop-blur-md">
         <div className="mx-auto max-w-6xl px-4 py-8">
           <h2 className="text-base font-semibold text-white">ช่องทางติดต่อ</h2>
           <ContactBar

@@ -17,7 +17,7 @@ export default async function ShopLoginPage() {
         {canRegister ? 'ยังไม่มีบัญชี? สมัครฟรีได้เลย' : 'ใช้อีเมลและรหัสผ่านที่ทางร้านสร้างให้'}
       </p>
 
-      <div className="card mt-6">
+      <div className="card mt-6 border-ink-700/70 bg-ink-900/75 backdrop-blur-md">
         <ActionForm action={shopLoginAction} className="space-y-4">
           <div>
             <label className="label" htmlFor="email">

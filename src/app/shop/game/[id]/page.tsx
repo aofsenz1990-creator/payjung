@@ -36,7 +36,7 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
       </Link>
 
       <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-center">
-        <div className="size-28 shrink-0 overflow-hidden rounded-2xl border border-ink-700 bg-ink-850">
+        <div className="size-28 shrink-0 overflow-hidden rounded-2xl border border-ink-700/70 bg-ink-850/70 backdrop-blur-sm">
           {game.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={game.image_url} alt={game.name} className="size-full object-contain p-2" />
@@ -52,7 +52,7 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-ink-700 bg-ink-900 p-5">
+      <div className="mt-6 rounded-2xl border border-ink-700/70 bg-ink-900/75 p-5 backdrop-blur-md">
         {packages.length === 0 ? (
           <p className="py-8 text-center text-sm text-mute">
             เกมนี้ยังไม่เปิดขายแพ็กเกจบนหน้าเว็บ กรุณาติดต่อร้านโดยตรง

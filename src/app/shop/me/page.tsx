@@ -67,7 +67,7 @@ export default async function ShopAccountPage() {
         </div>
       </div>
 
-      <p className="mb-6 rounded-xl border border-ink-700 bg-ink-850 px-4 py-3 text-xs leading-relaxed text-mute">
+      <p className="mb-6 rounded-xl border border-ink-700/70 bg-ink-850/70 px-4 py-3 text-xs leading-relaxed text-mute backdrop-blur-sm">
         เครดิตเติมได้โดยติดต่อทางร้านเท่านั้น (ดูช่องทางติดต่อด้านล่างหน้าเว็บ) —{' '}
         <Link href="/shop" className="text-brand-400 underline">
           เลือกเกมที่จะเติม
@@ -80,11 +80,11 @@ export default async function ShopAccountPage() {
           <span className="ml-2 text-sm font-normal text-mute">{num(orders.length)} รายการ</span>
         </h2>
         {orders.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-ink-700 px-4 py-10 text-center text-sm text-mute">
+          <div className="rounded-xl border border-dashed border-ink-700/70 bg-ink-900/40 px-4 py-10 text-center text-sm text-mute backdrop-blur-sm">
             ยังไม่มีรายการสั่งซื้อ
           </div>
         ) : (
-          <div className="card">
+          <div className="card border-ink-700/70 bg-ink-900/75 backdrop-blur-md">
             <div className="table-wrap">
               <table className="tbl">
                 <thead>
@@ -140,11 +140,11 @@ export default async function ShopAccountPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-white">ประวัติเครดิต</h2>
         {credits.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-ink-700 px-4 py-10 text-center text-sm text-mute">
+          <div className="rounded-xl border border-dashed border-ink-700/70 bg-ink-900/40 px-4 py-10 text-center text-sm text-mute backdrop-blur-sm">
             ยังไม่มีการเคลื่อนไหวของเครดิต
           </div>
         ) : (
-          <div className="card">
+          <div className="card border-ink-700/70 bg-ink-900/75 backdrop-blur-md">
             <div className="table-wrap">
               <table className="tbl">
                 <thead>

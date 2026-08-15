@@ -82,7 +82,7 @@ export default async function ShopHome({
         </div>
 
         {games.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-ink-700 px-4 py-12 text-center text-sm text-mute">
+          <div className="rounded-xl border border-dashed border-ink-700/70 bg-ink-900/40 px-4 py-12 text-center text-sm text-mute backdrop-blur-sm">
             {search ? (
               <>
                 ไม่พบเกมที่ค้นหา —{' '}
@@ -100,9 +100,9 @@ export default async function ShopHome({
               <Link
                 key={g.id}
                 href={`/shop/game/${g.id}`}
-                className="group overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 transition hover:border-brand-500/60 hover:shadow-lg hover:shadow-brand-600/10"
+                className="group overflow-hidden rounded-2xl border border-ink-700/70 bg-ink-900/70 backdrop-blur-sm transition hover:border-brand-500/60 hover:bg-ink-900/85 hover:shadow-lg hover:shadow-brand-600/20"
               >
-                <div className="aspect-square overflow-hidden bg-ink-850">
+                <div className="aspect-square overflow-hidden bg-ink-850/60">
                   {g.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -140,7 +140,7 @@ export default async function ShopHome({
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {news.map((n) => {
               const card = (
-                <article className="h-full overflow-hidden rounded-2xl border border-ink-700 bg-ink-900">
+                <article className="h-full overflow-hidden rounded-2xl border border-ink-700/70 bg-ink-900/70 backdrop-blur-sm">
                   {n.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
