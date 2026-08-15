@@ -21,28 +21,26 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
   return (
     <div className="relative flex min-h-screen flex-col">
       {/*
-        พื้นหลังของหน้าเว็บลูกค้า — วางไฟล์ไว้ที่ public/shop-bg.jpg
-        ถ้าไม่มีไฟล์ก็จะเห็นเป็นพื้นสีเข้มตามปกติ ไม่พัง
-        ตรึงไว้กับหน้าจอเพื่อไม่ให้เลื่อนตามเนื้อหา และไม่ใช้ background-attachment: fixed
-        เพราะบนมือถือจะกระตุก
+        พื้นหลังของหน้าเว็บลูกค้า
+        ห้ามใช้ z-index ติดลบ เพราะเบราว์เซอร์จะวาดพื้นหลังทึบของ body ทับลงไปอีกที
+        ทำให้ภาพหายไปทั้งที่ค่า CSS ถูกต้องทุกอย่าง — ใช้ z-0 แล้วดันเนื้อหาขึ้น z-10 แทน
+
+        จอแคบใช้ความกว้างเต็มแล้วชิดบน เพื่อให้เห็นลายที่อยู่ริมภาพครบ
+        (ถ้าใช้ cover บนจอแคบ ภาพแนวนอนจะถูกครอบจนเหลือแต่ตรงกลางที่ว่างเปล่า)
+        จอกว้างค่อยใช้ cover ให้เต็มพื้นที่
       */}
       <div
         aria-hidden
-        /*
-          จอแคบ (มือถือ) ใช้ความกว้างเต็มแล้วชิดบน เพื่อให้เห็นลายที่อยู่ริมภาพครบ
-          ถ้าใช้ cover บนจอแคบ ภาพแนวนอนจะถูกครอบจนเหลือแต่ตรงกลางที่ว่างเปล่า
-          จอกว้างค่อยใช้ cover ให้เต็มพื้นที่
-        */
-        className="pointer-events-none fixed inset-0 -z-20 bg-ink-950 bg-[length:100%_auto] bg-top bg-no-repeat md:bg-cover md:bg-center"
+        className="pointer-events-none fixed inset-0 z-0 bg-ink-950 bg-[length:100%_auto] bg-top bg-no-repeat md:bg-cover md:bg-center"
         style={{ backgroundImage: `url(${shopBackground(settings)})` }}
       />
       {/* ฝ้าทับให้ตัวหนังสืออ่านง่าย ปรับความเข้มได้จากหลังร้าน */}
       <div
         aria-hidden
-        className={`pointer-events-none fixed inset-0 -z-10 bg-linear-to-b ${shopOverlayClass(settings)}`}
+        className={`pointer-events-none fixed inset-0 z-0 bg-linear-to-b ${shopOverlayClass(settings)}`}
       />
       {settings.announcement ? (
-        <div className="bg-linear-to-r from-brand-600 to-grape-600 px-4 py-2 text-center text-sm font-medium text-white">
+        <div className="relative z-10 bg-linear-to-r from-brand-600 to-grape-600 px-4 py-2 text-center text-sm font-medium text-white">
           {settings.announcement}
         </div>
       ) : null}
@@ -84,9 +82,9 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+      <main className="relative z-10 mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
 
-      <footer className="relative mt-10 border-t border-ink-800/60 bg-ink-900/70 backdrop-blur-md">
+      <footer className="relative z-10 mt-10 border-t border-ink-800/60 bg-ink-900/70 backdrop-blur-md">
         <div className="mx-auto max-w-6xl px-4 py-8">
           <h2 className="text-base font-semibold text-white">ช่องทางติดต่อ</h2>
           <ContactBar
