@@ -6,6 +6,23 @@ export class ConfigError extends Error {}
 
 let client: postgres.Sql | null = null
 
+/** ข้อมูลปลายทางของฐานข้อมูล (ไม่มีรหัสผ่าน) ใช้ตรวจว่าต่อผ่าน pooler ถูกตัวไหม */
+export function dbTarget() {
+  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL
+  if (!url) return null
+  const m = url.match(/@([^:/?]+)(?::(\d+))?/)
+  const host = m?.[1] ?? ''
+  const port = m?.[2] ?? '5432'
+  return {
+    host,
+    port,
+    region: host.match(/aws-\d+-([a-z]+-[a-z]+-\d+)/)?.[1] ?? null,
+    // 6543 = transaction pooler (ที่ควรใช้บน serverless), 5432 = session/direct
+    mode: port === '6543' ? 'transaction-pooler' : port === '5432' ? 'session-or-direct' : port,
+    pooled: /pooler\.supabase\.com/.test(host),
+  }
+}
+
 function getClient() {
   if (client) return client
   const url = process.env.DATABASE_URL || process.env.POSTGRES_URL
@@ -19,12 +36,34 @@ function getClient() {
     prepare: false,
     // ปกติ postgres.js จะยิงถามตารางชนิดข้อมูลตอนต่อครั้งแรก ซึ่งเสียเวลาไปฟรี ๆ หนึ่งรอบ
     fetch_types: false,
-    // เชื่อมต่อน้อย ๆ เพราะรันบน serverless ที่มีหลาย instance
-    max: 3,
-    idle_timeout: 20,
-    connect_timeout: 15,
+    // บน serverless หนึ่ง instance รับทีละรีเควสต์อยู่แล้ว เปิดคอนเนกชันเดียวพอ
+    // ถ้าเปิดหลายอันคูณจำนวน instance จะกินโควตาของ Supabase จนเต็มแล้วค้างทั้งระบบ
+    max: 1,
+    idle_timeout: 10,
+    connect_timeout: 10,
+    max_lifetime: 60 * 5,
   })
   return client
+}
+
+/** กันไม่ให้ค้างยาว ถ้าฐานข้อมูลไม่ตอบให้ขึ้น error ใน 12 วินาที จะได้รู้ว่าพังที่ตรงไหน */
+function withTimeout<T>(promise: Promise<T>, ms = 12_000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`ฐานข้อมูลไม่ตอบภายใน ${ms / 1000} วินาที`)),
+      ms
+    )
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      }
+    )
+  })
 }
 
 // ตารางที่ต้องมีครบ ถ้าเพิ่มตารางใหม่ใน schema.ts ต้องเติมชื่อที่นี่ด้วย
@@ -72,7 +111,7 @@ export async function q<T = Record<string, unknown>>(
 ): Promise<T[]> {
   await ensureSchema()
   const sql = getClient()
-  const rows = await sql.unsafe(text, params as never[])
+  const rows = await withTimeout(sql.unsafe(text, params as never[]))
   return rows as unknown as T[]
 }
 

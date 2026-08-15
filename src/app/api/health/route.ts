@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server'
-import { q } from '@/lib/db'
+import { NextResponse, type NextRequest } from 'next/server'
+import { dbTarget, q } from '@/lib/db'
 import { publicSupabaseConfig } from '@/lib/supabase'
 import { todayISO } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 /**
  * หน้าตรวจสุขภาพระบบ — ใช้หาว่าช้าตรงไหน
@@ -23,17 +24,30 @@ async function timed<T>(fn: () => Promise<T>) {
   }
 }
 
-/** ดึงเฉพาะชื่อรีเจินจาก host ของฐานข้อมูล เช่น aws-0-us-east-1.pooler.supabase.com -> us-east-1 */
-function dbRegion() {
-  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL
-  if (!url) return null
-  const host = url.match(/@([^:/?]+)/)?.[1] ?? ''
-  return host.match(/aws-\d+-([a-z]+-[a-z]+-\d+)/)?.[1] ?? host.split('.').slice(-3).join('.')
-}
+export async function GET(request: NextRequest) {
+  const target = dbTarget()
+  const base = {
+    vercelRegion: process.env.VERCEL_REGION ?? 'local',
+    database: target,
+    envPresent: {
+      DATABASE_URL: Boolean(process.env.DATABASE_URL),
+      POSTGRES_URL: Boolean(process.env.POSTGRES_URL),
+      SUPABASE_URL: Boolean(process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL),
+      SUPABASE_SERVICE_ROLE_KEY: Boolean(
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
+      ),
+    },
+  }
 
-export async function GET() {
+  // ค่าเริ่มต้นตอบทันทีโดยไม่แตะฐานข้อมูล จะได้ตรวจการตั้งค่าได้แม้ตอนฐานข้อมูลค้าง
+  if (request.nextUrl.searchParams.get('deep') !== '1') {
+    return NextResponse.json(
+      { ...base, hint: 'เติม ?deep=1 เพื่อวัดเวลาจริงของฐานข้อมูล' },
+      { headers: { 'cache-control': 'no-store' } }
+    )
+  }
+
   const today = todayISO()
-
   const connect = await timed(() => q('select 1 as ok'))
   const simpleRead = await timed(() => q('select count(*)::int as n from profiles'))
 
@@ -78,8 +92,7 @@ export async function GET() {
 
   return NextResponse.json(
     {
-      vercelRegion: process.env.VERCEL_REGION ?? 'local',
-      databaseRegion: dbRegion(),
+      ...base,
       timings: {
         dbConnectFirstQuery: connect,
         dbSimpleRead: simpleRead,
