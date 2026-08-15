@@ -95,7 +95,7 @@ export function Nav({
 function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2.5">
-      <BrandLogo circle size={40} compactFallback />
+      <BrandLogo circle size={56} compactFallback />
       <BrandWordmark />
     </Link>
   )

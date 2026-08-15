@@ -29,7 +29,7 @@ export function BrandMark({ size = 36, className = '' }: { size?: number; classN
 /** ตัวอักษร Pay Jung ตามสีโลโก้ ใช้คู่กับ BrandMark ตอนไม่มีไฟล์โลโก้ */
 export function BrandWordmark({ subtitle = true }: { subtitle?: boolean }) {
   return (
-    <span>
+    <span className="min-w-0">
       <span className="block text-base font-bold leading-tight">
         <span className="text-brand-400">Pay</span> <span className="text-grape-400">Jung</span>
       </span>

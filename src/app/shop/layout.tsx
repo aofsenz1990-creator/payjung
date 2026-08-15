@@ -48,7 +48,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       <header className="sticky top-0 z-30 border-b border-ink-800/60 bg-ink-950/60 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link href="/shop" className="flex items-center gap-2.5">
-            <BrandLogo circle size={44} compactFallback />
+            <BrandLogo circle size={56} compactFallback />
             <BrandWordmark />
           </Link>
 
