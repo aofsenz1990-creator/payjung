@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { ConfigError, q, q1 } from './db'
 import { supabaseServer, SupabaseConfigError } from './supabase'
@@ -22,7 +23,11 @@ export async function countUsers() {
  * อ่านผู้ใช้ที่ล็อกอินอยู่จาก Supabase Auth แล้วต่อด้วยข้อมูลสิทธิ์จากตาราง profiles
  * ถ้ายังไม่มีแถวใน profiles (เช่นสร้างบัญชีจากหน้า Supabase โดยตรง) จะสร้างให้เป็นพนักงาน
  */
-export async function getSession(): Promise<SessionUser | null> {
+/**
+ * ห่อด้วย cache() เพื่อให้หนึ่งรีเควสต์ถาม Supabase และฐานข้อมูลแค่ครั้งเดียว
+ * เดิม layout เรียกหนึ่งครั้งและตัวหน้าเรียกอีกครั้ง = ทำงานซ้ำสองเท่าทุกครั้งที่เปิดหน้า
+ */
+export const getSession = cache(async function getSession(): Promise<SessionUser | null> {
   let user: { id: string; email?: string } | null = null
   try {
     const supabase = await supabaseServer()
@@ -64,7 +69,7 @@ export async function getSession(): Promise<SessionUser | null> {
     name: profile.display_name || (user.email ?? '').split('@')[0],
     role: profile.role === 'admin' ? 'admin' : 'staff',
   }
-}
+})
 
 /** ใช้ในหน้าที่ต้องล็อกอิน — ถ้าไม่มี session จะเด้งไปหน้า login */
 export async function requireUser(): Promise<SessionUser> {

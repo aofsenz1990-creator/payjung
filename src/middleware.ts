@@ -19,6 +19,16 @@ export async function middleware(request: NextRequest) {
   // ยังตั้งค่า Supabase ไม่ครบ — ปล่อยผ่านไปให้หน้า login อธิบายวิธีตั้งค่า
   if (!url || !key) return response
 
+  // ไม่มี cookie ของ Supabase เลย = ยังไม่เคยล็อกอิน ไม่ต้องเสียเวลายิงถาม Supabase
+  const hasAuthCookie = request.cookies.getAll().some((c) => c.name.startsWith('sb-'))
+  if (!hasAuthCookie) {
+    if (isPublic) return response
+    const target = request.nextUrl.clone()
+    target.pathname = '/login'
+    target.search = pathname === '/' ? '' : `?next=${encodeURIComponent(pathname + search)}`
+    return NextResponse.redirect(target)
+  }
+
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll() {
