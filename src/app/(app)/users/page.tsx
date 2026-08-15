@@ -5,9 +5,11 @@ import {
   createUserAction,
   deleteUserAction,
   resetPasswordAction,
+  setPagesAction,
   toggleUserAction,
 } from '@/lib/actions/users'
 import { dateOnly, num } from '@/lib/format'
+import { ASSIGNABLE_PAGES, DEFAULT_STAFF_PAGES } from '@/lib/pages'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
 
@@ -20,6 +22,7 @@ type UserRow = {
   role: string
   is_active: boolean
   created_at: string
+  allowed_pages: string | null
   sales: number
 }
 
@@ -28,9 +31,13 @@ export default async function UsersPage() {
 
   const users = await q<UserRow>(
     `select p.id, p.email, p.display_name, p.role, p.is_active, p.created_at,
+            case when p.allowed_pages is null then null
+                 else array_to_string(p.allowed_pages, ',') end as allowed_pages,
             (select count(*) from sales s where s.created_by = p.id)::int as sales
        from profiles p order by p.role, p.display_name`
   )
+
+  const staff = users.filter((u) => u.role !== 'admin')
 
   return (
     <>
@@ -234,6 +241,94 @@ export default async function UsersPage() {
             และคุณแก้ไขสิทธิ์ของตัวเองไม่ได้ เพื่อกันไม่ให้ล็อกตัวเองออกจากระบบ
           </p>
         </div>
+      </div>
+
+      {/* กำหนดเมนูที่พนักงานแต่ละคนเห็น */}
+      <div className="mt-6 card">
+        <SectionTitle
+          right={<span className="text-xs text-mute">{num(staff.length)} คน</span>}
+        >
+          สิทธิ์การเข้าถึงเมนู (รายคน)
+        </SectionTitle>
+
+        <p className="mb-5 text-xs leading-relaxed text-mute">
+          ติ๊กเฉพาะเมนูที่ต้องการให้พนักงานคนนั้นเห็น เมนูที่ไม่ได้ติ๊กจะหายไปจากแถบเมนู
+          และถ้าพิมพ์ที่อยู่เว็บเข้าตรง ๆ ก็จะถูกกันออกเช่นกัน —
+          ส่วน <b className="text-slate-200">ค่าใช้จ่ายรายเดือน</b> กับ{' '}
+          <b className="text-slate-200">ผู้ใช้งานระบบ</b> เป็นของผู้ดูแลระบบเท่านั้น มอบให้พนักงานไม่ได้
+        </p>
+
+        {staff.length === 0 ? (
+          <Empty>ยังไม่มีบัญชีพนักงาน — ผู้ดูแลระบบเห็นทุกเมนูอยู่แล้ว</Empty>
+        ) : (
+          <div className="space-y-4">
+            {staff.map((u) => {
+              const current =
+                u.allowed_pages === null
+                  ? (DEFAULT_STAFF_PAGES as string[])
+                  : u.allowed_pages.split(',').filter(Boolean)
+
+              return (
+                <div key={u.id} className="rounded-xl border border-ink-700 bg-ink-850 p-4">
+                  <ActionForm action={setPagesAction}>
+                    <input type="hidden" name="id" value={u.id} />
+
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="font-medium text-white">{u.display_name}</span>
+                        <span className="ml-2 text-xs text-mute">{u.email}</span>
+                      </div>
+                      {u.allowed_pages === null ? (
+                        <Badge>ใช้ค่าเริ่มต้น</Badge>
+                      ) : (
+                        <Badge tone="brand">กำหนดเอง {current.length} เมนู</Badge>
+                      )}
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {ASSIGNABLE_PAGES.map((p) => (
+                        <label
+                          key={p.key}
+                          className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2.5 transition hover:border-ink-600"
+                        >
+                          <input
+                            type="checkbox"
+                            name="pages"
+                            value={p.key}
+                            defaultChecked={current.includes(p.key)}
+                            className="mt-0.5 size-4 rounded border-ink-600 bg-ink-850"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm text-slate-100">
+                              <span aria-hidden className="mr-1.5">
+                                {p.icon}
+                              </span>
+                              {p.label}
+                            </span>
+                            <span className="block text-xs text-mute">{p.hint}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <SubmitButton className="btn-primary btn-sm">บันทึกสิทธิ์</SubmitButton>
+                      <button
+                        type="submit"
+                        name="reset"
+                        value="1"
+                        className="btn-ghost btn-sm"
+                        formNoValidate
+                      >
+                        คืนค่าเริ่มต้น
+                      </button>
+                    </div>
+                  </ActionForm>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </>
   )

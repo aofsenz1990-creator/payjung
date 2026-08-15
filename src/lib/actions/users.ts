@@ -5,6 +5,7 @@ import { q, q1 } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { friendlyError, str } from '@/lib/form'
+import { ASSIGNABLE_PAGES, isPageKey } from '@/lib/pages'
 import type { ActionState } from '@/components/ActionForm'
 
 function authError(message: string) {
@@ -67,6 +68,52 @@ export async function resetPasswordAction(formData: FormData): Promise<ActionSta
 
   revalidatePath('/users')
   return { ok: 'เปลี่ยนรหัสผ่านเรียบร้อย' }
+}
+
+/**
+ * กำหนดว่าพนักงานคนนี้เห็นเมนูอะไรบ้าง
+ * - ติ๊กเลือกเมนู = เก็บรายการที่เลือก
+ * - ไม่ติ๊กเลย = ไม่เห็นเมนูใดเลย (ต่างจาก "คืนค่าเริ่มต้น" ที่ล้างเป็น null)
+ */
+export async function setPagesAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const id = str(formData, 'id')
+  if (!id) return { error: 'ไม่พบผู้ใช้' }
+
+  try {
+    if (str(formData, 'reset') === '1') {
+      await q('update profiles set allowed_pages = null where id = $1', [id])
+      revalidatePath('/users')
+      revalidatePath('/', 'layout')
+      return { ok: 'คืนค่าเริ่มต้นแล้ว (เห็นทุกเมนูของพนักงาน)' }
+    }
+
+    const selected = formData
+      .getAll('pages')
+      .filter((v): v is string => typeof v === 'string')
+      .filter(isPageKey)
+      .filter((key) => ASSIGNABLE_PAGES.some((p) => p.key === key))
+
+    // เก็บเป็นข้อความคั่นจุลภาคแล้วให้ Postgres แปลงเป็น array เอง
+    // จะได้ไม่ต้องพึ่งการแปลง array ของไดรเวอร์
+    await q(
+      `update profiles
+          set allowed_pages = case when $2 = '' then '{}'::text[] else string_to_array($2, ',') end
+        where id = $1`,
+      [id, selected.join(',')]
+    )
+
+    revalidatePath('/users')
+    revalidatePath('/', 'layout')
+    return {
+      ok:
+        selected.length === 0
+          ? 'บันทึกแล้ว — ผู้ใช้นี้จะไม่เห็นเมนูใดเลย'
+          : `บันทึกสิทธิ์ ${selected.length} เมนูแล้ว`,
+    }
+  } catch (err) {
+    return { error: friendlyError(err) }
+  }
 }
 
 export async function toggleUserAction(formData: FormData) {

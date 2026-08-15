@@ -14,6 +14,9 @@ function csvCell(value: unknown) {
 export async function GET(request: NextRequest) {
   const user = await getSession()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (!user.pages.includes('history')) {
+    return NextResponse.json({ error: 'ไม่มีสิทธิ์เข้าถึงประวัติการเติม' }, { status: 403 })
+  }
 
   const sp = Object.fromEntries(request.nextUrl.searchParams.entries())
   const filters = parseFilters(sp)

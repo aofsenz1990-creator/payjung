@@ -86,6 +86,12 @@ function withTimeout<T>(promise: Promise<T>, ms = 12_000): Promise<T> {
   })
 }
 
+/**
+ * คอลัมน์ที่เพิ่มล่าสุด ใช้เป็นหมุดบอกว่าโครงสร้างเป็นเวอร์ชันปัจจุบันแล้วหรือยัง
+ * เวลาเพิ่มคอลัมน์ใหม่ใน schema.ts ให้อัปเดตตรงนี้ด้วย ระบบจะได้รู้ว่าต้องรัน DDL ซ้ำ
+ */
+const SCHEMA_MARKER = { table: 'profiles', column: 'allowed_pages' }
+
 // ตารางที่ต้องมีครบ ถ้าเพิ่มตารางใหม่ใน schema.ts ต้องเติมชื่อที่นี่ด้วย
 const EXPECTED_TABLES = [
   'profiles',
@@ -108,11 +114,15 @@ function ensureSchema() {
       // เช็กก่อนด้วยคำสั่งเดียวว่าตารางครบแล้วหรือยัง
       // ถ้าครบก็ข้ามการสร้างไปเลย ไม่ต้องยิง DDL ยาว ๆ ทุกครั้งที่ instance เย็น
       const list = EXPECTED_TABLES.map((t) => `'${t}'`).join(', ')
-      const [{ n }] = await sql.unsafe<{ n: number }[]>(
-        `select count(*)::int as n from pg_tables
-          where schemaname = 'public' and tablename in (${list})`
+      const [{ tables, marker }] = await sql.unsafe<{ tables: number; marker: number }[]>(
+        `select
+           (select count(*)::int from pg_tables
+             where schemaname = 'public' and tablename in (${list})) as tables,
+           (select count(*)::int from information_schema.columns
+             where table_schema = 'public' and table_name = '${SCHEMA_MARKER.table}'
+               and column_name = '${SCHEMA_MARKER.column}') as marker`
       )
-      if (n >= EXPECTED_TABLES.length) return
+      if (tables >= EXPECTED_TABLES.length && marker === 1) return
 
       // ครั้งแรกเท่านั้น — รวมทุก statement ยิงรอบเดียวแบบ simple query
       await sql.unsafe(SCHEMA_STATEMENTS.join(';\n')).simple()

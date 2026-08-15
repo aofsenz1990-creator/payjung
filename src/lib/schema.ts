@@ -14,6 +14,9 @@ export const SCHEMA_STATEMENTS: string[] = [
     created_at timestamptz not null default now()
   )`,
 
+  // สิทธิ์เข้าถึงเมนูรายคน — null = ใช้ค่าเริ่มต้นตามสิทธิ์ (ดู src/lib/pages.ts)
+  `alter table profiles add column if not exists allowed_pages text[]`,
+
   `create table if not exists games (
     id serial primary key,
     name text not null,

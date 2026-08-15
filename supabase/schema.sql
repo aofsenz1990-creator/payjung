@@ -14,6 +14,8 @@ create table if not exists profiles (
     created_at timestamptz not null default now()
   );
 
+alter table profiles add column if not exists allowed_pages text[];
+
 create table if not exists games (
     id serial primary key,
     name text not null,

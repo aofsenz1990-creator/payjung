@@ -9,7 +9,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
-      <Nav role={user.role} user={user.name} />
+      <Nav
+        pages={user.pages}
+        user={user.name}
+        roleLabel={user.role === 'admin' ? 'ผู้ดูแลระบบ (เห็นทุนและกำไร)' : 'พนักงาน'}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="hidden items-center justify-end gap-3 border-b border-ink-800 bg-ink-900/60 px-8 py-3 lg:flex">
           <span className="text-sm text-mute">

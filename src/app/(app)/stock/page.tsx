@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
-import { requireUser } from '@/lib/auth'
+import { requirePage } from '@/lib/auth'
 import { stockMoveAction } from '@/lib/actions/stock'
 import { dateTime, money, num } from '@/lib/format'
 import { StockForm, type StockProduct } from '@/components/StockForm'
@@ -10,7 +10,7 @@ import { STOCK_KIND } from '@/lib/constants'
 export const dynamic = 'force-dynamic'
 
 export default async function StockPage() {
-  const user = await requireUser()
+  const user = await requirePage('stock')
   const isAdmin = user.role === 'admin'
 
   const [products, movements, summary] = await Promise.all([

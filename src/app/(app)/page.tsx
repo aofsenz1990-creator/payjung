@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
-import { requireUser } from '@/lib/auth'
+import { requirePage } from '@/lib/auth'
 import { dateTime, money, monthLabel, num, recentMonths, safeMonth, todayISO } from '@/lib/format'
 import { BarChart, RankBars } from '@/components/Charts'
 import { MonthPicker } from '@/components/MonthPicker'
@@ -31,7 +31,7 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ month?: string }>
 }) {
-  const user = await requireUser()
+  const user = await requirePage('dashboard')
   const showMoney = user.role === 'admin'
   const { month: monthParam } = await searchParams
   const month = safeMonth(monthParam)

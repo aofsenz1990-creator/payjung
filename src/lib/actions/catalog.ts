@@ -3,14 +3,14 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { q } from '@/lib/db'
-import { requireUser, requireAdmin } from '@/lib/auth'
+import { requireAdmin, requirePage } from '@/lib/auth'
 import { bool, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
 
 /* ---------------------------------- เกม ---------------------------------- */
 
 export async function saveGameAction(formData: FormData): Promise<ActionState> {
-  await requireUser()
+  await requirePage('games')
   const id = str(formData, 'id')
   const name = str(formData, 'name')
   const publisher = optStr(formData, 'publisher')
@@ -56,7 +56,7 @@ export async function deleteGameAction(formData: FormData) {
 /* -------------------------------- แพ็กเกจเติม ------------------------------- */
 
 export async function saveProductAction(formData: FormData): Promise<ActionState> {
-  await requireUser()
+  await requirePage('games')
   const id = str(formData, 'id')
   const gameId = int(formData, 'game_id')
   const name = str(formData, 'name')
@@ -114,7 +114,7 @@ export async function deleteProductAction(formData: FormData) {
 /* --------------------------------- ลูกค้า --------------------------------- */
 
 export async function saveCustomerAction(formData: FormData): Promise<ActionState> {
-  await requireUser()
+  await requirePage('customers')
   const id = str(formData, 'id')
   const name = str(formData, 'name')
   const phone = optStr(formData, 'phone')

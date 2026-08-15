@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { q } from '@/lib/db'
-import { requireUser } from '@/lib/auth'
+import { requirePage } from '@/lib/auth'
 import { createSaleAction, cancelSaleAction, markPaidAction } from '@/lib/actions/sales'
 import { dateTime, money, nowLocalInput, num, todayISO } from '@/lib/format'
 import { ConfirmButton } from '@/components/ActionForm'
@@ -10,7 +10,7 @@ import { Empty, MoneyStat, PageHeader, SectionTitle, StatusBadge } from '@/compo
 export const dynamic = 'force-dynamic'
 
 export default async function SalesPage() {
-  const user = await requireUser()
+  const user = await requirePage('sales')
   const showMoney = user.role === 'admin'
 
   const [games, products, customers, todaySales, todayTotal] = await Promise.all([

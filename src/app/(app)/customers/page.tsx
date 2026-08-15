@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
-import { requireUser } from '@/lib/auth'
+import { requirePage } from '@/lib/auth'
 import { deleteCustomerAction, saveCustomerAction } from '@/lib/actions/catalog'
 import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
@@ -25,7 +25,7 @@ export default async function CustomersPage({
 }: {
   searchParams: Promise<{ edit?: string; q?: string }>
 }) {
-  const user = await requireUser()
+  const user = await requirePage('customers')
   const isAdmin = user.role === 'admin'
   const { edit, q: keyword } = await searchParams
   const search = (keyword ?? '').trim()

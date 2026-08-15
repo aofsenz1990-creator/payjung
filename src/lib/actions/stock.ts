@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { q, q1 } from '@/lib/db'
-import { requireUser } from '@/lib/auth'
+import { requirePage } from '@/lib/auth'
 import { decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
 
@@ -13,7 +13,7 @@ import type { ActionState } from '@/components/ActionForm'
  *  - adjust : นับสต๊อกจริงแล้วตั้งค่าใหม่ให้ตรง
  */
 export async function stockMoveAction(formData: FormData): Promise<ActionState> {
-  const user = await requireUser()
+  const user = await requirePage('stock')
   const productId = int(formData, 'product_id')
   const kind = str(formData, 'kind')
   const qty = int(formData, 'qty')

@@ -4,33 +4,34 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { BrandLogo } from '@/components/Brand'
-import type { Role } from '@/lib/auth'
-
-type Item = { href: string; label: string; icon: string; adminOnly?: boolean }
-
-const ITEMS: Item[] = [
-  { href: '/', label: 'แดชบอร์ดสรุปยอด', icon: '📊' },
-  { href: '/sales', label: 'ลงยอดขาย', icon: '🧾' },
-  { href: '/history', label: 'ประวัติการเติม', icon: '🕘' },
-  { href: '/games', label: 'รายชื่อเกม & แพ็กเกจ', icon: '🎮' },
-  { href: '/stock', label: 'ระบบสต๊อก', icon: '📦' },
-  { href: '/customers', label: 'รายชื่อลูกค้า', icon: '👥' },
-  { href: '/expenses', label: 'ค่าใช้จ่ายรายเดือน', icon: '💸', adminOnly: true },
-  { href: '/users', label: 'ผู้ใช้งานระบบ', icon: '🔐', adminOnly: true },
-]
+import { PAGES, type PageKey } from '@/lib/pages'
 
 function isActive(pathname: string, href: string) {
   if (href === '/') return pathname === '/'
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-export function Nav({ role, user }: { role: Role; user: string }) {
+export function Nav({
+  pages,
+  user,
+  roleLabel,
+}: {
+  pages: PageKey[]
+  user: string
+  roleLabel: string
+}) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  const items = ITEMS.filter((i) => !i.adminOnly || role === 'admin')
+  const items = PAGES.filter((p) => pages.includes(p.key))
 
   const list = (
     <nav className="space-y-1">
+      {items.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-ink-700 px-3 py-4 text-center text-xs leading-relaxed text-mute">
+          ยังไม่ได้รับสิทธิ์เข้าถึงเมนูใด ๆ<br />
+          ติดต่อผู้ดูแลระบบ
+        </p>
+      ) : null}
       {items.map((item) => {
         const active = isActive(pathname, item.href)
         return (
@@ -81,9 +82,7 @@ export function Nav({ role, user }: { role: Role; user: string }) {
         <div className="border-t border-ink-800 px-5 py-4">
           <p className="text-xs text-mute">เข้าใช้งานโดย</p>
           <p className="truncate text-sm font-medium text-white">{user}</p>
-          <p className="mt-0.5 text-xs text-mute">
-            {role === 'admin' ? 'ผู้ดูแลระบบ (เห็นทุนและกำไร)' : 'พนักงาน'}
-          </p>
+          <p className="mt-0.5 text-xs text-mute">{roleLabel}</p>
         </div>
       </aside>
     </>

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
-import { requireUser } from '@/lib/auth'
+import { requirePage } from '@/lib/auth'
 import { deleteGameAction, saveGameAction } from '@/lib/actions/catalog'
 import { money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
@@ -24,7 +24,7 @@ export default async function GamesPage({
 }: {
   searchParams: Promise<{ edit?: string }>
 }) {
-  const user = await requireUser()
+  const user = await requirePage('games')
   const isAdmin = user.role === 'admin'
   const { edit } = await searchParams
 

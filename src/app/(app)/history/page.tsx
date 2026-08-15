@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
-import { requireUser } from '@/lib/auth'
+import { requirePage } from '@/lib/auth'
 import { cancelSaleAction, deleteSaleAction, markPaidAction } from '@/lib/actions/sales'
 import { buildWhere, filtersToQuery, HISTORY_JOINS, parseFilters } from '@/lib/history'
 import { dateOnly, money, monthLabel, num, recentMonths, timeOnly, todayISO } from '@/lib/format'
@@ -17,7 +17,7 @@ export default async function HistoryPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const user = await requireUser()
+  const user = await requirePage('history')
   const showMoney = user.role === 'admin'
   const sp = await searchParams
   const filters = parseFilters(sp)

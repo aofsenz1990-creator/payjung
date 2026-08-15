@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { q, q1 } from '@/lib/db'
-import { requireAdmin, requireUser } from '@/lib/auth'
+import { requireAdmin, requireAnyPage, requirePage } from '@/lib/auth'
 import { decimal, friendlyError, int, optInt, optStr, str } from '@/lib/form'
 import { localInputToISO } from '@/lib/format'
 import type { ActionState } from '@/components/ActionForm'
@@ -29,7 +29,7 @@ async function nextSaleCode(soldAtISO: string, attempt: number) {
 }
 
 export async function createSaleAction(formData: FormData): Promise<ActionState> {
-  const user = await requireUser()
+  const user = await requirePage('sales')
 
   const gameId = optInt(formData, 'game_id')
   const productId = optInt(formData, 'product_id')
@@ -146,7 +146,8 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
 
 /** ยกเลิกบิล แล้วคืนสต๊อกให้อัตโนมัติ */
 export async function cancelSaleAction(formData: FormData) {
-  const user = await requireUser()
+  // ยกเลิกบิลได้ทั้งจากหน้าลงยอดขายและหน้าประวัติ
+  const user = await requireAnyPage('sales', 'history')
   const id = int(formData, 'id')
   await q(
     `with s as (
@@ -172,7 +173,7 @@ export async function cancelSaleAction(formData: FormData) {
 }
 
 export async function markPaidAction(formData: FormData) {
-  await requireUser()
+  await requireAnyPage('sales', 'history')
   await q(`update sales set status = 'paid' where id = $1 and status = 'pending'`, [
     int(formData, 'id'),
   ])
