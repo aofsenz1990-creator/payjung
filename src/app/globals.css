@@ -1,0 +1,105 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-ink-950: #080b16;
+  --color-ink-900: #0d1220;
+  --color-ink-850: #121a2c;
+  --color-ink-800: #18213a;
+  --color-ink-700: #222d4d;
+  --color-ink-600: #33406a;
+  --color-mute: #8e9bc0;
+  --color-brand-400: #7c8cff;
+  --color-brand-500: #5b6cff;
+  --color-brand-600: #4353f0;
+  --color-good: #2ee6a8;
+  --color-warn: #ffbb3d;
+  --color-bad: #ff6b7a;
+}
+
+* {
+  border-color: var(--color-ink-700);
+}
+
+html,
+body {
+  background: var(--color-ink-950);
+  color: #e8ecfa;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ให้ตัวเลือกใน dropdown อ่านออกบนธีมมืดของ Windows/Chrome */
+select option {
+  background: var(--color-ink-850);
+  color: #e8ecfa;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-ink-700 bg-ink-900 p-5 shadow-lg shadow-black/30;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-medium text-mute;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-sm text-white
+      outline-none transition placeholder:text-ink-600
+      focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+      transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2
+      text-sm font-medium text-white transition hover:bg-brand-500
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-ink-700
+      bg-ink-850 px-4 py-2 text-sm font-medium text-slate-200 transition
+      hover:border-ink-600 hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-bad/40
+      bg-bad/10 px-4 py-2 text-sm font-medium text-bad transition hover:bg-bad/20
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1 text-xs;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .table-wrap {
+    @apply -mx-5 overflow-x-auto px-5;
+  }
+
+  .tbl {
+    @apply w-full min-w-full text-sm;
+  }
+
+  .tbl th {
+    @apply whitespace-nowrap border-b border-ink-700 px-3 py-2.5 text-left text-xs
+      font-semibold tracking-wide text-mute;
+  }
+
+  .tbl td {
+    @apply border-b border-ink-800 px-3 py-2.5 align-middle;
+  }
+
+  .tbl tbody tr:hover {
+    @apply bg-ink-850/60;
+  }
+}
