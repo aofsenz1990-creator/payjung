@@ -17,9 +17,11 @@ export default async function SalesPage() {
   const [games, products, customers, todaySales, todayTotal] = await Promise.all([
     q<GameOption>('select id, name from games where is_active order by name'),
     q<ProductOption>(
+      // เรียงตามลำดับที่บันทึกเข้าระบบ (id) ไม่ใช่ตามตัวอักษร
+      // เพราะชื่อแพ็กเกจขึ้นต้นด้วยตัวเลข พอเรียงตามตัวอักษรแล้วดูสับสน
       `select id, game_id, name, sell_price::float8 as sell_price, cost_price::float8 as cost_price,
               track_stock, stock_qty
-         from products where is_active order by name`
+         from products where is_active order by game_id, id`
     ),
     q<CustomerOption>('select id, name, game_uid from customers order by name'),
     q<{
