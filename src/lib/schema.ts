@@ -171,6 +171,26 @@ export const SCHEMA_STATEMENTS: string[] = [
     created_at timestamptz not null default now()
   )`,
 
+  // รายการเคลม — เติมเกมให้ไม่สำเร็จแล้วต้องโอนเงินคืนลูกค้า
+  `create table if not exists claims (
+    id serial primary key,
+    customer_id int references customers(id) on delete set null,
+    customer_name text not null,
+    contact_channel text,
+    contact_value text,
+    amount numeric(12,2) not null default 0,
+    game_id int references games(id) on delete set null,
+    game_name text,
+    sale_id int references sales(id) on delete set null,
+    slip_path text,
+    note text,
+    status text not null default 'pending',
+    created_by uuid references profiles(id) on delete set null,
+    created_at timestamptz not null default now(),
+    paid_at timestamptz
+  )`,
+  `create index if not exists claims_status_idx on claims (status, created_at desc)`,
+
   // ค่าตั้งค่าทั่วไปของหน้าเว็บ เช่น ช่องทางติดต่อ ข้อความประกาศ
   `create table if not exists site_settings (
     key text primary key,

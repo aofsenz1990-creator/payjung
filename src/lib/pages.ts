@@ -11,6 +11,7 @@ export type PageKey =
   | 'games'
   | 'stock'
   | 'customers'
+  | 'claims'
   | 'storefront'
   | 'expenses'
   | 'users'
@@ -33,6 +34,7 @@ export const PAGES: PageDef[] = [
   { key: 'games', href: '/games', label: 'รายชื่อเกม & แพ็กเกจ', icon: '🎮', hint: 'จัดการเกมและราคา' },
   { key: 'stock', href: '/stock', label: 'ระบบสต๊อก', icon: '📦', hint: 'รับเข้า ตัดออก ปรับยอด' },
   { key: 'customers', href: '/customers', label: 'รายชื่อลูกค้า', icon: '👥', hint: 'ข้อมูลติดต่อและยอดซื้อ' },
+  { key: 'claims', href: '/claims', label: 'เคลม / คืนเงิน', icon: '↩️', hint: 'เติมไม่สำเร็จ ต้องโอนคืนลูกค้า' },
   {
     key: 'storefront',
     href: '/storefront',

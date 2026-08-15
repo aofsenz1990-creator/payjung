@@ -47,9 +47,15 @@ export function BrandWordmark({ subtitle = true }: { subtitle?: boolean }) {
 export function BrandLogo({
   className = 'w-56 sm:w-64',
   compactFallback = false,
+  circle = false,
+  size = 128,
 }: {
   className?: string
   compactFallback?: boolean
+  /** แสดงเป็นวงกลมพื้นขาว */
+  circle?: boolean
+  /** ขนาดวงกลมเป็นพิกเซล ใช้เมื่อ circle = true */
+  size?: number
 }) {
   const [failed, setFailed] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
@@ -60,6 +66,27 @@ export function BrandLogo({
     const img = imgRef.current
     if (img && img.complete && img.naturalWidth === 0) setFailed(true)
   }, [])
+
+  if (circle && !failed) {
+    return (
+      <span
+        className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-lg shadow-black/30 ring-1 ring-white/20"
+        style={{ width: size, height: size }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          ref={imgRef}
+          src="/logo.png"
+          alt="Pay Jung — ระบบจัดการร้านเติมเกม"
+          width={836}
+          height={675}
+          className="object-contain"
+          style={{ width: size * 0.82, height: size * 0.82 }}
+          onError={() => setFailed(true)}
+        />
+      </span>
+    )
+  }
 
   if (failed) {
     if (compactFallback) {

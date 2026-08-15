@@ -10,6 +10,9 @@ export const PAYMENT_METHODS = [
 /** ลูกค้ามาจากช่องทางไหน — แก้รายการนี้ได้ตามช่องทางที่ร้านใช้จริง */
 export const CUSTOMER_SOURCES = ['Facebook', 'LINE'] as const
 
+/** ช่องทางที่ใช้ติดต่อลูกค้าตอนโอนเงินคืน */
+export const CLAIM_CHANNELS = ['Facebook', 'LINE'] as const
+
 export const EXPENSE_CATEGORIES = [
   'ค่าเช่าร้าน',
   'ค่าน้ำ/ค่าไฟ',

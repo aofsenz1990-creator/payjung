@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import { q } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
-import { createSaleAction, cancelSaleAction, markPaidAction } from '@/lib/actions/sales'
+import { createSaleAction, cancelSaleAction, markPaidAction, refundSaleAction } from '@/lib/actions/sales'
 import { dateTime, money, nowLocalInput, num, todayISO } from '@/lib/format'
-import { ConfirmButton } from '@/components/ActionForm'
+import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { SaleForm, type CustomerOption, type GameOption, type ProductOption } from '@/components/SaleForm'
 import { Empty, MoneyStat, PageHeader, SectionTitle, StatusBadge } from '@/components/ui'
@@ -36,12 +36,13 @@ export default async function SalesPage() {
       profit: number
       status: string
       slip_path: string | null
+      channel: string
       payment_method: string
       seller: string | null
     }>(
       `select s.id, s.code, s.sold_at, s.item_name, g.name as game, coalesce(c.name, s.customer_name) as customer, s.source,
               s.game_account, s.qty, s.total::float8 as total, s.profit::float8 as profit, s.slip_path,
-              s.status, s.payment_method, u.display_name as seller
+              s.status, s.payment_method, s.channel, u.display_name as seller
          from sales s
          left join games g on g.id = s.game_id
          left join customers c on c.id = s.customer_id
@@ -178,6 +179,14 @@ export default async function SalesPage() {
                     </td>
                     <td>
                       <div className="flex justify-end gap-1.5">
+{s.channel === 'web' && s.status !== 'cancelled' ? (
+                          <ActionForm action={refundSaleAction}>
+                            <input type="hidden" name="id" value={s.id} />
+                            <SubmitButton className="btn-ghost btn-sm text-warn" pendingLabel="...">
+                              คืนเครดิต
+                            </SubmitButton>
+                          </ActionForm>
+                        ) : null}
                         {s.status === 'pending' ? (
                           <form action={markPaidAction}>
                             <input type="hidden" name="id" value={s.id} />

@@ -10,7 +10,7 @@ import {
 } from '@/lib/shop'
 import { ContactBar } from '@/components/ContactBar'
 import { shopLogoutAction } from '@/lib/actions/shop'
-import { BrandLogo } from '@/components/Brand'
+import { BrandLogo, BrandWordmark } from '@/components/Brand'
 import { money } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
@@ -47,8 +47,9 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
 
       <header className="sticky top-0 z-30 border-b border-ink-800/60 bg-ink-950/60 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <Link href="/shop">
-            <BrandLogo className="w-32 sm:w-40" compactFallback />
+          <Link href="/shop" className="flex items-center gap-2.5">
+            <BrandLogo circle size={44} compactFallback />
+            <BrandWordmark />
           </Link>
 
           {customer ? (

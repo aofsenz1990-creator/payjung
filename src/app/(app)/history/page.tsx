@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
-import { cancelSaleAction, deleteSaleAction, markPaidAction } from '@/lib/actions/sales'
+import { cancelSaleAction, deleteSaleAction, markPaidAction, refundSaleAction } from '@/lib/actions/sales'
 import { buildWhere, filtersToQuery, HISTORY_JOINS, parseFilters } from '@/lib/history'
 import { dateOnly, money, monthLabel, num, recentMonths, timeOnly, todayISO } from '@/lib/format'
-import { ConfirmButton } from '@/components/ActionForm'
+import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { Empty, MoneyStat, PageHeader, SectionTitle, StatusBadge } from '@/components/ui'
 import { CUSTOMER_SOURCES, SALE_STATUS } from '@/lib/constants'
@@ -44,11 +44,12 @@ export default async function HistoryPage({
       seller: string | null
       note: string | null
       slip_path: string | null
+      channel: string
     }>(
       `select s.id, s.code, s.sold_at, s.item_name, g.name as game, coalesce(c.name, s.customer_name) as customer, s.source,
               s.game_account, s.qty, s.unit_price::float8 as unit_price, s.total::float8 as total,
               s.profit::float8 as profit, s.status, s.payment_method,
-              u.display_name as seller, s.note, s.slip_path
+              u.display_name as seller, s.note, s.slip_path, s.channel
        ${HISTORY_JOINS} ${where}
         order by s.sold_at desc, s.id desc
         limit ${PAGE_SIZE + 1} offset ${(page - 1) * PAGE_SIZE}`,
@@ -330,6 +331,14 @@ export default async function HistoryPage({
                     </td>
                     <td>
                       <div className="flex justify-end gap-1.5">
+{r.channel === 'web' && r.status !== 'cancelled' ? (
+                          <ActionForm action={refundSaleAction}>
+                            <input type="hidden" name="id" value={r.id} />
+                            <SubmitButton className="btn-ghost btn-sm text-warn" pendingLabel="...">
+                              คืนเครดิต
+                            </SubmitButton>
+                          </ActionForm>
+                        ) : null}
                         {r.status === 'pending' ? (
                           <form action={markPaidAction}>
                             <input type="hidden" name="id" value={r.id} />

@@ -199,6 +199,68 @@ export async function cancelSaleAction(formData: FormData) {
   refreshSalesViews()
 }
 
+/**
+ * ยกเลิกบิลจากหน้าเว็บแล้วคืนเครดิตให้ลูกค้า — ใช้ตอนเติมเกมให้ไม่ได้
+ * ยกเลิกบิล คืนเครดิต ลงสมุดเครดิต และคืนสต๊อก อยู่ในคำสั่งเดียวกันทั้งหมด
+ * กันกดซ้ำด้วยการเช็กว่าเคยมีรายการคืนเครดิตของบิลนี้แล้วหรือยัง
+ */
+export async function refundSaleAction(formData: FormData): Promise<ActionState> {
+  await requireAnyPage('sales', 'history')
+  const id = int(formData, 'id')
+  if (!id) return { error: 'ไม่พบบิลนี้' }
+
+  try {
+    const rows = await q<{ refunded: number; balance_after: number; code: string }>(
+      `with s as (
+         update sales set status = 'cancelled'
+          where id = $1
+            and status <> 'cancelled'
+            and customer_id is not null
+            and not exists (
+              select 1 from credit_transactions t where t.sale_id = sales.id and t.kind = 'refund'
+            )
+         returning id, code, customer_id, product_id, qty, unit_cost, total
+       ),
+       cust as (
+         update customers set credit = customers.credit + s.total
+           from s where customers.id = s.customer_id
+         returning customers.id, customers.credit
+       ),
+       tx as (
+         insert into credit_transactions (customer_id, kind, amount, balance_after, note, sale_id)
+         select cust.id, 'refund', s.total, cust.credit, $2, s.id from cust, s
+       ),
+       upd as (
+         update products set stock_qty = products.stock_qty + s.qty
+           from s where products.id = s.product_id and products.track_stock
+         returning products.id
+       ),
+       mv as (
+         insert into stock_movements (product_id, kind, qty, unit_cost, note, sale_id)
+         select s.product_id, 'in', s.qty, s.unit_cost, 'คืนสต๊อกจากการคืนเครดิต', s.id
+           from s join products p on p.id = s.product_id where p.track_stock
+       )
+       select s.code, s.total::float8 as refunded, cust.credit::float8 as balance_after
+         from s, cust`,
+      [id, optStr(formData, 'note') ?? 'คืนเครดิตเพราะเติมเกมไม่สำเร็จ']
+    )
+
+    if (rows.length === 0) {
+      return { error: 'คืนเครดิตไม่ได้ — บิลนี้อาจคืนไปแล้ว ถูกยกเลิกแล้ว หรือไม่ใช่บิลที่ตัดจากเครดิต' }
+    }
+
+    refreshSalesViews()
+    revalidatePath('/customers')
+    return {
+      ok:
+        `คืนเครดิต ${rows[0].refunded.toLocaleString('th-TH')} บาท ของบิล ${rows[0].code} แล้ว — ` +
+        `เครดิตลูกค้าคงเหลือ ${rows[0].balance_after.toLocaleString('th-TH')} บาท`,
+    }
+  } catch (err) {
+    return { error: friendlyError(err, 'คืนเครดิตไม่สำเร็จ') }
+  }
+}
+
 export async function markPaidAction(formData: FormData) {
   await requireAnyPage('sales', 'history')
   await q(`update sales set status = 'paid' where id = $1 and status = 'pending'`, [

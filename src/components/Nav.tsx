@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { BrandLogo } from '@/components/Brand'
+import { BrandLogo, BrandWordmark } from '@/components/Brand'
 import { PAGES, type PageKey } from '@/lib/pages'
 
 function isActive(pathname: string, href: string) {
@@ -94,8 +94,9 @@ export function Nav({
 
 function Brand() {
   return (
-    <Link href="/" className="flex items-center">
-      <BrandLogo className="w-36 lg:w-44" compactFallback />
+    <Link href="/" className="flex items-center gap-2.5">
+      <BrandLogo circle size={40} compactFallback />
+      <BrandWordmark />
     </Link>
   )
 }
