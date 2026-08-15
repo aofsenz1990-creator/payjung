@@ -6,6 +6,7 @@ import {
   saveGameStorefrontAction,
   saveProviderAction,
   toggleGamePublishedAction,
+  setAllProductsPublishedAction,
   testProviderAction,
   toggleProductPublishedAction,
 } from '@/lib/actions/storefront'
@@ -640,6 +641,33 @@ export default async function StorefrontPage({
         >
           แพ็กเกจกับผู้ให้บริการที่จะเติมให้
         </SectionTitle>
+
+        {products.length > 0 ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-ink-700 bg-ink-850 p-3">
+            <span className="text-xs text-mute">
+              เปิด/ปิดขายทีเดียวทั้งหมด ({num(publishedProducts)} จาก {num(products.length)}{' '}
+              เปิดขายอยู่)
+            </span>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <ActionForm action={setAllProductsPublishedAction}>
+                <input type="hidden" name="published" value="1" />
+                <SubmitButton className="btn-primary btn-sm" pendingLabel="...">
+                  เปิดขายทั้งหมด
+                </SubmitButton>
+              </ActionForm>
+              <ActionForm action={setAllProductsPublishedAction}>
+                <input type="hidden" name="published" value="0" />
+                {/* ถามยืนยันก่อน เพราะกดพลาดทีเดียวหน้าเว็บจะไม่เหลือของขายเลย */}
+                <ConfirmButton
+                  className="btn-ghost btn-sm"
+                  message={`ซ่อนแพ็กเกจทั้งหมด ${products.length} รายการจากหน้าเว็บลูกค้า?`}
+                >
+                  ซ่อนทั้งหมด
+                </ConfirmButton>
+              </ActionForm>
+            </div>
+          </div>
+        ) : null}
         {products.length === 0 ? (
           <Empty>ยังไม่มีแพ็กเกจ</Empty>
         ) : (

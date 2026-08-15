@@ -152,6 +152,52 @@ export async function toggleGamePublishedAction(formData: FormData) {
   revalidatePath('/storefront')
 }
 
+/**
+ * เปิดขาย/ซ่อนแพ็กเกจทั้งหมดในทีเดียว
+ * ทำเฉพาะแพ็กเกจ ไม่ไปยุ่งกับการเปิด-ปิดตัวเกม เพราะเป็นคนละเรื่องกัน
+ * แต่จะเตือนให้ถ้ายังมีเกมที่ซ่อนอยู่ เพราะเปิดแพ็กเกจอย่างเดียวลูกค้าก็ยังไม่เห็น
+ */
+export async function setAllProductsPublishedAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const published = str(formData, 'published') === '1'
+
+  try {
+    const rows = await q<{ changed: number; hidden_games: number }>(
+      `with upd as (
+         update products set is_published = $1
+          where is_active and is_published <> $1
+         returning id
+       )
+       select (select count(*) from upd)::int as changed,
+              (select count(*) from games g
+                where g.is_active and not g.is_published
+                  and exists (select 1 from products p
+                               where p.game_id = g.id and p.is_active))::int as hidden_games`,
+      [published]
+    )
+
+    const changed = rows[0]?.changed ?? 0
+    const hiddenGames = rows[0]?.hidden_games ?? 0
+
+    revalidatePath('/storefront')
+    revalidatePath('/games')
+    revalidatePath('/shop')
+
+    if (changed === 0) {
+      return { ok: published ? 'ทุกแพ็กเกจเปิดขายอยู่แล้ว' : 'ทุกแพ็กเกจซ่อนอยู่แล้ว' }
+    }
+    return {
+      ok:
+        `${published ? 'เปิดขาย' : 'ซ่อน'} ${changed} แพ็กเกจแล้ว` +
+        (published && hiddenGames > 0
+          ? ` — แต่ยังมี ${hiddenGames} เกมที่ซ่อนอยู่ ลูกค้าจะยังไม่เห็นแพ็กเกจของเกมนั้น กดปุ่ม "แสดง" ที่ตารางเกมด้านบนด้วย`
+          : ''),
+    }
+  } catch (err) {
+    return { error: friendlyError(err) }
+  }
+}
+
 export async function toggleProductPublishedAction(formData: FormData) {
   await requireAdmin()
   await q('update products set is_published = not is_published where id = $1', [
