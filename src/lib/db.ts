@@ -46,6 +46,26 @@ function getClient() {
   return client
 }
 
+/**
+ * ต่อคิวให้ query วิ่งทีละคำสั่งต่อหนึ่ง instance
+ *
+ * postgres.js จะ "pipeline" คำสั่งที่ยิงพร้อมกันลงคอนเนกชันเดียว ซึ่ง PgBouncer
+ * ของ Supabase ในโหมด transaction รับไม่ได้ ผลคือค้างยาวจนหมดเวลา
+ * (วัดจริงแล้ว: ยิงทีละคำสั่ง 8 คำสั่งใช้ 120ms แต่ยิงพร้อมกันค้างเกิน 12 วินาที)
+ *
+ * แต่ละคำสั่งใช้เวลา 1-3 ms อยู่แล้ว ต่อคิวจึงแทบไม่ต่างและได้ความนิ่งกลับมา
+ */
+let queue: Promise<void> = Promise.resolve()
+
+function serialize<T>(run: () => Promise<T>): Promise<T> {
+  const result = queue.then(run)
+  queue = result.then(
+    () => undefined,
+    () => undefined
+  )
+  return result
+}
+
 /** กันไม่ให้ค้างยาว ถ้าฐานข้อมูลไม่ตอบให้ขึ้น error ใน 12 วินาที จะได้รู้ว่าพังที่ตรงไหน */
 function withTimeout<T>(promise: Promise<T>, ms = 12_000): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -111,7 +131,7 @@ export async function q<T = Record<string, unknown>>(
 ): Promise<T[]> {
   await ensureSchema()
   const sql = getClient()
-  const rows = await withTimeout(sql.unsafe(text, params as never[]))
+  const rows = await withTimeout(serialize(() => sql.unsafe(text, params as never[])))
   return rows as unknown as T[]
 }
 
