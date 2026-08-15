@@ -13,7 +13,7 @@ export type StaffRow = {
   allowed_pages: string | null
 }
 
-/** ดึงรายชื่อพนักงานพร้อมสิทธิ์เมนูปัจจุบัน — ใช้ทั้งหน้าแดชบอร์ดและหน้าผู้ใช้งานระบบ */
+/** ดึงรายชื่อพนักงานพร้อมสิทธิ์เมนูปัจจุบัน */
 export async function loadStaff() {
   return q<StaffRow>(
     `select id, email, display_name,
@@ -23,37 +23,20 @@ export async function loadStaff() {
   )
 }
 
-/**
- * การ์ดกำหนดว่าพนักงานแต่ละคนเห็นเมนูอะไรบ้าง
- * ใช้ซ้ำได้ทั้งหน้าแดชบอร์ดและหน้าผู้ใช้งานระบบ
- */
-export function MenuPermissions({
-  staff,
-  compact = false,
-}: {
-  staff: StaffRow[]
-  compact?: boolean
-}) {
+/** การ์ดกำหนดว่าพนักงานแต่ละคนเห็นเมนูอะไรบ้าง — อยู่ในหน้าผู้ใช้งานระบบ */
+export function MenuPermissions({ staff }: { staff: StaffRow[] }) {
   return (
     <div className="card">
       <SectionTitle right={<span className="text-xs text-mute">{num(staff.length)} คน</span>}>
         สิทธิ์การเข้าถึงเมนู (รายคน)
       </SectionTitle>
 
-      {compact ? (
-        <p className="mb-5 text-xs leading-relaxed text-mute">
-          ติ๊กเฉพาะเมนูที่ต้องการให้พนักงานคนนั้นเห็น — เมนูที่ไม่ได้ติ๊กจะหายไปจากแถบเมนู
-          และพิมพ์ที่อยู่เว็บเข้าตรง ๆ ก็ถูกกันออก
-        </p>
-      ) : (
-        <p className="mb-5 text-xs leading-relaxed text-mute">
-          ติ๊กเฉพาะเมนูที่ต้องการให้พนักงานคนนั้นเห็น เมนูที่ไม่ได้ติ๊กจะหายไปจากแถบเมนู
-          และถ้าพิมพ์ที่อยู่เว็บเข้าตรง ๆ ก็จะถูกกันออกเช่นกัน —
-          ส่วน <b className="text-slate-200">ค่าใช้จ่ายรายเดือน</b> กับ{' '}
-          <b className="text-slate-200">ผู้ใช้งานระบบ</b> เป็นของผู้ดูแลระบบเท่านั้น
-          มอบให้พนักงานไม่ได้
-        </p>
-      )}
+      <p className="mb-5 text-xs leading-relaxed text-mute">
+        ติ๊กเฉพาะเมนูที่ต้องการให้พนักงานคนนั้นเห็น เมนูที่ไม่ได้ติ๊กจะหายไปจากแถบเมนู
+        และถ้าพิมพ์ที่อยู่เว็บเข้าตรง ๆ ก็จะถูกกันออกเช่นกัน — ส่วน{' '}
+        <b className="text-slate-200">ค่าใช้จ่ายรายเดือน</b> กับ{' '}
+        <b className="text-slate-200">ผู้ใช้งานระบบ</b> เป็นของผู้ดูแลระบบเท่านั้น มอบให้พนักงานไม่ได้
+      </p>
 
       {staff.length === 0 ? (
         <Empty>ยังไม่มีบัญชีพนักงาน — ผู้ดูแลระบบเห็นทุกเมนูอยู่แล้ว</Empty>
