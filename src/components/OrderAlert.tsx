@@ -29,21 +29,45 @@ function playChime(ctx: AudioContext) {
   }
 }
 
+/** พักเสียงครั้งละกี่นาที ตอนที่ยังเติมให้ลูกค้าไม่ได้แต่ไม่อยากให้ดังรัว ๆ */
+const SNOOZE_MINUTES = 15
+
+function clockLabel(at: number) {
+  return new Intl.DateTimeFormat('th-TH', {
+    timeZone: 'Asia/Bangkok',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(at))
+}
+
 /**
- * เสียงแจ้งเตือนเมื่อมีออเดอร์ใหม่เข้ามาจากหน้าเว็บลูกค้า
+ * เสียงแจ้งเตือนออเดอร์จากหน้าเว็บลูกค้า
  *
- * ถามจำนวนออเดอร์เป็นระยะ ถ้าเพิ่มขึ้นก็ส่งเสียง ขึ้นป้าย และดึงข้อมูลหน้าปัจจุบันใหม่
- * ตั้งใจให้ถามต่อแม้สลับแท็บไปทำอย่างอื่น เพราะเวลานั้นแหละที่ต้องการให้เสียงเตือน
- * แลกกับที่ต้องเปิดเองก่อนถึงจะเริ่มถาม จะได้ไม่กินโควตาของคนที่ไม่ได้ใช้
+ * ดังซ้ำเรื่อย ๆ ตราบใดที่ยังมีออเดอร์ค้างอยู่ หยุดเองเมื่อเติมสำเร็จ (กดรับเงินแล้ว)
+ * หรือยกเลิก/คืนเครดิตไปแล้ว — ตั้งใจให้กวนจนกว่าจะจัดการเสร็จ ไม่ใช่ดังครั้งเดียวแล้วหาย
+ *
+ * ช่วงที่มีของค้างจะถามถี่ขึ้น เพื่อให้เสียงหยุดเร็วหลังกดรับเงิน
+ * ช่วงปกติถามห่าง ๆ พอ จะได้ไม่กินโควตาเปล่า ๆ
+ * และตั้งใจให้ถามต่อแม้สลับแท็บไปทำอย่างอื่น เพราะเวลานั้นแหละที่ต้องการให้เตือน
  */
-export function OrderAlert({ seconds = 25 }: { seconds?: number }) {
+export function OrderAlert({
+  repeatSeconds = 10,
+  idleSeconds = 25,
+}: {
+  repeatSeconds?: number
+  idleSeconds?: number
+}) {
   const router = useRouter()
   const [on, setOn] = useState(false)
   const [ready, setReady] = useState(false)
   const [fresh, setFresh] = useState(0)
+  const [waiting, setWaiting] = useState(0)
+  const [snoozeUntil, setSnoozeUntil] = useState(0)
   const [muted, setMuted] = useState(false)
 
   const total = useRef<number | null>(null)
+  const snoozeRef = useRef(0)
+  snoozeRef.current = snoozeUntil
   const ctxRef = useRef<AudioContext | null>(null)
   const baseTitle = useRef('')
 
@@ -99,39 +123,68 @@ export function OrderAlert({ seconds = 25 }: { seconds?: number }) {
   useEffect(() => {
     if (!on) return
     let alive = true
+    let timer: ReturnType<typeof setTimeout>
 
     async function check() {
+      // ยังมีของค้าง = ถามถี่ขึ้น เสียงจะได้หยุดเร็วหลังกดรับเงิน
+      let wait = idleSeconds
+
       try {
         const res = await fetch('/api/new-orders', { cache: 'no-store' })
-        if (!res.ok || !alive) return
-        const data = (await res.json()) as { total: number; pending: number }
-        if (!alive || typeof data.total !== 'number') return
+        if (!alive) return
+        if (res.ok) {
+          const data = (await res.json()) as { total: number; pending: number }
+          if (!alive) return
 
-        const before = total.current
-        total.current = data.total
-        // รอบแรกแค่จำตัวเลขไว้ ยังไม่ต้องเตือน ไม่งั้นจะดังทุกครั้งที่เปิดหน้า
-        if (before === null || data.total <= before) return
+          if (typeof data.total === 'number' && typeof data.pending === 'number') {
+            const before = total.current
+            total.current = data.total
+            setWaiting(data.pending)
+            if (data.pending > 0) wait = repeatSeconds
 
-        setFresh((n) => n + (data.total - before))
-        ring()
-        router.refresh()
+            // ป้ายนับเฉพาะที่เพิ่งเข้ามา รอบแรกจึงยังไม่นับ ไม่งั้นของเก่าจะถูกนับใหม่ทุกครั้งที่เปิดหน้า
+            if (before !== null && data.total > before) {
+              setFresh((n) => n + (data.total - before))
+              router.refresh()
+            }
+
+            // หมดเวลาพักเสียงแล้ว ล้างค่าให้ปุ่มกลับมาเป็นปกติ
+            if (snoozeRef.current && Date.now() >= snoozeRef.current) setSnoozeUntil(0)
+
+            // ส่วนเสียงดูที่ "ยังค้างอยู่ไหม" ไม่ใช่ "เพิ่งเข้ามาไหม"
+            // ของค้างข้ามวันจึงยังเตือนอยู่ และรอบแรกหลังเปิดหน้าก็เตือนเลย
+            if (data.pending > 0 && Date.now() >= snoozeRef.current) ring()
+          }
+        }
       } catch {
         // เน็ตสะดุดหรือเซิร์ฟเวอร์ไม่ว่าง ข้ามรอบนี้ไปเงียบ ๆ แล้วลองใหม่รอบหน้า
       }
+
+      if (alive) timer = setTimeout(check, wait * 1000)
     }
 
     void check()
-    const timer = setInterval(check, seconds * 1000)
     return () => {
       alive = false
-      clearInterval(timer)
+      clearTimeout(timer)
     }
-  }, [on, seconds, ring, router])
+  }, [on, repeatSeconds, idleSeconds, ring, router])
 
   // ขึ้นจำนวนบนแท็บเบราว์เซอร์ด้วย เผื่อสลับไปทำอย่างอื่นแล้วไม่ได้ยินเสียง
   useEffect(() => {
     if (!baseTitle.current) return
-    document.title = fresh > 0 ? `(${fresh}) ${baseTitle.current}` : baseTitle.current
+
+    function apply() {
+      const want = fresh > 0 ? `(${fresh}) ${baseTitle.current}` : baseTitle.current
+      if (document.title !== want) document.title = want
+    }
+    apply()
+
+    // ทุกครั้งที่ดึงข้อมูลหน้าใหม่ Next จะสร้างแท็ก title ใหม่ทับของเดิม
+    // ต้องดูทั้ง head ไม่ใช่ดูที่แท็กเดิม เพราะแท็กเดิมถูกถอดออกไปแล้ว
+    const observer = new MutationObserver(apply)
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true })
+    return () => observer.disconnect()
   }, [fresh])
 
   function toggle() {
@@ -153,14 +206,18 @@ export function OrderAlert({ seconds = 25 }: { seconds?: number }) {
     } else {
       total.current = null
       setFresh(0)
+      setWaiting(0)
+      setSnoozeUntil(0)
     }
   }
 
   // ยังอ่านค่าที่เคยเลือกไว้ไม่เสร็จ เว้นที่ไว้เท่าเดิมกันหน้าเด้ง
   if (!ready) return <div className="h-8" />
 
+  const snoozing = snoozeUntil > Date.now()
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2">
       {fresh > 0 ? (
         <button
           type="button"
@@ -169,6 +226,24 @@ export function OrderAlert({ seconds = 25 }: { seconds?: number }) {
           title="กดเพื่อล้างป้าย"
         >
           🛒 ออเดอร์ใหม่ {fresh} รายการ
+        </button>
+      ) : null}
+
+      {on && waiting > 0 ? (
+        <span className="rounded-lg border border-warn/50 bg-warn/10 px-2.5 py-1.5 text-xs font-medium text-warn">
+          ⏳ ยังไม่ได้เติม {waiting} รายการ
+          {snoozing ? <span className="ml-1 text-mute">· พักเสียงถึง {clockLabel(snoozeUntil)}</span> : null}
+        </span>
+      ) : null}
+
+      {on && waiting > 0 && !snoozing ? (
+        <button
+          type="button"
+          onClick={() => setSnoozeUntil(Date.now() + SNOOZE_MINUTES * 60_000)}
+          className="rounded-lg border border-ink-700 bg-ink-850 px-2.5 py-1.5 text-xs text-mute transition hover:text-slate-200"
+          title={`หยุดเสียง ${SNOOZE_MINUTES} นาที แต่ยังนับออเดอร์ให้อยู่`}
+        >
+          😴 พักเสียง {SNOOZE_MINUTES} นาที
         </button>
       ) : null}
 
@@ -189,7 +264,7 @@ export function OrderAlert({ seconds = 25 }: { seconds?: number }) {
         title={
           on
             ? 'ปิดเสียงแจ้งเตือนออเดอร์จากหน้าเว็บ'
-            : 'เปิดเสียงแจ้งเตือนเมื่อมีออเดอร์ใหม่จากหน้าเว็บ'
+            : `เปิดเสียงแจ้งเตือน — จะดังซ้ำทุก ${repeatSeconds} วินาที จนกว่าจะเติมให้ลูกค้าเสร็จ`
         }
       >
         {on ? '🔔 เสียงแจ้งเตือน: เปิด' : '🔕 เสียงแจ้งเตือน: ปิด'}
