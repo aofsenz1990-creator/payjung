@@ -745,12 +745,13 @@ export default async function StorefrontPage({
                 </label>
                 <textarea id="body" name="body" className="input" rows={3} />
               </div>
-              <div>
-                <label className="label" htmlFor="news_image">
-                  ลิงก์รูป
-                </label>
-                <input id="news_image" name="image_url" className="input" placeholder="https://..." />
-              </div>
+              <ImageInput
+                label="รูปข่าว"
+                hint="แสดงเป็นภาพหัวข่าวบนหน้าเว็บ แนะนำภาพแนวนอน — คลิกเลือกไฟล์ ลากมาวาง หรือ Ctrl+V"
+                maxDimension={1200}
+                forceJpeg
+                previewClassName="h-24 w-32"
+              />
               <div>
                 <label className="label" htmlFor="link_url">
                   ลิงก์เมื่อกด (ถ้ามี)

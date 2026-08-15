@@ -119,7 +119,6 @@ export async function saveNewsAction(formData: FormData): Promise<ActionState> {
   const id = str(formData, 'id')
   const title = str(formData, 'title')
   const body = optStr(formData, 'body')
-  const imageUrl = optStr(formData, 'image_url')
   const linkUrl = optStr(formData, 'link_url')
   const isPublished = bool(formData, 'is_published')
   const pinned = bool(formData, 'pinned')
@@ -127,6 +126,14 @@ export async function saveNewsAction(formData: FormData): Promise<ActionState> {
   if (!title) return { error: 'กรุณากรอกหัวข้อข่าว' }
 
   try {
+    // อัปโหลดรูปที่แนบมาก่อน ถ้าไม่ได้แนบก็ใช้ลิงก์ที่กรอกไว้
+    const imageData = str(formData, 'image_data')
+    let imageUrl = optStr(formData, 'image_url')
+    if (imageData) imageUrl = await uploadImage(imageData, 'news')
+    if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
+      return { error: 'ลิงก์รูปต้องขึ้นต้นด้วย http:// หรือ https://' }
+    }
+
     if (id) {
       await q(
         `update news set title = $1, body = $2, image_url = $3, link_url = $4,
@@ -141,6 +148,7 @@ export async function saveNewsAction(formData: FormData): Promise<ActionState> {
       )
     }
   } catch (err) {
+    if (err instanceof SlipError) return { error: err.message }
     return { error: friendlyError(err) }
   }
 
