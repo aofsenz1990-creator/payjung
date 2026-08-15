@@ -38,6 +38,9 @@ export function Nav({
           <Link
             key={item.href}
             href={item.href}
+            // ปิด prefetch เพราะทุกหน้าดึงข้อมูลสด แค่เลื่อนเมาส์ผ่านเมนูก็ยิงถาม Supabase
+            // ทุกปุ่มโดยที่ยังไม่ได้กดเข้าไปดูเลย กินโควตา egress ฟรี ๆ
+            prefetch={false}
             onClick={() => setOpen(false)}
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
               active

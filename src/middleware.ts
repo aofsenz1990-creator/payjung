@@ -1,8 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// /api/health เปิดสาธารณะ เพราะต้องเรียกได้ตอนยังล็อกอินไม่ได้ — คืนแค่ตัวเลขเวลา ไม่มีข้อมูลลับ
-const PUBLIC_PATHS = ['/login', '/setup', '/api/health']
+const PUBLIC_PATHS = ['/login', '/setup']
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
