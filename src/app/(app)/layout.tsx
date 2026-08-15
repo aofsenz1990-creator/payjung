@@ -1,6 +1,7 @@
 import { requireUser } from '@/lib/auth'
 import { logoutAction } from '@/lib/actions/auth'
 import { Nav } from '@/components/Nav'
+import { OrderAlert } from '@/components/OrderAlert'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,11 +16,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         roleLabel={user.role === 'admin' ? 'ผู้ดูแลระบบ (เห็นทุนและกำไร)' : 'พนักงาน'}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="hidden items-center justify-end gap-3 border-b border-ink-800 bg-ink-900/60 px-8 py-3 lg:flex">
-          <span className="text-sm text-mute">
+        {/* แถบบนขวา — จอมือถือเหลือแค่ปุ่มเสียงแจ้งเตือน ชื่อคนใช้กับปุ่มออกไปอยู่ล่างสุดแทน */}
+        <header className="flex items-center justify-end gap-3 border-b border-ink-800 bg-ink-900/60 px-4 py-2 lg:px-8 lg:py-3">
+          <OrderAlert />
+          <span className="hidden text-sm text-mute lg:inline">
             สวัสดี <span className="font-medium text-white">{user.name}</span>
           </span>
-          <form action={logoutAction}>
+          <form action={logoutAction} className="hidden lg:block">
             <button type="submit" className="btn-ghost btn-sm">
               ออกจากระบบ
             </button>
