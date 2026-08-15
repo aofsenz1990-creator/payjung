@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-const MAX_DIMENSION = 800
+const DEFAULT_MAX_DIMENSION = 800
 const JPEG_QUALITY = 0.85
 
 /**
@@ -11,9 +11,9 @@ const JPEG_QUALITY = 0.85
  * รูป PNG/WebP เก็บเป็น PNG ต่อ เพราะโลโก้เกมมักมีพื้นหลังโปร่งใส
  * ถ้าแปลงเป็น JPEG พื้นโปร่งจะกลายเป็นสีดำทับโลโก้
  */
-async function toResizedDataUrl(blob: Blob) {
+async function toResizedDataUrl(blob: Blob, maxDimension: number, forceJpeg: boolean) {
   const bitmap = await createImageBitmap(blob)
-  const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height))
+  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height))
   const width = Math.round(bitmap.width * scale)
   const height = Math.round(bitmap.height * scale)
 
@@ -25,7 +25,8 @@ async function toResizedDataUrl(blob: Blob) {
   ctx.drawImage(bitmap, 0, 0, width, height)
   bitmap.close?.()
 
-  const keepAlpha = blob.type === 'image/png' || blob.type === 'image/webp'
+  // ภาพพื้นหลังไม่ต้องการความโปร่งใส บังคับเป็น JPEG เพราะ PNG ของภาพใหญ่ ๆ ไฟล์บวมมาก
+  const keepAlpha = !forceJpeg && (blob.type === 'image/png' || blob.type === 'image/webp')
   return keepAlpha ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', JPEG_QUALITY)
 }
 
@@ -39,12 +40,20 @@ export function ImageInput({
   currentUrl,
   label = 'รูปภาพ',
   hint,
+  maxDimension = DEFAULT_MAX_DIMENSION,
+  forceJpeg = false,
+  previewClassName = 'size-24',
 }: {
   name?: string
   urlName?: string
   currentUrl?: string | null
   label?: string
   hint?: string
+  /** ด้านยาวสุดหลังย่อ ภาพพื้นหลังควรใหญ่กว่ารูปเกม */
+  maxDimension?: number
+  /** บังคับเก็บเป็น JPEG แม้ต้นฉบับเป็น PNG (ใช้กับภาพใหญ่ที่ไม่ต้องการความโปร่งใส) */
+  forceJpeg?: boolean
+  previewClassName?: string
 }) {
   const [dataUrl, setDataUrl] = useState('')
   const [url, setUrl] = useState(currentUrl ?? '')
@@ -65,7 +74,7 @@ export function ImageInput({
     setBusy(true)
     setError('')
     try {
-      setDataUrl(await toResizedDataUrl(blob))
+      setDataUrl(await toResizedDataUrl(blob, maxDimension, forceJpeg))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'อ่านรูปไม่สำเร็จ')
     } finally {
@@ -107,7 +116,7 @@ export function ImageInput({
             void accept(e.dataTransfer.files?.[0])
           }}
           onClick={() => fileRef.current?.click()}
-          className={`flex size-24 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed transition ${
+          className={`flex ${previewClassName} shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed transition ${
             dragging ? 'border-brand-500 bg-brand-500/10' : 'border-ink-600 bg-ink-850 hover:border-brand-500/60'
           }`}
         >

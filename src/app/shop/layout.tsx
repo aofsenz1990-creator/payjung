@@ -5,6 +5,8 @@ import {
   getSiteSettings,
   lineLink,
   registrationOpen,
+  shopBackground,
+  shopOverlayClass,
 } from '@/lib/shop'
 import { ContactBar } from '@/components/ContactBar'
 import { shopLogoutAction } from '@/lib/actions/shop'
@@ -26,12 +28,13 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-20 bg-ink-950 bg-[url('/shop-bg.jpg')] bg-cover bg-center bg-no-repeat"
+        className="pointer-events-none fixed inset-0 -z-20 bg-ink-950 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${shopBackground(settings)})` }}
       />
-      {/* ฝ้าทับให้ตัวหนังสืออ่านง่าย เข้มขึ้นเรื่อย ๆ ตอนเลื่อนลงไปหาเนื้อหาด้านล่าง */}
+      {/* ฝ้าทับให้ตัวหนังสืออ่านง่าย ปรับความเข้มได้จากหลังร้าน */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 bg-linear-to-b from-ink-950/55 via-ink-950/75 to-ink-950/92"
+        className={`pointer-events-none fixed inset-0 -z-10 bg-linear-to-b ${shopOverlayClass(settings)}`}
       />
       {settings.announcement ? (
         <div className="bg-linear-to-r from-brand-600 to-grape-600 px-4 py-2 text-center text-sm font-medium text-white">

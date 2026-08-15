@@ -14,6 +14,22 @@ export const SITE_KEYS = [
       { value: 'off', label: 'ปิด — ร้านเปิดบัญชีให้เท่านั้น' },
     ],
   },
+  {
+    key: 'shop_bg',
+    label: 'ภาพพื้นหลังหน้าเว็บ',
+    placeholder: '',
+    image: true as const,
+  },
+  {
+    key: 'shop_bg_overlay',
+    label: 'ความเข้มของฝ้าทับพื้นหลัง',
+    placeholder: '',
+    options: [
+      { value: 'medium', label: 'กลาง — สมดุลระหว่างเห็นภาพกับอ่านง่าย' },
+      { value: 'light', label: 'จาง — เห็นภาพชัด แต่ตัวหนังสืออ่านยากขึ้น' },
+      { value: 'dark', label: 'เข้ม — อ่านง่ายที่สุด ภาพจางลง' },
+    ],
+  },
   { key: 'shop_tagline', label: 'ข้อความใต้ชื่อร้าน', placeholder: 'เติมเกมไว ราคาถูก บริการ 24 ชม.' },
   { key: 'announcement', label: 'ประกาศแถบบนสุด', placeholder: 'เว้นว่างถ้าไม่ต้องการแสดง' },
   { key: 'contact_line', label: 'LINE (ใส่ @id หรือลิงก์ก็ได้)', placeholder: '@payjung' },
@@ -33,6 +49,29 @@ export const SITE_KEYS = [
 ] as const
 
 export type SiteSettings = Record<string, string>
+
+/** ภาพพื้นหลังหน้าเว็บ — ถ้ายังไม่ได้อัปโหลดเอง ใช้ภาพที่ติดมากับระบบ */
+export const DEFAULT_SHOP_BG = '/shop-bg.jpg'
+
+export function shopBackground(settings: SiteSettings) {
+  return settings.shop_bg || DEFAULT_SHOP_BG
+}
+
+/**
+ * ความเข้มของฝ้าที่ทับพื้นหลัง
+ * เขียนคลาสเต็ม ๆ ไว้ทุกตัว เพราะ Tailwind ต้องเห็นชื่อคลาสตรง ๆ ในโค้ดถึงจะสร้าง CSS ให้
+ */
+const OVERLAY_CLASSES = {
+  light: 'from-ink-950/30 via-ink-950/50 to-ink-950/78',
+  medium: 'from-ink-950/55 via-ink-950/75 to-ink-950/92',
+  dark: 'from-ink-950/78 via-ink-950/90 to-ink-950/97',
+} as const
+
+export function shopOverlayClass(settings: SiteSettings) {
+  const key = settings.shop_bg_overlay
+  if (key === 'light' || key === 'dark') return OVERLAY_CLASSES[key]
+  return OVERLAY_CLASSES.medium
+}
 
 /** สร้างลิงก์เพิ่มเพื่อน LINE จาก @id หรือคืนลิงก์เดิมถ้ากรอกมาเป็นลิงก์อยู่แล้ว */
 export function lineLink(value?: string | null) {
