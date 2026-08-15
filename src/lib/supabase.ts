@@ -4,15 +4,22 @@ import { cookies } from 'next/headers'
 
 export class SupabaseConfigError extends Error {}
 
-/** URL และ key ฝั่งเบราว์เซอร์ — รองรับทั้งชื่อเดิม (anon) และชื่อใหม่ (publishable) ของ Supabase */
+/**
+ * URL และ anon key ของ Supabase
+ * การเรียก Supabase ทั้งหมดอยู่ฝั่งเซิร์ฟเวอร์ จึงรับได้ทั้งชื่อที่ขึ้นต้นด้วย NEXT_PUBLIC_
+ * และชื่อที่ Vercel Marketplace ใส่ให้อัตโนมัติ (SUPABASE_URL / SUPABASE_ANON_KEY)
+ * รวมถึงชื่อใหม่ publishable key ของ Supabase ด้วย
+ */
 export function publicSupabaseConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY
   if (!url || !key) {
     throw new SupabaseConfigError(
-      'ยังไม่ได้ตั้งค่า NEXT_PUBLIC_SUPABASE_URL และ NEXT_PUBLIC_SUPABASE_ANON_KEY — คัดลอกจาก Supabase > Project Settings > API มาใส่ใน Environment Variables ของ Vercel'
+      'ยังไม่ได้ตั้งค่า SUPABASE_URL และ SUPABASE_ANON_KEY — เพิ่ม Supabase จาก Vercel > Storage หรือคัดลอกค่าจาก Supabase > Project Settings > API มาใส่ใน Environment Variables ของ Vercel'
     )
   }
   return { url, key }
