@@ -5,6 +5,15 @@ import { supabaseServer } from './supabase'
 
 /** ค่าตั้งค่าหน้าเว็บที่แก้ได้จากหลังร้าน */
 export const SITE_KEYS = [
+  {
+    key: 'allow_register',
+    label: 'ให้ลูกค้าสมัครบัญชีเองได้',
+    placeholder: '',
+    options: [
+      { value: 'on', label: 'เปิด — ลูกค้าสมัครเองได้ที่หน้าเว็บ' },
+      { value: 'off', label: 'ปิด — ร้านเปิดบัญชีให้เท่านั้น' },
+    ],
+  },
   { key: 'shop_tagline', label: 'ข้อความใต้ชื่อร้าน', placeholder: 'เติมเกมไว ราคาถูก บริการ 24 ชม.' },
   { key: 'announcement', label: 'ประกาศแถบบนสุด', placeholder: 'เว้นว่างถ้าไม่ต้องการแสดง' },
   { key: 'contact_line', label: 'LINE', placeholder: '@payjung' },
@@ -14,6 +23,11 @@ export const SITE_KEYS = [
 ] as const
 
 export type SiteSettings = Record<string, string>
+
+/** เปิดให้ลูกค้าสมัครเองไหม — ไม่เคยตั้งค่า = เปิดไว้ */
+export function registrationOpen(settings: SiteSettings) {
+  return (settings.allow_register ?? 'on') !== 'off'
+}
 
 export const getSiteSettings = cache(async function getSiteSettings(): Promise<SiteSettings> {
   const rows = await q<{ key: string; value: string | null }>('select key, value from site_settings')

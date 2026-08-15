@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin, requirePage } from '@/lib/auth'
-import { getShopCustomer } from '@/lib/shop'
+import { getShopCustomer, getSiteSettings, registrationOpen } from '@/lib/shop'
 import { supabaseAdmin, supabaseServer } from '@/lib/supabase'
 import { bool, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
@@ -201,6 +201,81 @@ export async function shopLoginAction(formData: FormData): Promise<ActionState> 
     }
   } catch (err) {
     return { error: friendlyError(err, 'เข้าสู่ระบบไม่สำเร็จ') }
+  }
+
+  redirect('/shop/me')
+}
+
+/**
+ * ลูกค้าสมัครบัญชีเอง
+ *
+ * ถ้าเคยเป็นลูกค้าหน้าร้านอยู่แล้ว (มีเบอร์ตรงกันและยังไม่เคยผูกบัญชีเว็บ)
+ * จะผูกเข้ากับรายชื่อเดิมให้เลย ยอดซื้อสะสมและเครดิตที่ร้านเติมไว้จะไม่หาย
+ */
+export async function shopRegisterAction(formData: FormData): Promise<ActionState> {
+  const settings = await getSiteSettings()
+  if (!registrationOpen(settings)) {
+    return { error: 'ตอนนี้ร้านปิดรับสมัครเอง กรุณาติดต่อร้านเพื่อเปิดบัญชีให้' }
+  }
+
+  const name = str(formData, 'name')
+  const email = str(formData, 'email')
+  const phone = optStr(formData, 'phone')
+  const gameUid = optStr(formData, 'game_uid')
+  const password = str(formData, 'password')
+  const confirm = str(formData, 'confirm')
+
+  if (!name) return { error: 'กรุณากรอกชื่อ' }
+  if (!email.includes('@')) return { error: 'กรุณากรอกอีเมลให้ถูกต้อง' }
+  if (password.length < 8) return { error: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร' }
+  if (password !== confirm) return { error: 'รหัสผ่านสองช่องไม่ตรงกัน' }
+
+  try {
+    const admin = supabaseAdmin()
+    const { data, error } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // ใช้กับร้าน ไม่ต้องรอเมลยืนยัน
+    })
+    if (error || !data.user) {
+      return {
+        error: /already/i.test(error?.message ?? '')
+          ? 'อีเมลนี้เคยสมัครไว้แล้ว ลองเข้าสู่ระบบ หรือติดต่อร้าน'
+          : (error?.message ?? 'สมัครไม่สำเร็จ'),
+      }
+    }
+
+    // ถ้าร้านเคยบันทึกลูกค้าคนนี้ไว้ด้วยเบอร์เดียวกัน ให้ผูกเข้ากับรายชื่อเดิม
+    const existing = phone
+      ? await q1<{ id: number }>(
+          `select id from customers
+            where phone = $1 and auth_user_id is null order by id limit 1`,
+          [phone]
+        )
+      : null
+
+    if (existing) {
+      await q(
+        `update customers set auth_user_id = $2, web_enabled = true,
+                              game_uid = coalesce(game_uid, $3)
+          where id = $1`,
+        [existing.id, data.user.id, gameUid]
+      )
+    } else {
+      await q(
+        `insert into customers (name, phone, game_uid, auth_user_id, web_enabled)
+         values ($1, $2, $3, $4, true)`,
+        [name, phone, gameUid, data.user.id]
+      )
+    }
+
+    const supabase = await supabaseServer()
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+    if (signInError) return { error: 'สมัครสำเร็จแล้ว แต่เข้าสู่ระบบอัตโนมัติไม่ได้ กรุณาล็อกอินเอง' }
+
+    revalidatePath('/customers')
+  } catch (err) {
+    return { error: friendlyError(err, 'สมัครไม่สำเร็จ') }
   }
 
   redirect('/shop/me')

@@ -686,13 +686,28 @@ export default async function StorefrontPage({
                   <label className="label" htmlFor={`setting_${s.key}`}>
                     {s.label}
                   </label>
-                  <input
-                    id={`setting_${s.key}`}
-                    name={`setting_${s.key}`}
-                    className="input"
-                    defaultValue={settings[s.key] ?? ''}
-                    placeholder={s.placeholder}
-                  />
+                  {'options' in s ? (
+                    <select
+                      id={`setting_${s.key}`}
+                      name={`setting_${s.key}`}
+                      className="input"
+                      defaultValue={settings[s.key] ?? s.options[0].value}
+                    >
+                      {s.options.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      id={`setting_${s.key}`}
+                      name={`setting_${s.key}`}
+                      className="input"
+                      defaultValue={settings[s.key] ?? ''}
+                      placeholder={s.placeholder}
+                    />
+                  )}
                 </div>
               ))}
               <SubmitButton className="btn-primary w-full">บันทึกการตั้งค่า</SubmitButton>

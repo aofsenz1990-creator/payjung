@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getShopCustomer, getSiteSettings } from '@/lib/shop'
+import { getShopCustomer, getSiteSettings, registrationOpen } from '@/lib/shop'
 import { shopLogoutAction } from '@/lib/actions/shop'
 import { BrandLogo } from '@/components/Brand'
 import { money } from '@/lib/format'
@@ -46,9 +46,16 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
               </form>
             </div>
           ) : (
-            <Link href="/shop/login" className="btn-primary btn-sm">
-              เข้าสู่ระบบ
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href="/shop/login" className="btn-ghost btn-sm">
+                เข้าสู่ระบบ
+              </Link>
+              {registrationOpen(settings) ? (
+                <Link href="/shop/register" className="btn-primary btn-sm">
+                  สมัครสมาชิก
+                </Link>
+              ) : null}
+            </div>
           )}
         </div>
       </header>
