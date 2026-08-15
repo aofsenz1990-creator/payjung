@@ -6,10 +6,12 @@
 export type PageKey =
   | 'dashboard'
   | 'sales'
+  | 'daily'
   | 'history'
   | 'games'
   | 'stock'
   | 'customers'
+  | 'storefront'
   | 'expenses'
   | 'users'
 
@@ -26,10 +28,19 @@ export type PageDef = {
 export const PAGES: PageDef[] = [
   { key: 'dashboard', href: '/', label: 'แดชบอร์ดสรุปยอด', icon: '📊', hint: 'ยอดขาย กำไร กราฟรายวัน' },
   { key: 'sales', href: '/sales', label: 'ลงยอดขาย', icon: '🧾', hint: 'บันทึกบิลเติมเกม' },
+  { key: 'daily', href: '/daily', label: 'สรุปยอดขายรายวัน', icon: '📅', hint: 'ยอดแยกรายวันทั้งเดือน' },
   { key: 'history', href: '/history', label: 'ประวัติการเติม', icon: '🕘', hint: 'ค้นหาย้อนหลัง + ดาวน์โหลด CSV' },
   { key: 'games', href: '/games', label: 'รายชื่อเกม & แพ็กเกจ', icon: '🎮', hint: 'จัดการเกมและราคา' },
   { key: 'stock', href: '/stock', label: 'ระบบสต๊อก', icon: '📦', hint: 'รับเข้า ตัดออก ปรับยอด' },
   { key: 'customers', href: '/customers', label: 'รายชื่อลูกค้า', icon: '👥', hint: 'ข้อมูลติดต่อและยอดซื้อ' },
+  {
+    key: 'storefront',
+    href: '/storefront',
+    label: 'จัดการหน้าเว็บไซต์',
+    icon: '🛒',
+    adminOnly: true,
+    hint: 'เฉพาะผู้ดูแลระบบ',
+  },
   {
     key: 'expenses',
     href: '/expenses',

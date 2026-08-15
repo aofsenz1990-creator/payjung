@@ -17,6 +17,22 @@ export const SCHEMA_STATEMENTS: string[] = [
   // สิทธิ์เข้าถึงเมนูรายคน — null = ใช้ค่าเริ่มต้นตามสิทธิ์ (ดู src/lib/pages.ts)
   `alter table profiles add column if not exists allowed_pages text[]`,
 
+  // ผู้ให้บริการเติมเกมที่ต่อ API ไว้ — รองรับหลายเจ้าพร้อมกัน
+  // แต่ละแพ็กเกจเลือกได้ว่าจะให้เจ้าไหนเป็นคนเติมให้
+  // ต้องสร้างก่อนตาราง products เพราะ products อ้างถึงตารางนี้
+  `create table if not exists api_providers (
+    id serial primary key,
+    name text not null,
+    base_url text,
+    auth_type text not null default 'bearer',
+    api_key text,
+    note text,
+    priority int not null default 100,
+    is_active boolean not null default true,
+    created_at timestamptz not null default now()
+  )`,
+  `create unique index if not exists api_providers_name_uniq on api_providers (lower(name))`,
+
   `create table if not exists games (
     id serial primary key,
     name text not null,
@@ -26,6 +42,12 @@ export const SCHEMA_STATEMENTS: string[] = [
     created_at timestamptz not null default now()
   )`,
   `create unique index if not exists games_name_uniq on games (lower(name))`,
+
+  // ข้อมูลสำหรับหน้าเว็บที่ลูกค้าจะเข้ามาสั่งซื้อเอง (ยังไม่เปิดใช้)
+  `alter table games add column if not exists image_url text`,
+  `alter table games add column if not exists description text`,
+  `alter table games add column if not exists is_published boolean not null default false`,
+  `alter table games add column if not exists sort_order int not null default 100`,
 
   `create table if not exists products (
     id serial primary key,
@@ -41,6 +63,13 @@ export const SCHEMA_STATEMENTS: string[] = [
     created_at timestamptz not null default now()
   )`,
   `create index if not exists products_game_idx on products (game_id)`,
+
+  // การตั้งค่าของแพ็กเกจสำหรับหน้าเว็บลูกค้า + ผูกกับผู้ให้บริการ API ที่จะเติมให้
+  `alter table products add column if not exists image_url text`,
+  `alter table products add column if not exists is_published boolean not null default false`,
+  `alter table products add column if not exists sort_order int not null default 100`,
+  `alter table products add column if not exists provider_id int references api_providers(id) on delete set null`,
+  `alter table products add column if not exists provider_sku text`,
 
   `create table if not exists customers (
     id serial primary key,

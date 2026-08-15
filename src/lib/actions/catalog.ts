@@ -66,6 +66,12 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
   const trackStock = bool(formData, 'track_stock')
   const lowStock = int(formData, 'low_stock')
   const isActive = bool(formData, 'is_active')
+  // ข้อมูลสำหรับหน้าเว็บลูกค้า
+  const imageUrl = optStr(formData, 'image_url')
+  const isPublished = bool(formData, 'is_published')
+  const sortOrder = int(formData, 'sort_order', 100)
+  const providerId = str(formData, 'provider_id') ? int(formData, 'provider_id') : null
+  const providerSku = optStr(formData, 'provider_sku')
 
   if (!gameId) return { error: 'กรุณาเลือกเกม' }
   if (!name) return { error: 'กรุณากรอกชื่อแพ็กเกจ เช่น 100 เพชร' }
@@ -75,15 +81,24 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
     if (id) {
       await q(
         `update products set game_id = $1, name = $2, sku = $3, cost_price = $4, sell_price = $5,
-           track_stock = $6, low_stock = $7, is_active = $8 where id = $9`,
-        [gameId, name, sku, cost, price, trackStock, lowStock, isActive, Number(id)]
+           track_stock = $6, low_stock = $7, is_active = $8, image_url = $10,
+           is_published = $11, sort_order = $12, provider_id = $13, provider_sku = $14
+         where id = $9`,
+        [
+          gameId, name, sku, cost, price, trackStock, lowStock, isActive, Number(id),
+          imageUrl, isPublished, sortOrder, providerId, providerSku,
+        ]
       )
     } else {
       const openingQty = int(formData, 'opening_qty')
       const rows = await q<{ id: number }>(
-        `insert into products (game_id, name, sku, cost_price, sell_price, track_stock, low_stock, stock_qty)
-         values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
-        [gameId, name, sku, cost, price, trackStock, lowStock, trackStock ? openingQty : 0]
+        `insert into products (game_id, name, sku, cost_price, sell_price, track_stock, low_stock,
+                               stock_qty, image_url, is_published, sort_order, provider_id, provider_sku)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning id`,
+        [
+          gameId, name, sku, cost, price, trackStock, lowStock, trackStock ? openingQty : 0,
+          imageUrl, isPublished, sortOrder, providerId, providerSku,
+        ]
       )
       if (trackStock && openingQty > 0) {
         await q(
@@ -99,6 +114,7 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
 
   revalidatePath('/games')
   revalidatePath('/stock')
+  revalidatePath('/storefront')
   if (id) redirect(`/games/${gameId}`)
   return { ok: `บันทึกแพ็กเกจ "${name}" แล้ว` }
 }

@@ -21,6 +21,11 @@ type ProductRow = {
   low_stock: number
   is_active: boolean
   sold: number
+  image_url: string | null
+  is_published: boolean
+  sort_order: number
+  provider_id: number | null
+  provider_sku: string | null
 }
 
 export default async function GameDetailPage({
@@ -37,7 +42,7 @@ export default async function GameDetailPage({
   const gameId = Number(id)
   if (!Number.isFinite(gameId)) notFound()
 
-  const [game, products, editing] = await Promise.all([
+  const [game, products, editing, providers] = await Promise.all([
     q1<{ id: number; name: string; publisher: string | null; note: string | null }>(
       'select id, name, publisher, note from games where id = $1',
       [gameId]
@@ -55,11 +60,15 @@ export default async function GameDetailPage({
     edit
       ? q1<ProductRow>(
           `select id, game_id, name, sku, cost_price::float8 as cost_price,
-                  sell_price::float8 as sell_price, track_stock, stock_qty, low_stock, is_active
+                  sell_price::float8 as sell_price, track_stock, stock_qty, low_stock, is_active,
+                  image_url, is_published, sort_order, provider_id, provider_sku
              from products where id = $1`,
           [Number(edit)]
         )
       : Promise.resolve(null),
+    q<{ id: number; name: string }>(
+      'select id, name from api_providers where is_active order by priority, name'
+    ),
   ])
 
   if (!game) notFound()
@@ -227,8 +236,96 @@ export default async function GameDetailPage({
                 defaultChecked={editing ? editing.is_active : true}
                 className="size-4 rounded border-ink-600 bg-ink-850"
               />
-              เปิดขายอยู่
+              เปิดขายอยู่ (ในระบบหลังร้าน)
             </label>
+
+            {/* ส่วนของหน้าเว็บลูกค้า */}
+            <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
+              <p className="text-sm font-medium text-slate-100">🛒 หน้าเว็บสำหรับลูกค้า</p>
+              <p className="mt-1 text-xs leading-relaxed text-mute">
+                ใช้ตอนเปิดเว็บให้ลูกค้ากดซื้อเอง ตอนนี้ตั้งค่าเก็บไว้ก่อนได้
+              </p>
+
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="label" htmlFor="image_url">
+                    ลิงก์รูปแพ็กเกจ
+                  </label>
+                  <input
+                    id="image_url"
+                    name="image_url"
+                    className="input"
+                    defaultValue={editing?.image_url ?? ''}
+                    placeholder="https://..."
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label" htmlFor="provider_id">
+                      ผู้ให้บริการที่เติมให้
+                    </label>
+                    <select
+                      id="provider_id"
+                      name="provider_id"
+                      className="input"
+                      defaultValue={editing?.provider_id ?? ''}
+                    >
+                      <option value="">— ยังไม่ผูก —</option>
+                      {providers.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="provider_sku">
+                      รหัสสินค้าฝั่งผู้ให้บริการ
+                    </label>
+                    <input
+                      id="provider_sku"
+                      name="provider_sku"
+                      className="input"
+                      defaultValue={editing?.provider_sku ?? ''}
+                      placeholder="เช่น ff_100_diamond"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label" htmlFor="sort_order">
+                      ลำดับการแสดง
+                    </label>
+                    <input
+                      id="sort_order"
+                      name="sort_order"
+                      type="number"
+                      className="input"
+                      defaultValue={editing?.sort_order ?? 100}
+                    />
+                  </div>
+                  <div className="flex items-end pb-2">
+                    <label className="flex items-center gap-2 text-sm text-slate-200">
+                      <input
+                        type="checkbox"
+                        name="is_published"
+                        defaultChecked={editing?.is_published ?? false}
+                        className="size-4 rounded border-ink-600 bg-ink-900"
+                      />
+                      แสดงบนเว็บ
+                    </label>
+                  </div>
+                </div>
+                {providers.length === 0 ? (
+                  <p className="text-xs text-warn">
+                    ยังไม่มีผู้ให้บริการ API —{' '}
+                    <Link href="/storefront" className="underline">
+                      เพิ่มที่หน้าจัดการหน้าเว็บไซต์
+                    </Link>
+                  </p>
+                ) : null}
+              </div>
+            </div>
 
             <SubmitButton className="btn-primary w-full">
               {editing ? 'บันทึกการแก้ไข' : 'เพิ่มแพ็กเกจ'}
