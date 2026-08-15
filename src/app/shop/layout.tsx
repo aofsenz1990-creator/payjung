@@ -10,7 +10,6 @@ import {
   shopOverlayClass,
 } from '@/lib/shop'
 import { ContactBar } from '@/components/ContactBar'
-import { ShopCover } from '@/components/ShopCover'
 import { shopLogoutAction } from '@/lib/actions/shop'
 import { BrandLogo, BrandWordmark } from '@/components/Brand'
 import { money } from '@/lib/format'
@@ -47,13 +46,25 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         </div>
       ) : null}
 
-      <ShopCover src={shopCover(settings)} />
-
-      <header className="sticky top-0 z-30 border-b border-ink-800/60 bg-ink-950/60 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <header className="sticky top-0 z-30 border-b border-ink-800/60 bg-ink-950/80 backdrop-blur-md">
+        {/*
+          ภาพพื้นหลังของแถบเมนู อัปโหลดเปลี่ยนได้จากหลังร้าน
+          ถ้าโหลดรูปไม่ขึ้น ชั้นนี้จะโปร่งใส แล้วสีพื้นของ header จะโผล่มาแทนเอง
+        */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: `url(${shopCover(settings)})` }}
+        />
+        {/* ฝ้าเข้มที่ริมสองข้าง เพราะโลโก้กับปุ่มอยู่ตรงนั้น ตรงกลางปล่อยให้เห็นภาพชัด */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-linear-to-r from-ink-950/85 via-ink-950/45 to-ink-950/85"
+        />
+        <div className="relative mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link href="/shop" className="flex items-center gap-2.5">
             <BrandLogo circle size={56} compactFallback />
-            <BrandWordmark />
+            <BrandWordmark subtitle="บริการเติมเกมออนไลน์" />
           </Link>
 
           {customer ? (

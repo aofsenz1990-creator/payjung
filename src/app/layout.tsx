@@ -9,8 +9,8 @@ const thai = Noto_Sans_Thai({
 })
 
 export const metadata: Metadata = {
-  title: 'Pay Jung — ระบบจัดการร้านเติมเกม',
-  description: 'ระบบสต๊อก ยอดขาย ลูกค้า และสรุปกำไรสำหรับร้านเติมเกม Pay Jung',
+  title: 'Pay Jung บริการเติมเกมออนไลน์',
+  description: 'เติมเกมออนไลน์ราคาถูก รวดเร็ว ปลอดภัย โดยร้าน Pay Jung',
 }
 
 export const viewport: Viewport = {

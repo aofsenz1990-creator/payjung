@@ -16,7 +16,7 @@ export const SITE_KEYS = [
   },
   {
     key: 'shop_cover',
-    label: 'ภาพแบนเนอร์ด้านบนสุด (Cover)',
+    label: 'ภาพพื้นหลังแถบเมนูด้านบน',
     placeholder: '',
     image: true as const,
   },
@@ -69,7 +69,7 @@ export function shopBackground(settings: SiteSettings) {
   return settings.shop_bg || DEFAULT_SHOP_BG
 }
 
-/** แบนเนอร์ด้านบนสุดของหน้าเว็บ — ถ้ายังไม่ได้อัปโหลดเอง ใช้ไฟล์ที่ติดมากับระบบ */
+/** ภาพพื้นหลังของแถบเมนูด้านบน — ถ้ายังไม่ได้อัปโหลดเอง ใช้ไฟล์ที่ติดมากับระบบ */
 export const DEFAULT_SHOP_COVER = '/shop-cover.jpg'
 
 export function shopCover(settings: SiteSettings) {
