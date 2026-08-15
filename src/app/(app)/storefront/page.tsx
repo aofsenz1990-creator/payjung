@@ -11,7 +11,7 @@ import {
 } from '@/lib/actions/storefront'
 import { deleteNewsAction, saveNewsAction, saveSiteSettingsAction } from '@/lib/actions/shop'
 import { getSiteSettings, SITE_KEYS } from '@/lib/shop'
-import { BUYM_DEFAULT_BASE } from '@/lib/providers/24buym'
+import { ProviderForm } from '@/components/ProviderForm'
 import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
@@ -193,134 +193,7 @@ export default async function StorefrontPage({
             {editingProvider ? `แก้ไข: ${editingProvider.name}` : 'เพิ่มผู้ให้บริการ API'}
           </SectionTitle>
 
-          <ActionForm
-            key={editingProvider?.id ?? 'new'}
-            action={saveProviderAction}
-            className="space-y-4"
-            resetOnSuccess={!editingProvider}
-          >
-            {editingProvider ? (
-              <input type="hidden" name="id" value={editingProvider.id} />
-            ) : null}
-            <div>
-              <label className="label" htmlFor="name">
-                ชื่อผู้ให้บริการ
-              </label>
-              <input
-                id="name"
-                name="name"
-                className="input"
-                defaultValue={editingProvider?.name ?? ''}
-                placeholder="เช่น TopupHub, GameStore API"
-                required
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="kind">
-                ชนิดของ API
-              </label>
-              <select
-                id="kind"
-                name="kind"
-                className="input"
-                defaultValue={editingProvider?.kind ?? '24buym'}
-              >
-                <option value="24buym">24BUYM (รองรับเต็มรูปแบบ)</option>
-                <option value="custom">อื่น ๆ (เก็บข้อมูลไว้ก่อน)</option>
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="base_url">
-                ที่อยู่ API
-              </label>
-              <input
-                id="base_url"
-                name="base_url"
-                className="input"
-                defaultValue={editingProvider?.base_url ?? BUYM_DEFAULT_BASE}
-                placeholder={BUYM_DEFAULT_BASE}
-              />
-              <p className="mt-1 text-xs text-mute">
-                ของ 24BUYM ใช้ค่านี้ได้เลย ไม่ต้องแก้
-              </p>
-            </div>
-            <div>
-              <label className="label" htmlFor="auth_type">
-                วิธียืนยันตัวตน
-              </label>
-              <select
-                id="auth_type"
-                name="auth_type"
-                className="input"
-                defaultValue={editingProvider?.auth_type ?? 'bearer'}
-              >
-                {Object.entries(AUTH_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label" htmlFor="api_key">
-                คีย์ / โทเคน
-              </label>
-              <input
-                id="api_key"
-                name="api_key"
-                type="password"
-                className="input"
-                autoComplete="new-password"
-                placeholder={
-                  editingProvider?.has_key ? 'มีคีย์อยู่แล้ว — เว้นว่างถ้าไม่เปลี่ยน' : 'วางคีย์ที่นี่'
-                }
-              />
-              <p className="mt-1 text-xs text-mute">
-                24BUYM เรียกคีย์นี้ว่า <b>USER_KEY</b> — เก็บในฐานข้อมูลและใช้เฉพาะฝั่งเซิร์ฟเวอร์
-                ไม่ถูกส่งออกไปที่เบราว์เซอร์
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label" htmlFor="priority">
-                  ลำดับความสำคัญ
-                </label>
-                <input
-                  id="priority"
-                  name="priority"
-                  type="number"
-                  className="input"
-                  defaultValue={editingProvider?.priority ?? 100}
-                />
-              </div>
-              <div className="flex items-end pb-2">
-                <label className="flex items-center gap-2 text-sm text-slate-200">
-                  <input
-                    type="checkbox"
-                    name="is_active"
-                    defaultChecked={editingProvider ? editingProvider.is_active : true}
-                    className="size-4 rounded border-ink-600 bg-ink-850"
-                  />
-                  เปิดใช้งาน
-                </label>
-              </div>
-            </div>
-            <div>
-              <label className="label" htmlFor="note">
-                หมายเหตุ
-              </label>
-              <input
-                id="note"
-                name="note"
-                className="input"
-                defaultValue={editingProvider?.note ?? ''}
-                placeholder="เช่น ใช้กับเกมค่าย Garena"
-              />
-            </div>
-            <SubmitButton className="btn-primary w-full">
-              {editingProvider ? 'บันทึกการแก้ไข' : 'เพิ่มผู้ให้บริการ'}
-            </SubmitButton>
-          </ActionForm>
+          <ProviderForm action={saveProviderAction} editing={editingProvider} />
         </div>
 
         <div className="card">

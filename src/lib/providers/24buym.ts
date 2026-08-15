@@ -8,7 +8,8 @@ import 'server-only'
  * จึงต้องเรียกจากฝั่งเซิร์ฟเวอร์เท่านั้น ห้ามให้หลุดไปฝั่งเบราว์เซอร์เด็ดขาด
  */
 
-export const BUYM_DEFAULT_BASE = 'https://new-api.24buymseller.com'
+export { BUYM_DEFAULT_BASE } from './constants'
+import { BUYM_DEFAULT_BASE } from './constants'
 
 /** รหัสสถานะออเดอร์ตามเอกสาร */
 export const BUYM_STATUS = {
