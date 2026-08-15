@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
 import { dateTime, money, monthLabel, num, recentMonths, safeMonth, todayISO } from '@/lib/format'
+import { AutoRefresh } from '@/components/AutoRefresh'
 import { BarChart, RankBars } from '@/components/Charts'
 import { MenuPermissions, loadStaff } from '@/components/MenuPermissions'
 import { MonthPicker } from '@/components/MonthPicker'
@@ -157,6 +158,7 @@ export default async function DashboardPage({
   return (
     <>
       <PageHeader title="แดชบอร์ดสรุปยอด" subtitle={`ภาพรวมของ ${monthLabel(month)}`}>
+        <AutoRefresh seconds={30} />
         <MonthPicker value={month} months={recentMonths(todayISO().slice(0, 7))} />
         <Link href="/sales" className="btn-primary">
           + ลงยอดขาย

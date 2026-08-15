@@ -4,6 +4,7 @@ import { requirePage } from '@/lib/auth'
 import { createSaleAction, cancelSaleAction, markPaidAction } from '@/lib/actions/sales'
 import { dateTime, money, nowLocalInput, num, todayISO } from '@/lib/format'
 import { ConfirmButton } from '@/components/ActionForm'
+import { AutoRefresh } from '@/components/AutoRefresh'
 import { SaleForm, type CustomerOption, type GameOption, type ProductOption } from '@/components/SaleForm'
 import { Empty, MoneyStat, PageHeader, SectionTitle, StatusBadge } from '@/components/ui'
 
@@ -62,6 +63,7 @@ export default async function SalesPage() {
   return (
     <>
       <PageHeader title="ลงยอดขาย" subtitle="บันทึกรายการเติมเกมแต่ละบิล ระบบจะตัดสต๊อกให้อัตโนมัติ">
+        <AutoRefresh seconds={20} />
         <Link href="/history" className="btn-ghost">
           ประวัติทั้งหมด
         </Link>

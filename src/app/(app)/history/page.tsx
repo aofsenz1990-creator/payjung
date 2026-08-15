@@ -5,6 +5,7 @@ import { cancelSaleAction, deleteSaleAction, markPaidAction } from '@/lib/action
 import { buildWhere, filtersToQuery, HISTORY_JOINS, parseFilters } from '@/lib/history'
 import { dateOnly, money, monthLabel, num, recentMonths, timeOnly, todayISO } from '@/lib/format'
 import { ConfirmButton } from '@/components/ActionForm'
+import { AutoRefresh } from '@/components/AutoRefresh'
 import { Empty, MoneyStat, PageHeader, SectionTitle, StatusBadge } from '@/components/ui'
 import { SALE_STATUS } from '@/lib/constants'
 
@@ -85,6 +86,7 @@ export default async function HistoryPage({
         title="ประวัติการเติม"
         subtitle="ค้นหาย้อนหลังตามวัน เดือน เกม ลูกค้า หรือเลขบิล"
       >
+        <AutoRefresh seconds={60} />
         <a className="btn-ghost" href={`/history/export?${filtersToQuery(filters)}`}>
           ⬇ ดาวน์โหลด CSV
         </a>

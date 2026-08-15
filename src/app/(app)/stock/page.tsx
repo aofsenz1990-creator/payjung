@@ -3,6 +3,7 @@ import { q, q1 } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
 import { stockMoveAction } from '@/lib/actions/stock'
 import { dateTime, money, num } from '@/lib/format'
+import { AutoRefresh } from '@/components/AutoRefresh'
 import { StockForm, type StockProduct } from '@/components/StockForm'
 import { Badge, Empty, MoneyStat, PageHeader, SectionTitle } from '@/components/ui'
 import { STOCK_KIND } from '@/lib/constants'
@@ -60,6 +61,7 @@ export default async function StockPage() {
         title="ระบบสต๊อก"
         subtitle="ใช้กับแพ็กเกจที่ตั้งค่า “นับสต๊อก” ไว้ เช่น บัตรเติมเงินหรือโค้ดที่ซื้อมาเก็บล่วงหน้า"
       >
+        <AutoRefresh seconds={45} />
         <Link href="/games" className="btn-ghost">
           จัดการแพ็กเกจ
         </Link>
