@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-/** เครื่องหมาย P แบบไล่สีชมพู→ม่วง ใช้ในเมนูและเป็นตัวสำรองเวลาไม่มีไฟล์โลโก้ */
+/** เครื่องหมาย P แบบไล่สีชมพู→ม่วง ใช้เป็นตัวสำรองเวลาไม่มีไฟล์โลโก้ และเป็น favicon */
 export function BrandMark({ size = 36, className = '' }: { size?: number; className?: string }) {
   return (
     <svg
@@ -26,7 +26,7 @@ export function BrandMark({ size = 36, className = '' }: { size?: number; classN
   )
 }
 
-/** ตัวอักษร Pay Jung ตามสีโลโก้ */
+/** ตัวอักษร Pay Jung ตามสีโลโก้ ใช้คู่กับ BrandMark ตอนไม่มีไฟล์โลโก้ */
 export function BrandWordmark({ subtitle = true }: { subtitle?: boolean }) {
   return (
     <span>
@@ -41,11 +41,16 @@ export function BrandWordmark({ subtitle = true }: { subtitle?: boolean }) {
 }
 
 /**
- * โลโก้เต็มใบสำหรับหน้าเข้าสู่ระบบ
- * ไฟล์โลโก้เป็นพื้นหลังสีขาว จึงวางบนการ์ดสีขาวให้ดูตั้งใจ
- * ถ้ายังไม่มีไฟล์ public/logo.png จะสลับไปใช้เครื่องหมาย P อัตโนมัติ
+ * โลโก้ร้านจากไฟล์ public/logo.png (พื้นหลังโปร่งใส)
+ * ถ้าไม่มีไฟล์ จะสลับไปใช้เครื่องหมาย P + ตัวอักษรอัตโนมัติ
  */
-export function BrandLogo() {
+export function BrandLogo({
+  className = 'w-56 sm:w-64',
+  compactFallback = false,
+}: {
+  className?: string
+  compactFallback?: boolean
+}) {
   const [failed, setFailed] = useState(false)
   const imgRef = useRef<HTMLImageElement>(null)
 
@@ -57,29 +62,35 @@ export function BrandLogo() {
   }, [])
 
   if (failed) {
+    if (compactFallback) {
+      return (
+        <span className="flex items-center gap-2.5">
+          <BrandMark size={36} />
+          <BrandWordmark />
+        </span>
+      )
+    }
     return (
-      <div className="mx-auto mb-5 flex flex-col items-center gap-3">
+      <span className="flex flex-col items-center gap-3">
         <BrandMark size={64} />
         <span className="text-xl font-bold">
           <span className="text-brand-400">Pay</span> <span className="text-grape-400">Jung</span>
         </span>
-      </div>
+      </span>
     )
   }
 
   return (
-    <div className="mx-auto mb-5 w-fit rounded-3xl bg-white p-3 shadow-lg shadow-black/40 ring-1 ring-white/10">
-      {/* ใช้ img ธรรมดาเพื่อให้ตกกลับไปใช้โลโก้สำรองได้เมื่อไฟล์หาย */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        ref={imgRef}
-        src="/logo.png"
-        alt="Pay Jung — ระบบจัดการร้านเติมเกม"
-        width={200}
-        height={200}
-        className="block size-40 object-contain sm:size-48"
-        onError={() => setFailed(true)}
-      />
-    </div>
+    // ใช้ img ธรรมดาเพื่อให้ตกกลับไปใช้โลโก้สำรองได้เมื่อไฟล์หาย
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      ref={imgRef}
+      src="/logo.png"
+      alt="Pay Jung — ระบบจัดการร้านเติมเกม"
+      width={836}
+      height={675}
+      className={`block h-auto ${className}`}
+      onError={() => setFailed(true)}
+    />
   )
 }

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { BrandMark, BrandWordmark } from '@/components/Brand'
+import { BrandLogo } from '@/components/Brand'
 import type { Role } from '@/lib/auth'
 
 type Item = { href: string; label: string; icon: string; adminOnly?: boolean }
@@ -92,9 +92,8 @@ export function Nav({ role, user }: { role: Role; user: string }) {
 
 function Brand() {
   return (
-    <Link href="/" className="flex items-center gap-2.5">
-      <BrandMark size={36} />
-      <BrandWordmark />
+    <Link href="/" className="flex items-center">
+      <BrandLogo className="w-36 lg:w-44" compactFallback />
     </Link>
   )
 }

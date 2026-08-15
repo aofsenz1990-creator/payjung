@@ -23,7 +23,9 @@ export function AuthShell({
 
       <div className="relative w-full max-w-sm">
         <div className="mb-6 text-center">
-          <BrandLogo />
+          <div className="mx-auto mb-5 w-fit">
+            <BrandLogo />
+          </div>
           <h1 className="text-xl font-bold text-white">{title}</h1>
           <p className="mt-1 text-sm text-mute">{subtitle}</p>
         </div>
