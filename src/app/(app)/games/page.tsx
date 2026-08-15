@@ -24,11 +24,12 @@ type GameRow = {
 export default async function GamesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string }>
+  searchParams: Promise<{ edit?: string; q?: string }>
 }) {
   const user = await requirePage('games')
   const isAdmin = user.role === 'admin'
-  const { edit } = await searchParams
+  const { edit, q: keyword } = await searchParams
+  const search = (keyword ?? '').trim()
 
   const [games, editing] = await Promise.all([
     q<GameRow>(
@@ -41,7 +42,10 @@ export default async function GamesPage({
                            and (s.sold_at at time zone 'Asia/Bangkok')::date
                                >= date_trunc('month', (now() at time zone 'Asia/Bangkok')::date)
                        ), 0)::float8 as month_revenue
-         from games g order by g.is_active desc, g.name`
+         from games g
+        ${search ? 'where g.name ilike $1 or g.publisher ilike $1 or g.note ilike $1' : ''}
+        order by g.is_active desc, g.name`,
+      search ? [`%${search}%`] : []
     ),
     edit
       ? q1<GameRow>('select id, name, publisher, note, is_active, image_url from games where id = $1', [
@@ -137,10 +141,39 @@ export default async function GamesPage({
 
         <div className="card">
           <SectionTitle right={<span className="text-xs text-mute">{num(games.length)} เกม</span>}>
-            เกมทั้งหมด
+            {search ? `ผลการค้นหา "${search}"` : 'เกมทั้งหมด'}
           </SectionTitle>
+
+          <form method="get" className="mb-4 flex gap-2">
+            <input
+              name="q"
+              className="input"
+              defaultValue={search}
+              placeholder="ค้นหาชื่อเกม ผู้ให้บริการ หรือหมายเหตุ"
+              aria-label="ค้นหาเกม"
+            />
+            <button type="submit" className="btn-ghost">
+              ค้นหา
+            </button>
+            {search ? (
+              <Link href="/games" className="btn-ghost">
+                ล้าง
+              </Link>
+            ) : null}
+          </form>
           {games.length === 0 ? (
-            <Empty>ยังไม่มีเกมในระบบ เพิ่มเกมแรกจากฟอร์มด้านซ้าย</Empty>
+            <Empty>
+              {search ? (
+                <>
+                  ไม่พบเกมที่ค้นหา —{' '}
+                  <Link href="/games" className="text-brand-400 underline">
+                    ดูเกมทั้งหมด
+                  </Link>
+                </>
+              ) : (
+                'ยังไม่มีเกมในระบบ เพิ่มเกมแรกจากฟอร์มด้านซ้าย'
+              )}
+            </Empty>
           ) : (
             <div className="table-wrap">
               <table className="tbl">

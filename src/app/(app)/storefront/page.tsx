@@ -88,10 +88,11 @@ const AUTH_LABELS: Record<string, string> = {
 export default async function StorefrontPage({
   searchParams,
 }: {
-  searchParams: Promise<{ provider?: string; game?: string }>
+  searchParams: Promise<{ provider?: string; game?: string; cq?: string }>
 }) {
   await requireAdmin()
-  const { provider: editProvider, game: editGame } = await searchParams
+  const { provider: editProvider, game: editGame, cq } = await searchParams
+  const catalogSearch = (cq ?? '').trim()
 
   const [providers, games, products, editingProvider, editingGame, news, settings, catalog] =
     await Promise.all([
@@ -147,8 +148,10 @@ export default async function StorefrontPage({
                   where pr.provider_id = c.provider_id
                     and pr.provider_game_id = c.game_id)::int as imported
            from provider_catalog c
+          ${catalogSearch ? 'where c.game_name ilike $1' : ''}
           group by c.provider_id, c.game_id
-          order by min(c.game_name)`
+          order by min(c.game_name)`,
+        catalogSearch ? [`%${catalogSearch}%`] : []
       ),
     ])
 
@@ -372,8 +375,30 @@ export default async function StorefrontPage({
             </p>
           </div>
 
+          <form method="get" className="mb-4 flex gap-2">
+            <input
+              name="cq"
+              className="input"
+              defaultValue={catalogSearch}
+              placeholder="ค้นหาชื่อเกมจากรายการที่ดึงมา"
+              aria-label="ค้นหาเกมจากผู้ให้บริการ"
+            />
+            <button type="submit" className="btn-ghost">
+              ค้นหา
+            </button>
+            {catalogSearch ? (
+              <Link href="/storefront" className="btn-ghost">
+                ล้าง
+              </Link>
+            ) : null}
+          </form>
+
           {catalog.length === 0 ? (
-            <Empty>ยังไม่ได้ดึงรายการ — กดปุ่มด้านบนเพื่อดึงจากผู้ให้บริการ</Empty>
+            <Empty>
+              {catalogSearch
+                ? `ไม่พบเกมที่ค้นหา "${catalogSearch}"`
+                : 'ยังไม่ได้ดึงรายการ — กดปุ่มด้านบนเพื่อดึงจากผู้ให้บริการ'}
+            </Empty>
           ) : (
             <div className="table-wrap">
               <table className="tbl">
