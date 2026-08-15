@@ -37,10 +37,10 @@ export function friendlyError(err: unknown, fallback = 'บันทึกไม
   const message = err instanceof Error ? err.message : String(err)
   if (/duplicate key|unique constraint/i.test(message)) {
     if (/games_name_uniq/.test(message)) return 'มีเกมชื่อนี้อยู่แล้ว'
-    if (/users_username_key/.test(message)) return 'ชื่อผู้ใช้นี้ถูกใช้ไปแล้ว'
+    if (/profiles_pkey/.test(message)) return 'บัญชีนี้มีอยู่ในระบบแล้ว'
     return 'ข้อมูลนี้ซ้ำกับที่มีอยู่แล้ว'
   }
-  if (/DATABASE_URL|AUTH_SECRET/.test(message)) return message
+  if (/DATABASE_URL|SUPABASE/.test(message)) return message
   if (/violates foreign key/i.test(message)) return 'ลบไม่ได้ เพราะมีข้อมูลอื่นอ้างอิงรายการนี้อยู่'
   return `${fallback} (${message})`
 }

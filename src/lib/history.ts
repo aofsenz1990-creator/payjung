@@ -80,7 +80,7 @@ export const HISTORY_JOINS = `
   from sales s
   left join games g on g.id = s.game_id
   left join customers c on c.id = s.customer_id
-  left join users u on u.id = s.created_by
+  left join profiles u on u.id = s.created_by
 `
 
 export function filtersToQuery(f: HistoryFilters, extra: Record<string, string> = {}) {

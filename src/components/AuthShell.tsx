@@ -1,3 +1,5 @@
+import { BrandLogo } from './Brand'
+
 export function AuthShell({
   title,
   subtitle,
@@ -8,12 +10,20 @@ export function AuthShell({
   children: React.ReactNode
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-ink-950 px-4 py-10">
-      <div className="w-full max-w-sm">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-ink-950 px-4 py-10">
+      {/* แสงไล่สีชมพู-ม่วงตามโลโก้ */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 left-1/2 size-[36rem] -translate-x-1/2 rounded-full bg-brand-500/20 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-48 right-0 size-[30rem] rounded-full bg-grape-500/20 blur-3xl"
+      />
+
+      <div className="relative w-full max-w-sm">
         <div className="mb-6 text-center">
-          <span className="mx-auto mb-3 flex size-14 items-center justify-center rounded-2xl bg-linear-to-br from-brand-400 to-brand-600 text-2xl font-bold text-white">
-            P
-          </span>
+          <BrandLogo />
           <h1 className="text-xl font-bold text-white">{title}</h1>
           <p className="mt-1 text-sm text-mute">{subtitle}</p>
         </div>

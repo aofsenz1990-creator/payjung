@@ -1,12 +1,14 @@
 // โครงสร้างตารางทั้งหมด — รันซ้ำได้เสมอ (IF NOT EXISTS) จึงใช้เป็น migration ในตัวได้
-// Neon HTTP ยิงได้ทีละ statement เท่านั้น จึงต้องแยกเป็น array
+//
+// การล็อกอินใช้ Supabase Auth ตัวผู้ใช้จริงเก็บอยู่ในตาราง auth.users ของ Supabase
+// ส่วนตาราง profiles ด้านล่างเก็บข้อมูลฝั่งร้าน (ชื่อที่แสดง / สิทธิ์ / เปิด-ปิดการใช้งาน)
+// โดยใช้ id เดียวกับ auth.users.id
 
 export const SCHEMA_STATEMENTS: string[] = [
-  `create table if not exists users (
-    id serial primary key,
-    username text not null unique,
-    password_hash text not null,
-    display_name text not null,
+  `create table if not exists profiles (
+    id uuid primary key,
+    email text,
+    display_name text not null default '',
     role text not null default 'staff',
     is_active boolean not null default true,
     created_at timestamptz not null default now()
@@ -65,7 +67,7 @@ export const SCHEMA_STATEMENTS: string[] = [
     payment_method text not null default 'เงินสด',
     status text not null default 'paid',
     note text,
-    created_by int references users(id) on delete set null,
+    created_by uuid references profiles(id) on delete set null,
     created_at timestamptz not null default now()
   )`,
   `create index if not exists sales_sold_at_idx on sales (sold_at desc)`,
@@ -80,7 +82,7 @@ export const SCHEMA_STATEMENTS: string[] = [
     unit_cost numeric(12,2) not null default 0,
     note text,
     sale_id int references sales(id) on delete set null,
-    created_by int references users(id) on delete set null,
+    created_by uuid references profiles(id) on delete set null,
     created_at timestamptz not null default now()
   )`,
   `create index if not exists stock_movements_product_idx on stock_movements (product_id, created_at desc)`,
@@ -92,10 +94,20 @@ export const SCHEMA_STATEMENTS: string[] = [
     title text not null,
     amount numeric(12,2) not null default 0,
     note text,
-    created_by int references users(id) on delete set null,
+    created_by uuid references profiles(id) on delete set null,
     created_at timestamptz not null default now()
   )`,
   `create index if not exists expenses_spent_on_idx on expenses (spent_on desc)`,
+
+  // ตารางทั้งหมดถูกอ่าน/เขียนผ่านเซิร์ฟเวอร์ของแอปด้วย connection string โดยตรงเท่านั้น
+  // เปิด RLS ไว้โดยไม่สร้าง policy เพื่อกันไม่ให้ anon key ของ Supabase แตะข้อมูลได้เลย
+  `alter table profiles enable row level security`,
+  `alter table games enable row level security`,
+  `alter table products enable row level security`,
+  `alter table customers enable row level security`,
+  `alter table sales enable row level security`,
+  `alter table stock_movements enable row level security`,
+  `alter table expenses enable row level security`,
 ]
 
 // เกมยอดนิยมที่ใส่ให้ตอนตั้งค่าครั้งแรก เพื่อไม่ต้องเริ่มจากหน้าว่าง

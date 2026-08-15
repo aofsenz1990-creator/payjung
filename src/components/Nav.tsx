@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import type { Role } from '@/lib/session'
+import { BrandMark, BrandWordmark } from '@/components/Brand'
+import type { Role } from '@/lib/auth'
 
 type Item = { href: string; label: string; icon: string; adminOnly?: boolean }
 
@@ -92,13 +93,8 @@ export function Nav({ role, user }: { role: Role; user: string }) {
 function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2.5">
-      <span className="flex size-9 items-center justify-center rounded-xl bg-linear-to-br from-brand-400 to-brand-600 text-lg font-bold text-white">
-        P
-      </span>
-      <span>
-        <span className="block text-base font-bold leading-tight text-white">Pay Jung</span>
-        <span className="block text-[11px] leading-tight text-mute">ระบบจัดการร้านเติมเกม</span>
-      </span>
+      <BrandMark size={36} />
+      <BrandWordmark />
     </Link>
   )
 }

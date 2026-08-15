@@ -3,7 +3,7 @@
 แดชบอร์ดหลังร้านสำหรับร้านเติมเกม **Pay Jung** — เก็บสต๊อก ลงยอดขาย ดูประวัติการเติม
 สรุปกำไร และคุมค่าใช้จ่ายรายเดือน ใช้งานผ่านเว็บได้ทั้งคอมและมือถือ
 
-สร้างด้วย Next.js (App Router) + Postgres รันบน Vercel ได้ฟรี
+สร้างด้วย Next.js (App Router) + **Supabase** (Auth + Postgres) รันบน Vercel ได้ฟรี
 
 ---
 
@@ -17,7 +17,7 @@
 | 4 | รายชื่อลูกค้า | `/customers` | ชื่อ เบอร์ LINE ไอดีเกม พร้อมยอดซื้อสะสมและวันที่ซื้อล่าสุด |
 | 5 | ประวัติการเติม | `/history` | กรองตามวัน / เดือน / เกม / ลูกค้า / สถานะ, ค้นหาด้วยเลขบิลหรือไอดีเกม, ดาวน์โหลด CSV |
 | 6 | แดชบอร์ดสรุปยอด | `/` | ยอดวันนี้ ยอดเดือนนี้ กำไรสุทธิ กราฟรายวัน เกมขายดี ลูกค้าอันดับต้น และของใกล้หมด |
-| 7 | ระบบ login admin | `/login`, `/users` | หลายบัญชี แยกสิทธิ์ผู้ดูแล / พนักงาน รหัสผ่านเข้ารหัสด้วย bcrypt |
+| 7 | ระบบ login admin | `/login`, `/users` | ใช้ **Supabase Auth** (อีเมล + รหัสผ่าน) หลายบัญชี แยกสิทธิ์ผู้ดูแล / พนักงาน |
 | 8 | ค่าใช้จ่ายรายเดือน | `/expenses` | ค่าเช่า ค่าน้ำค่าไฟ เงินเดือน ฯลฯ แยกหมวด แล้วหักจากกำไรขั้นต้นเป็นกำไรสุทธิ |
 
 ### สิทธิ์การใช้งาน
@@ -42,36 +42,35 @@
 git init && git add -A && git commit -m "Pay Jung dashboard" && git branch -M main && git remote add origin https://github.com/<ชื่อบัญชีของคุณ>/payjung.git && git push -u origin main
 ```
 
-### 2. สร้างฐานข้อมูลบน Vercel
+### 2. สร้างโปรเจกต์ Supabase
 
-1. เข้า [vercel.com](https://vercel.com) ด้วยบัญชีที่ต้องการ → **Add New → Project** → เลือก repo `payjung` → **Deploy**
-   (deploy รอบแรกจะขึ้นแล้ว แต่ยังเปิดใช้ไม่ได้เพราะยังไม่มีฐานข้อมูล — ปกติ)
-2. เข้าโปรเจกต์ → แท็บ **Storage** → **Create Database** → เลือก **Neon (Serverless Postgres)** → Region แนะนำ `Singapore (sin1)`
-3. กด **Connect** เข้ากับโปรเจกต์ Vercel จะใส่ตัวแปร `DATABASE_URL` ให้อัตโนมัติ
+1. เข้า [supabase.com](https://supabase.com) → **New project** → Region แนะนำ `Southeast Asia (Singapore)`
+2. **จดรหัสผ่านฐานข้อมูลที่ตั้งไว้** — ต้องใช้ในขั้นถัดไป และดูย้อนหลังไม่ได้
+3. รอสร้างเสร็จ ~2 นาที
 
-### 3. ตั้งค่ากุญแจเข้ารหัส session
+### 3. ตั้งค่า Environment Variables บน Vercel
 
-สุ่มค่าด้วยคำสั่งนี้:
+เข้า [vercel.com](https://vercel.com) → เลือกโปรเจกต์ `payjung` → **Settings → Environment Variables**
+แล้วใส่ 4 ค่านี้ (เลือกให้ครบทั้ง Production / Preview / Development):
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-เอาค่าที่ได้ไปใส่ที่ **Settings → Environment Variables** ของโปรเจกต์:
-
-| Key | Value |
+| Key | หาได้จาก |
 |---|---|
-| `AUTH_SECRET` | ค่าที่สุ่มได้ |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → **API** → Project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | หน้าเดียวกัน → **anon / public** key |
+| `SUPABASE_SERVICE_ROLE_KEY` | หน้าเดียวกัน → **service_role** key ⚠ เป็นความลับ ห้ามเผยแพร่ |
+| `DATABASE_URL` | Project Settings → **Database** → Connection string → **Transaction pooler** (port 6543) แล้วแทน `[YOUR-PASSWORD]` ด้วยรหัสผ่านจากข้อ 2 |
 
-เลือกให้ครบทั้ง Production / Preview / Development แล้วกด Save
+> ต้องใช้ **Transaction pooler** เท่านั้น เพราะ Vercel รันแบบ serverless ถ้าใช้ Direct connection จะเปิดคอนเนกชันเกินโควตา
 
 ### 4. Redeploy แล้วตั้งค่าครั้งแรก
 
 ไปที่แท็บ **Deployments** → จุดสามจุดของ deploy ล่าสุด → **Redeploy**
 
-เปิดเว็บที่ได้ ระบบจะพาไปหน้า `/setup` ให้สร้างบัญชีผู้ดูแลคนแรก
+เปิดเว็บที่ได้ ระบบจะพาไปหน้า `/setup` ให้สร้างบัญชีผู้ดูแลคนแรกด้วยอีเมล + รหัสผ่าน
 (หน้านี้เปิดได้ครั้งเดียว หลังมีผู้ใช้ในระบบแล้วจะเข้าไม่ได้อีก) ตารางทั้งหมดถูกสร้างให้อัตโนมัติ
 พร้อมใส่รายชื่อเกมยอดนิยมไว้ให้ตั้งต้น
+
+บัญชีถูกสร้างใน Supabase Auth และยืนยันอีเมลให้เลย จึงล็อกอินได้ทันทีโดยไม่ต้องรอเมลยืนยัน
 
 ---
 
@@ -81,8 +80,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 npm install
 ```
 
-คัดลอก `.env.example` เป็น `.env.local` แล้วใส่ `DATABASE_URL` (ใช้ Neon ตัวเดียวกับบน Vercel ได้)
-กับ `AUTH_SECRET` จากนั้น:
+คัดลอก `.env.example` เป็น `.env.local` แล้วใส่ค่าทั้ง 4 ตัวจาก Supabase (ใช้โปรเจกต์เดียวกับบน Vercel ได้) จากนั้น:
 
 ```bash
 npm run dev
@@ -100,6 +98,11 @@ npm run dev
 - **ยกเลิกบิลแทนการลบ** จะดีกว่า เพราะยังเห็นร่องรอยในประวัติ ส่วนการลบถาวรทำได้เฉพาะผู้ดูแล
 - ตารางฐานข้อมูลสร้างด้วย `CREATE TABLE IF NOT EXISTS` ตอนเปิดใช้งานครั้งแรกของแต่ละ instance
   (ดูได้ที่ [`src/lib/schema.ts`](src/lib/schema.ts)) จึงไม่ต้องรัน migration แยก
+- **บัญชีผู้ใช้อยู่ใน Supabase Auth** ส่วนตาราง `profiles` เก็บชื่อที่แสดงกับสิทธิ์ (admin / staff)
+  โดยใช้ id เดียวกัน — ถ้าไปสร้างผู้ใช้จากหน้า Supabase โดยตรง ระบบจะสร้าง profile ให้อัตโนมัติเป็น "พนักงาน"
+- ทุกตารางเปิด **Row Level Security** ไว้โดยไม่มี policy แปลว่า anon key ของ Supabase แตะข้อมูลไม่ได้เลย
+  แอปอ่าน/เขียนผ่าน `DATABASE_URL` ด้วย role `postgres` ซึ่งเป็นเจ้าของตารางจึงข้าม RLS ได้
+- **โลโก้** วางไฟล์ไว้ที่ `public/logo.png` ถ้าไม่มีไฟล์ หน้าเข้าสู่ระบบจะใช้เครื่องหมาย P แบบไล่สีแทนอัตโนมัติ
 
 ## โครงสร้างโปรเจกต์
 
@@ -108,10 +111,12 @@ src/
   app/
     (app)/            หน้าที่ต้องล็อกอิน — แดชบอร์ด, ขาย, ประวัติ, เกม, สต๊อก, ลูกค้า, ค่าใช้จ่าย, ผู้ใช้
     login/ setup/     หน้าเข้าสู่ระบบและตั้งค่าครั้งแรก
-  components/         ส่วนประกอบ UI ที่ใช้ซ้ำ (ฟอร์ม, กราฟ, การ์ดสรุป, เมนู)
+  components/         ส่วนประกอบ UI ที่ใช้ซ้ำ (ฟอร์ม, กราฟ, การ์ดสรุป, เมนู, โลโก้)
   lib/
     actions/          Server Actions ทั้งหมด (บันทึก/แก้ไข/ลบ)
     db.ts schema.ts   การเชื่อมต่อฐานข้อมูลและโครงสร้างตาราง
-    auth.ts session.ts ระบบล็อกอินและสิทธิ์
-  middleware.ts       กันคนที่ยังไม่ล็อกอินออกจากทุกหน้า
+    supabase.ts       client ของ Supabase (ฝั่งเซิร์ฟเวอร์ + สิทธิ์ service role)
+    auth.ts           อ่านผู้ใช้ที่ล็อกอินอยู่และตรวจสิทธิ์
+  middleware.ts       ต่ออายุ session ของ Supabase และกันคนที่ยังไม่ล็อกอิน
+public/logo.png       โลโก้ร้าน (ใส่เอง)
 ```

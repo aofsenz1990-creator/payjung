@@ -1,24 +1,27 @@
 import 'server-only'
-import { neon, type NeonQueryFunction } from '@neondatabase/serverless'
+import postgres from 'postgres'
 import { SCHEMA_STATEMENTS } from './schema'
 
 export class ConfigError extends Error {}
 
-let client: NeonQueryFunction<false, false> | null = null
+let client: postgres.Sql | null = null
 
 function getClient() {
   if (client) return client
-  const url =
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.DATABASE_URL_UNPOOLED ||
-    process.env.POSTGRES_URL_NON_POOLING
+  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL
   if (!url) {
     throw new ConfigError(
-      'ยังไม่ได้ตั้งค่า DATABASE_URL — ไปที่ Vercel > Storage > สร้าง Neon Postgres แล้ว redeploy อีกครั้ง'
+      'ยังไม่ได้ตั้งค่า DATABASE_URL — คัดลอก Connection string (Transaction pooler) จาก Supabase > Project Settings > Database มาใส่ใน Environment Variables ของ Vercel'
     )
   }
-  client = neon(url)
+  client = postgres(url, {
+    // Supabase Transaction pooler ไม่รองรับ prepared statement
+    prepare: false,
+    // เชื่อมต่อน้อย ๆ เพราะรันบน serverless ที่มีหลาย instance
+    max: 3,
+    idle_timeout: 20,
+    connect_timeout: 15,
+  })
   return client
 }
 
@@ -30,7 +33,7 @@ function ensureSchema() {
     schemaReady = (async () => {
       const sql = getClient()
       for (const statement of SCHEMA_STATEMENTS) {
-        await sql.query(statement)
+        await sql.unsafe(statement)
       }
     })().catch((err) => {
       schemaReady = null // ให้ลองใหม่ได้ในรีเควสต์ถัดไป
@@ -47,8 +50,8 @@ export async function q<T = Record<string, unknown>>(
 ): Promise<T[]> {
   await ensureSchema()
   const sql = getClient()
-  const rows = await sql.query(text, params as never[])
-  return rows as T[]
+  const rows = await sql.unsafe(text, params as never[])
+  return rows as unknown as T[]
 }
 
 /** ยิง SQL แล้วเอาแถวแรก (หรือ null) */

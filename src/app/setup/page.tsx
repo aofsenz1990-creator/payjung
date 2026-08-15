@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { countUsers } from '@/lib/auth'
 import { setupAction } from '@/lib/actions/auth'
+import { publicSupabaseConfig } from '@/lib/supabase'
 import { ActionForm, SubmitButton } from '@/components/ActionForm'
 import { AuthShell, SetupHint } from '@/components/AuthShell'
 
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic'
 export default async function SetupPage() {
   let configError: string | null = null
   try {
+    publicSupabaseConfig()
     if ((await countUsers()) > 0) redirect('/login')
   } catch (err) {
     if (err && typeof err === 'object' && 'digest' in err) throw err
@@ -21,8 +23,8 @@ export default async function SetupPage() {
         <SetupHint message={configError} />
       ) : (
         <p className="mb-4 rounded-lg border border-brand-500/30 bg-brand-500/10 px-3 py-2.5 text-xs leading-relaxed text-brand-400">
-          บัญชีแรกจะได้สิทธิ์ผู้ดูแลระบบโดยอัตโนมัติ และระบบจะใส่รายชื่อเกมยอดนิยมไว้ให้ตั้งต้น
-          หน้านี้จะใช้ได้ครั้งเดียวเท่านั้น
+          บัญชีแรกจะถูกสร้างใน Supabase Auth และได้สิทธิ์ผู้ดูแลระบบโดยอัตโนมัติ
+          พร้อมใส่รายชื่อเกมยอดนิยมไว้ให้ตั้งต้น หน้านี้จะใช้ได้ครั้งเดียวเท่านั้น
         </p>
       )}
       <ActionForm action={setupAction} className="space-y-4">
@@ -39,15 +41,16 @@ export default async function SetupPage() {
           />
         </div>
         <div>
-          <label className="label" htmlFor="username">
-            ชื่อผู้ใช้ (ใช้ล็อกอิน)
+          <label className="label" htmlFor="email">
+            อีเมล (ใช้ล็อกอิน)
           </label>
           <input
-            id="username"
-            name="username"
+            id="email"
+            name="email"
+            type="email"
             className="input"
             autoComplete="username"
-            placeholder="เช่น admin"
+            placeholder="you@example.com"
             required
           />
         </div>

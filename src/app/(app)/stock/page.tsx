@@ -38,7 +38,7 @@ export default async function StockPage() {
          from stock_movements m
          join products p on p.id = m.product_id
          join games g on g.id = p.game_id
-         left join users u on u.id = m.created_by
+         left join profiles u on u.id = m.created_by
          left join sales s on s.id = m.sale_id
         order by m.created_at desc, m.id desc
         limit 40`

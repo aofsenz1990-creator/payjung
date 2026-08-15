@@ -35,7 +35,7 @@ export default async function ExpensesPage({
     q<ExpenseRow>(
       `select e.id, to_char(e.spent_on, 'YYYY-MM-DD') as spent_on, e.category, e.title,
               e.amount::float8 as amount, e.note, u.display_name as created_by_name
-         from expenses e left join users u on u.id = e.created_by
+         from expenses e left join profiles u on u.id = e.created_by
         where e.spent_on >= $1::date and e.spent_on < $1::date + interval '1 month'
         order by e.spent_on desc, e.id desc`,
       [monthStart]

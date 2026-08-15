@@ -1,16 +1,21 @@
 @import 'tailwindcss';
 
+/* สีทั้งหมดอ้างอิงจากโลโก้ Pay Jung — ชมพูของคำว่า "Pay" และม่วงของคำว่า "Jung" */
 @theme {
-  --color-ink-950: #080b16;
-  --color-ink-900: #0d1220;
-  --color-ink-850: #121a2c;
-  --color-ink-800: #18213a;
-  --color-ink-700: #222d4d;
-  --color-ink-600: #33406a;
-  --color-mute: #8e9bc0;
-  --color-brand-400: #7c8cff;
-  --color-brand-500: #5b6cff;
-  --color-brand-600: #4353f0;
+  --color-ink-950: #0c0916;
+  --color-ink-900: #130f20;
+  --color-ink-850: #191430;
+  --color-ink-800: #201a3a;
+  --color-ink-700: #2c2450;
+  --color-ink-600: #3f3470;
+  --color-mute: #9b93c0;
+  --color-brand-400: #fb7fb5;
+  --color-brand-500: #f0579a;
+  --color-brand-600: #d93f82;
+  --color-grape-400: #b69af2;
+  --color-grape-500: #8b62d9;
+  --color-grape-600: #7245c4;
+  --color-sun: #fbc04b;
   --color-good: #2ee6a8;
   --color-warn: #ffbb3d;
   --color-bad: #ff6b7a;

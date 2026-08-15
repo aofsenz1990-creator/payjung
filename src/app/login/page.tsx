@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { countUsers } from '@/lib/auth'
 import { loginAction } from '@/lib/actions/auth'
+import { publicSupabaseConfig } from '@/lib/supabase'
 import { ActionForm, SubmitButton } from '@/components/ActionForm'
 import { AuthShell, SetupHint } from '@/components/AuthShell'
 
@@ -15,6 +16,7 @@ export default async function LoginPage({
 
   let configError: string | null = null
   try {
+    publicSupabaseConfig() // เช็ก key ของ Supabase ก่อน แล้วค่อยแตะฐานข้อมูล
     if ((await countUsers()) === 0) redirect('/setup')
   } catch (err) {
     if (err && typeof err === 'object' && 'digest' in err) throw err // ปล่อย redirect ผ่าน
@@ -27,14 +29,16 @@ export default async function LoginPage({
       <ActionForm action={loginAction} className="space-y-4">
         <input type="hidden" name="next" value={next ?? ''} />
         <div>
-          <label className="label" htmlFor="username">
-            ชื่อผู้ใช้
+          <label className="label" htmlFor="email">
+            อีเมล
           </label>
           <input
-            id="username"
-            name="username"
+            id="email"
+            name="email"
+            type="email"
             className="input"
             autoComplete="username"
+            placeholder="you@example.com"
             autoFocus
             required
           />
@@ -56,6 +60,9 @@ export default async function LoginPage({
           เข้าสู่ระบบ
         </SubmitButton>
       </ActionForm>
+      <p className="mt-4 text-center text-xs text-mute">
+        ลืมรหัสผ่าน? ให้ผู้ดูแลระบบตั้งรหัสใหม่ให้ที่หน้า “ผู้ใช้งานระบบ”
+      </p>
     </AuthShell>
   )
 }

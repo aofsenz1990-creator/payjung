@@ -14,8 +14,8 @@ import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
 export const dynamic = 'force-dynamic'
 
 type UserRow = {
-  id: number
-  username: string
+  id: string
+  email: string | null
   display_name: string
   role: string
   is_active: boolean
@@ -27,9 +27,9 @@ export default async function UsersPage() {
   const me = await requireAdmin()
 
   const users = await q<UserRow>(
-    `select u.id, u.username, u.display_name, u.role, u.is_active, u.created_at,
-            (select count(*) from sales s where s.created_by = u.id)::int as sales
-       from users u order by u.role, u.display_name`
+    `select p.id, p.email, p.display_name, p.role, p.is_active, p.created_at,
+            (select count(*) from sales s where s.created_by = p.id)::int as sales
+       from profiles p order by p.role, p.display_name`
   )
 
   return (
@@ -57,14 +57,16 @@ export default async function UsersPage() {
                 />
               </div>
               <div>
-                <label className="label" htmlFor="username">
-                  ชื่อผู้ใช้ (ใช้ล็อกอิน)
+                <label className="label" htmlFor="email">
+                  อีเมล (ใช้ล็อกอิน)
                 </label>
                 <input
-                  id="username"
-                  name="username"
+                  id="email"
+                  name="email"
+                  type="email"
                   className="input"
                   autoComplete="off"
+                  placeholder="staff@example.com"
                   required
                 />
               </div>
@@ -93,6 +95,10 @@ export default async function UsersPage() {
               </div>
               <SubmitButton className="btn-primary w-full">เพิ่มผู้ใช้</SubmitButton>
             </ActionForm>
+            <p className="mt-3 text-xs leading-relaxed text-mute">
+              บัญชีถูกสร้างใน Supabase Auth และยืนยันอีเมลให้อัตโนมัติ ผู้ใช้ล็อกอินได้ทันที
+              ไม่ต้องรอเมลยืนยัน
+            </p>
           </div>
 
           <div className="card h-fit">
@@ -108,7 +114,7 @@ export default async function UsersPage() {
                   </option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.display_name} ({u.username})
+                      {u.display_name} ({u.email})
                     </option>
                   ))}
                 </select>
@@ -144,7 +150,7 @@ export default async function UsersPage() {
                 <thead>
                   <tr>
                     <th>ชื่อ</th>
-                    <th>ชื่อผู้ใช้</th>
+                    <th>อีเมล</th>
                     <th>สิทธิ์</th>
                     <th className="text-right">บิลที่ลง</th>
                     <th>สร้างเมื่อ</th>
@@ -161,7 +167,7 @@ export default async function UsersPage() {
                           <span className="ml-2 text-xs text-brand-400">(คุณ)</span>
                         ) : null}
                       </td>
-                      <td className="font-mono text-xs text-mute">{u.username}</td>
+                      <td className="text-xs text-mute">{u.email ?? '-'}</td>
                       <td>
                         {u.id === me.id ? (
                           <Badge tone="brand">ผู้ดูแลระบบ</Badge>
@@ -208,7 +214,7 @@ export default async function UsersPage() {
                               <form action={deleteUserAction}>
                                 <input type="hidden" name="id" value={u.id} />
                                 <ConfirmButton
-                                  message={`ลบบัญชี "${u.display_name}"? บิลที่เคยลงไว้จะยังอยู่`}
+                                  message={`ลบบัญชี "${u.display_name}" ออกจาก Supabase Auth ถาวร? บิลที่เคยลงไว้จะยังอยู่`}
                                 >
                                   ลบ
                                 </ConfirmButton>

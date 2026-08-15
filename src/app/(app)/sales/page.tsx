@@ -42,7 +42,7 @@ export default async function SalesPage() {
          from sales s
          left join games g on g.id = s.game_id
          left join customers c on c.id = s.customer_id
-         left join users u on u.id = s.created_by
+         left join profiles u on u.id = s.created_by
         where (s.sold_at at time zone 'Asia/Bangkok')::date = $1::date
         order by s.sold_at desc`,
       [todayISO()]
