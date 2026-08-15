@@ -5,7 +5,12 @@ import { useEffect, useRef, useState } from 'react'
 const MAX_DIMENSION = 800
 const JPEG_QUALITY = 0.85
 
-/** ย่อรูปฝั่งเบราว์เซอร์ก่อนส่ง รูปเกมไม่ต้องใหญ่มาก */
+/**
+ * ย่อรูปฝั่งเบราว์เซอร์ก่อนส่ง รูปเกมไม่ต้องใหญ่มาก
+ *
+ * รูป PNG/WebP เก็บเป็น PNG ต่อ เพราะโลโก้เกมมักมีพื้นหลังโปร่งใส
+ * ถ้าแปลงเป็น JPEG พื้นโปร่งจะกลายเป็นสีดำทับโลโก้
+ */
 async function toResizedDataUrl(blob: Blob) {
   const bitmap = await createImageBitmap(blob)
   const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height))
@@ -20,7 +25,8 @@ async function toResizedDataUrl(blob: Blob) {
   ctx.drawImage(bitmap, 0, 0, width, height)
   bitmap.close?.()
 
-  return canvas.toDataURL('image/jpeg', JPEG_QUALITY)
+  const keepAlpha = blob.type === 'image/png' || blob.type === 'image/webp'
+  return keepAlpha ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', JPEG_QUALITY)
 }
 
 /**
@@ -109,7 +115,7 @@ export function ImageInput({
             <span className="text-xl">⏳</span>
           ) : preview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="ตัวอย่างรูป" className="size-full object-cover" />
+            <img src={preview} alt="ตัวอย่างรูป" className="size-full object-contain p-1" />
           ) : (
             <span className="text-center text-xs leading-tight text-mute">
               คลิก

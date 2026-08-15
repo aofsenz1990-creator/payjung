@@ -165,7 +165,7 @@ export default async function GamesPage({
                           <img
                             src={g.image_url}
                             alt={g.name}
-                            className="size-10 rounded-lg border border-ink-700 object-cover"
+                            className="size-10 rounded-lg border border-ink-700 bg-ink-850 object-contain p-0.5"
                           />
                         ) : (
                           <span className="flex size-10 items-center justify-center rounded-lg border border-dashed border-ink-700 text-xs text-mute">

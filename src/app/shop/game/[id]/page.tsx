@@ -39,7 +39,7 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
         <div className="size-28 shrink-0 overflow-hidden rounded-2xl border border-ink-700 bg-ink-850">
           {game.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={game.image_url} alt={game.name} className="size-full object-cover" />
+            <img src={game.image_url} alt={game.name} className="size-full object-contain p-2" />
           ) : (
             <span className="flex size-full items-center justify-center text-4xl">🎮</span>
           )}

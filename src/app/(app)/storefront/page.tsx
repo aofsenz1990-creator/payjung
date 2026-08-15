@@ -471,7 +471,7 @@ export default async function StorefrontPage({
                 <img
                   src={editingGame.image_url}
                   alt={editingGame.name}
-                  className="h-32 w-full rounded-lg border border-ink-700 object-cover"
+                  className="h-32 w-full rounded-lg border border-ink-700 bg-ink-850 object-contain p-2"
                 />
               ) : null}
               <div>
@@ -551,7 +551,7 @@ export default async function StorefrontPage({
                           <img
                             src={g.image_url}
                             alt={g.name}
-                            className="size-10 rounded-lg border border-ink-700 object-cover"
+                            className="size-10 rounded-lg border border-ink-700 bg-ink-850 object-contain p-0.5"
                           />
                         ) : (
                           <span className="flex size-10 items-center justify-center rounded-lg border border-dashed border-ink-700 text-xs text-mute">

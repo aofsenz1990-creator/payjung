@@ -66,7 +66,7 @@ export function BuyForm({
                   <img
                     src={p.image_url}
                     alt={p.name}
-                    className="size-12 shrink-0 rounded-lg object-cover"
+                    className="size-12 shrink-0 rounded-lg bg-ink-900 object-contain p-1"
                   />
                 ) : (
                   <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-ink-900 text-xl">

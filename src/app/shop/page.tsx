@@ -108,7 +108,7 @@ export default async function ShopHome({
                     <img
                       src={g.image_url}
                       alt={g.name}
-                      className="size-full object-cover transition group-hover:scale-105"
+                      className="size-full object-contain p-3 transition group-hover:scale-105"
                     />
                   ) : (
                     <span className="flex size-full items-center justify-center text-4xl">🎮</span>
