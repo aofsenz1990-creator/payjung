@@ -61,6 +61,58 @@ export async function uploadSlip(dataUrl: string, soldAtISO: string): Promise<st
   return path
 }
 
+export const IMAGE_BUCKET = 'images'
+
+let imageBucketReady: Promise<void> | null = null
+
+/** bucket สำหรับรูปที่ต้องให้คนทั่วไปเห็นได้ เช่น รูปเกมบนหน้าเว็บลูกค้า */
+function ensureImageBucket() {
+  if (!imageBucketReady) {
+    imageBucketReady = (async () => {
+      const admin = supabaseAdmin()
+      const { data } = await admin.storage.getBucket(IMAGE_BUCKET)
+      if (data) return
+      const { error } = await admin.storage.createBucket(IMAGE_BUCKET, {
+        public: true, // รูปเกมต้องเปิดดูได้จากหน้าเว็บลูกค้าโดยตรง
+        fileSizeLimit: MAX_BYTES,
+        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+      })
+      if (error && !/already exists/i.test(error.message)) throw error
+    })().catch((err) => {
+      imageBucketReady = null
+      throw err
+    })
+  }
+  return imageBucketReady
+}
+
+/**
+ * อัปโหลดรูปที่เปิดดูได้สาธารณะ แล้วคืน URL เต็มไว้เก็บลงฐานข้อมูล
+ * ใช้กับรูปเกมและรูปแพ็กเกจบนหน้าเว็บลูกค้า
+ */
+export async function uploadImage(dataUrl: string, folder = 'games'): Promise<string> {
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/)
+  if (!match) throw new SlipError('ไฟล์รูปไม่ถูกต้อง รองรับเฉพาะ JPG / PNG / WebP')
+
+  const [, contentType, base64] = match
+  const buffer = Buffer.from(base64, 'base64')
+  if (buffer.byteLength === 0) throw new SlipError('ไฟล์รูปว่างเปล่า')
+  if (buffer.byteLength > MAX_BYTES) throw new SlipError('รูปใหญ่เกินไป')
+
+  await ensureImageBucket()
+
+  const ext = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg'
+  const path = `${folder}/${crypto.randomUUID()}.${ext}`
+
+  const admin = supabaseAdmin()
+  const { error } = await admin.storage
+    .from(IMAGE_BUCKET)
+    .upload(path, buffer, { contentType, upsert: false })
+  if (error) throw new SlipError(`อัปโหลดรูปไม่สำเร็จ: ${error.message}`)
+
+  return admin.storage.from(IMAGE_BUCKET).getPublicUrl(path).data.publicUrl
+}
+
 /** ลบสลิปทิ้ง ใช้ตอนบันทึกบิลไม่สำเร็จ จะได้ไม่มีไฟล์ค้าง */
 export async function removeSlip(path: string) {
   try {

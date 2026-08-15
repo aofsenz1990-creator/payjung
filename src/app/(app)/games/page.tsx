@@ -4,6 +4,7 @@ import { requirePage } from '@/lib/auth'
 import { deleteGameAction, saveGameAction } from '@/lib/actions/catalog'
 import { money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
+import { ImageInput } from '@/components/ImageInput'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
@@ -14,6 +15,7 @@ type GameRow = {
   publisher: string | null
   note: string | null
   is_active: boolean
+  image_url: string | null
   products: number
   stock: number
   month_revenue: number
@@ -30,7 +32,7 @@ export default async function GamesPage({
 
   const [games, editing] = await Promise.all([
     q<GameRow>(
-      `select g.id, g.name, g.publisher, g.note, g.is_active,
+      `select g.id, g.name, g.publisher, g.note, g.is_active, g.image_url,
               (select count(*) from products p where p.game_id = g.id)::int as products,
               coalesce((select sum(p.stock_qty) from products p
                          where p.game_id = g.id and p.track_stock), 0)::int as stock,
@@ -42,7 +44,7 @@ export default async function GamesPage({
          from games g order by g.is_active desc, g.name`
     ),
     edit
-      ? q1<GameRow>('select id, name, publisher, note, is_active from games where id = $1', [
+      ? q1<GameRow>('select id, name, publisher, note, is_active, image_url from games where id = $1', [
           Number(edit),
         ])
       : Promise.resolve(null),
@@ -113,6 +115,11 @@ export default async function GamesPage({
                 placeholder="เช่น ต้องใช้ Player ID"
               />
             </div>
+            <ImageInput
+              currentUrl={editing?.image_url}
+              label="รูปเกม"
+              hint="ใช้แสดงบนหน้าเว็บลูกค้า — คลิกกรอบเพื่อเลือกไฟล์ ลากรูปมาวาง หรือกด Ctrl+V"
+            />
             <label className="flex items-center gap-2 text-sm text-slate-200">
               <input
                 type="checkbox"
@@ -139,6 +146,7 @@ export default async function GamesPage({
               <table className="tbl">
                 <thead>
                   <tr>
+                    <th>รูป</th>
                     <th>เกม</th>
                     <th>ผู้ให้บริการ</th>
                     <th className="text-right">แพ็กเกจ</th>
@@ -151,6 +159,20 @@ export default async function GamesPage({
                 <tbody>
                   {games.map((g) => (
                     <tr key={g.id}>
+                      <td>
+                        {g.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={g.image_url}
+                            alt={g.name}
+                            className="size-10 rounded-lg border border-ink-700 object-cover"
+                          />
+                        ) : (
+                          <span className="flex size-10 items-center justify-center rounded-lg border border-dashed border-ink-700 text-xs text-mute">
+                            —
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <Link
                           href={`/games/${g.id}`}

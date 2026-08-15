@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { q } from '@/lib/db'
 import { requireAdmin, requirePage } from '@/lib/auth'
+import { SlipError, uploadImage } from '@/lib/storage'
 import { bool, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
 
@@ -20,26 +21,36 @@ export async function saveGameAction(formData: FormData): Promise<ActionState> {
   if (!name) return { error: 'กรุณากรอกชื่อเกม' }
 
   try {
+    // อัปโหลดรูปที่แนบมาก่อน ถ้าไม่ได้แนบก็ใช้ลิงก์ที่กรอกไว้
+    const imageData = str(formData, 'image_data')
+    let imageUrl = optStr(formData, 'image_url')
+    if (imageData) imageUrl = await uploadImage(imageData, 'games')
+    if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
+      return { error: 'ลิงก์รูปต้องขึ้นต้นด้วย http:// หรือ https://' }
+    }
+
     if (id) {
-      await q('update games set name = $1, publisher = $2, note = $3, is_active = $4 where id = $5', [
-        name,
-        publisher,
-        note,
-        isActive,
-        Number(id),
-      ])
+      await q(
+        `update games set name = $1, publisher = $2, note = $3, is_active = $4, image_url = $6
+          where id = $5`,
+        [name, publisher, note, isActive, Number(id), imageUrl]
+      )
     } else {
-      await q('insert into games (name, publisher, note) values ($1, $2, $3)', [
+      await q('insert into games (name, publisher, note, image_url) values ($1, $2, $3, $4)', [
         name,
         publisher,
         note,
+        imageUrl,
       ])
     }
   } catch (err) {
+    if (err instanceof SlipError) return { error: err.message }
     return { error: friendlyError(err) }
   }
 
   revalidatePath('/games')
+  revalidatePath('/storefront')
+  revalidatePath('/shop')
   if (id) redirect('/games')
   return { ok: `บันทึกเกม "${name}" แล้ว` }
 }
