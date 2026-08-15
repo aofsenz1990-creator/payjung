@@ -11,6 +11,7 @@ import {
 } from '@/lib/actions/storefront'
 import { deleteNewsAction, saveNewsAction, saveSiteSettingsAction } from '@/lib/actions/shop'
 import { getSiteSettings, SITE_KEYS } from '@/lib/shop'
+import { ImageInput } from '@/components/ImageInput'
 import { ProviderForm } from '@/components/ProviderForm'
 import { importGameAction, syncCatalogAction } from '@/lib/actions/catalogSync'
 import { dateOnly, money, num } from '@/lib/format'
@@ -686,7 +687,15 @@ export default async function StorefrontPage({
                   <label className="label" htmlFor={`setting_${s.key}`}>
                     {s.label}
                   </label>
-                  {'options' in s ? (
+                  {'image' in s ? (
+                    <ImageInput
+                      name={`${s.key}_data`}
+                      urlName={`setting_${s.key}`}
+                      currentUrl={settings[s.key]}
+                      label=""
+                      hint="อัปโหลดรูป QR จากแอป LINE — ลูกค้ากดที่ปุ่ม LINE ท้ายเว็บแล้วจะเห็น QR นี้"
+                    />
+                  ) : 'options' in s ? (
                     <select
                       id={`setting_${s.key}`}
                       name={`setting_${s.key}`}

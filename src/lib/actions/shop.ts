@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin, requirePage } from '@/lib/auth'
-import { getShopCustomer, getSiteSettings, registrationOpen } from '@/lib/shop'
+import { getShopCustomer, getSiteSettings, registrationOpen, SITE_KEYS } from '@/lib/shop'
+import { SlipError, uploadImage } from '@/lib/storage'
 import { supabaseAdmin, supabaseServer } from '@/lib/supabase'
 import { bool, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
@@ -170,7 +171,21 @@ export async function saveSiteSettingsAction(formData: FormData): Promise<Action
         [key.replace('setting_', ''), value.trim()]
       )
     }
+
+    // ค่าที่เป็นรูป ถ้ามีไฟล์แนบมาให้อัปโหลดแล้วทับค่าเดิม
+    for (const item of SITE_KEYS) {
+      if (!('image' in item)) continue
+      const data = str(formData, `${item.key}_data`)
+      if (!data) continue
+      const url = await uploadImage(data, 'site')
+      await q(
+        `insert into site_settings (key, value) values ($1, $2)
+         on conflict (key) do update set value = excluded.value`,
+        [item.key, url]
+      )
+    }
   } catch (err) {
+    if (err instanceof SlipError) return { error: err.message }
     return { error: friendlyError(err) }
   }
 

@@ -1,5 +1,12 @@
 import Link from 'next/link'
-import { getShopCustomer, getSiteSettings, registrationOpen } from '@/lib/shop'
+import {
+  facebookLink,
+  getShopCustomer,
+  getSiteSettings,
+  lineLink,
+  registrationOpen,
+} from '@/lib/shop'
+import { ContactBar } from '@/components/ContactBar'
 import { shopLogoutAction } from '@/lib/actions/shop'
 import { BrandLogo } from '@/components/Brand'
 import { money } from '@/lib/format'
@@ -8,12 +15,6 @@ export const dynamic = 'force-dynamic'
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
   const [settings, customer] = await Promise.all([getSiteSettings(), getShopCustomer()])
-
-  const contacts = [
-    { label: 'LINE', value: settings.contact_line, icon: '💬' },
-    { label: 'Facebook', value: settings.contact_facebook, icon: '📘' },
-    { label: 'โทร', value: settings.contact_phone, icon: '📞' },
-  ].filter((c) => c.value)
 
   return (
     <div className="flex min-h-screen flex-col bg-ink-950">
@@ -65,27 +66,15 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       <footer className="mt-10 border-t border-ink-800 bg-ink-900">
         <div className="mx-auto max-w-6xl px-4 py-8">
           <h2 className="text-base font-semibold text-white">ช่องทางติดต่อ</h2>
-          {contacts.length === 0 ? (
-            <p className="mt-2 text-sm text-mute">ยังไม่ได้ตั้งค่าช่องทางติดต่อ</p>
-          ) : (
-            <div className="mt-3 flex flex-wrap gap-3">
-              {contacts.map((c) => (
-                <span
-                  key={c.label}
-                  className="rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-sm"
-                >
-                  <span aria-hidden className="mr-1.5">
-                    {c.icon}
-                  </span>
-                  <span className="text-mute">{c.label} </span>
-                  <span className="text-slate-100">{c.value}</span>
-                </span>
-              ))}
-            </div>
-          )}
-          {settings.contact_note ? (
-            <p className="mt-3 text-sm text-mute">{settings.contact_note}</p>
-          ) : null}
+          <ContactBar
+            line={settings.contact_line}
+            lineUrl={lineLink(settings.contact_line)}
+            lineQr={settings.contact_line_qr}
+            facebook={settings.contact_facebook}
+            facebookUrl={facebookLink(settings.contact_facebook)}
+            phone={settings.contact_phone}
+            note={settings.contact_note}
+          />
           <p className="mt-6 text-xs text-mute">© Pay Jung · ระบบเติมเกมออนไลน์</p>
         </div>
       </footer>

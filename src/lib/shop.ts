@@ -16,13 +16,39 @@ export const SITE_KEYS = [
   },
   { key: 'shop_tagline', label: 'ข้อความใต้ชื่อร้าน', placeholder: 'เติมเกมไว ราคาถูก บริการ 24 ชม.' },
   { key: 'announcement', label: 'ประกาศแถบบนสุด', placeholder: 'เว้นว่างถ้าไม่ต้องการแสดง' },
-  { key: 'contact_line', label: 'LINE', placeholder: '@payjung' },
-  { key: 'contact_facebook', label: 'Facebook', placeholder: 'https://facebook.com/payjung' },
+  { key: 'contact_line', label: 'LINE (ใส่ @id หรือลิงก์ก็ได้)', placeholder: '@payjung' },
+  {
+    key: 'contact_line_qr',
+    label: 'QR Code ของ LINE',
+    placeholder: '',
+    image: true as const,
+  },
+  {
+    key: 'contact_facebook',
+    label: 'Facebook (ใส่ชื่อเพจหรือลิงก์ก็ได้)',
+    placeholder: 'https://facebook.com/payjung',
+  },
   { key: 'contact_phone', label: 'เบอร์โทร', placeholder: '08x-xxx-xxxx' },
   { key: 'contact_note', label: 'เวลาทำการ / หมายเหตุ', placeholder: 'เปิดทุกวัน 09:00 - 22:00' },
 ] as const
 
 export type SiteSettings = Record<string, string>
+
+/** สร้างลิงก์เพิ่มเพื่อน LINE จาก @id หรือคืนลิงก์เดิมถ้ากรอกมาเป็นลิงก์อยู่แล้ว */
+export function lineLink(value?: string | null) {
+  if (!value) return null
+  if (/^https?:\/\//i.test(value)) return value
+  const id = value.trim().replace(/^@/, '')
+  return id ? `https://line.me/R/ti/p/%40${encodeURIComponent(id)}` : null
+}
+
+/** สร้างลิงก์เพจ Facebook จากชื่อเพจ หรือคืนลิงก์เดิมถ้ากรอกมาเป็นลิงก์อยู่แล้ว */
+export function facebookLink(value?: string | null) {
+  if (!value) return null
+  if (/^https?:\/\//i.test(value)) return value
+  const name = value.trim().replace(/^@/, '')
+  return name ? `https://www.facebook.com/${encodeURIComponent(name)}` : null
+}
 
 /** เปิดให้ลูกค้าสมัครเองไหม — ไม่เคยตั้งค่า = เปิดไว้ */
 export function registrationOpen(settings: SiteSettings) {
