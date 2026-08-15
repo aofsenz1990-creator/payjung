@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin, requireAnyPage, requirePage } from '@/lib/auth'
+import { removeSlip, SlipError, uploadSlip } from '@/lib/storage'
 import { decimal, friendlyError, int, optInt, optStr, str } from '@/lib/form'
 import { localInputToISO } from '@/lib/format'
 import type { ActionState } from '@/components/ActionForm'
@@ -46,6 +47,7 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
 
   let itemName = str(formData, 'item_name')
   let unitCost = 0
+  let slipPath: string | null = null
 
   try {
     if (productId) {
@@ -83,6 +85,11 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
     const costTotal = +(unitCost * qty).toFixed(2)
     const profit = +(total - costTotal).toFixed(2)
 
+    // ทุกบิลต้องมีสลิปโอนเงินแนบมาด้วยเสมอ
+    const slipData = str(formData, 'slip_data')
+    if (!slipData) return { error: 'กรุณาแนบสลิปโอนเงินก่อนบันทึกการขาย' }
+    slipPath = await uploadSlip(slipData, soldAt)
+
     let lastError: unknown = null
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = await nextSaleCode(soldAt, attempt)
@@ -91,8 +98,8 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
           `with s as (
              insert into sales (code, sold_at, customer_id, game_id, product_id, item_name,
                                 game_account, qty, unit_price, unit_cost, total, cost_total,
-                                profit, payment_method, status, note, created_by)
-             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                                profit, payment_method, status, note, created_by, slip_path)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
              returning id, code, product_id, qty, unit_cost, status
            ),
            upd as (
@@ -128,6 +135,7 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
             status,
             note,
             user.id,
+            slipPath,
           ]
         )
         refreshSalesViews()
@@ -140,6 +148,9 @@ export async function createSaleAction(formData: FormData): Promise<ActionState>
     }
     throw lastError
   } catch (err) {
+    // บันทึกบิลไม่ผ่าน — เก็บกวาดสลิปที่อัปโหลดไปแล้ว ไม่ให้มีไฟล์ค้าง
+    if (slipPath) await removeSlip(slipPath)
+    if (err instanceof SlipError) return { error: err.message }
     return { error: friendlyError(err, 'ลงยอดขายไม่สำเร็จ') }
   }
 }
@@ -197,6 +208,11 @@ export async function deleteSaleAction(formData: FormData) {
      select id from s`,
     [id]
   )
+  const doomed = await q1<{ slip_path: string | null }>(
+    'select slip_path from sales where id = $1',
+    [id]
+  )
   await q('delete from sales where id = $1', [id])
+  if (doomed?.slip_path) await removeSlip(doomed.slip_path)
   refreshSalesViews()
 }

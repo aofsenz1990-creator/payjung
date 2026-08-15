@@ -73,6 +73,9 @@ export const SCHEMA_STATEMENTS: string[] = [
     created_by uuid references profiles(id) on delete set null,
     created_at timestamptz not null default now()
   )`,
+  // ที่อยู่ไฟล์สลิปโอนเงินใน Supabase Storage (bucket "slips")
+  `alter table sales add column if not exists slip_path text`,
+
   `create index if not exists sales_sold_at_idx on sales (sold_at desc)`,
   `create index if not exists sales_customer_idx on sales (customer_id)`,
   `create index if not exists sales_game_idx on sales (game_id)`,

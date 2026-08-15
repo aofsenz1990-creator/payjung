@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { ActionForm, SubmitButton, type ActionState } from '@/components/ActionForm'
+import { SlipInput } from '@/components/SlipInput'
 import { PAYMENT_METHODS } from '@/lib/constants'
 
 export type GameOption = { id: number; name: string }
@@ -39,6 +40,19 @@ export function SaleForm({
   const [qty, setQty] = useState('1')
   const [price, setPrice] = useState('')
   const [cost, setCost] = useState('')
+  const [hasSlip, setHasSlip] = useState(false)
+  // เปลี่ยน key เพื่อล้างรูปที่แนบไว้หลังบันทึกบิลผ่าน กันเผลอใช้สลิปเดิมซ้ำกับบิลถัดไป
+  const [slipKey, setSlipKey] = useState(0)
+
+  const handleSaved = useCallback(() => {
+    setSlipKey((k) => k + 1)
+    setHasSlip(false)
+    setProductId('')
+    setItemName('')
+    setQty('1')
+    setPrice('')
+    setCost('')
+  }, [])
 
   const gameProducts = useMemo(
     () => products.filter((p) => String(p.game_id) === gameId),
@@ -64,6 +78,7 @@ export function SaleForm({
     <ActionForm
       action={action}
       resetOnSuccess={false}
+      onSuccess={handleSaved}
       className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
     >
       <div>
@@ -264,6 +279,10 @@ export function SaleForm({
         <input id="note" name="note" className="input" placeholder="ไม่บังคับ" />
       </div>
 
+      <div className="md:col-span-2 lg:col-span-2">
+        <SlipInput key={slipKey} onChange={setHasSlip} />
+      </div>
+
       <div className="md:col-span-2 lg:col-span-3">
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-ink-700 bg-ink-850 px-4 py-3">
           <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
@@ -281,7 +300,18 @@ export function SaleForm({
               </span>
             ) : null}
           </div>
-          <SubmitButton className="btn-primary">บันทึกการขาย</SubmitButton>
+          <div className="flex flex-wrap items-center gap-3">
+            {!hasSlip ? (
+              <span className="text-xs text-warn">⚠ ต้องแนบสลิปก่อนจึงจะบันทึกได้</span>
+            ) : null}
+            <SubmitButton
+              className="btn-primary"
+              disabled={!hasSlip}
+              title={hasSlip ? undefined : 'กรุณาแนบสลิปโอนเงินก่อน'}
+            >
+              บันทึกการขาย
+            </SubmitButton>
+          </div>
         </div>
       </div>
     </ActionForm>

@@ -2,8 +2,8 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   experimental: {
-    // ฟอร์มทุกหน้าใช้ Server Action ที่รับ FormData ขนาดเล็ก
-    serverActions: { bodySizeLimit: '1mb' },
+    // เผื่อไว้สำหรับรูปสลิปโอนเงิน (ย่อขนาดฝั่งเบราว์เซอร์แล้วเหลือไม่กี่ร้อย KB)
+    serverActions: { bodySizeLimit: '6mb' },
   },
 }
 

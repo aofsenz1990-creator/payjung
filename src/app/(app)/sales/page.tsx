@@ -33,11 +33,12 @@ export default async function SalesPage() {
       total: number
       profit: number
       status: string
+      slip_path: string | null
       payment_method: string
       seller: string | null
     }>(
       `select s.id, s.code, s.sold_at, s.item_name, g.name as game, c.name as customer,
-              s.game_account, s.qty, s.total::float8 as total, s.profit::float8 as profit,
+              s.game_account, s.qty, s.total::float8 as total, s.profit::float8 as profit, s.slip_path,
               s.status, s.payment_method, u.display_name as seller
          from sales s
          left join games g on g.id = s.game_id
@@ -119,6 +120,7 @@ export default async function SalesPage() {
                   <th className="text-right">ยอด</th>
                   {showMoney ? <th className="text-right">กำไร</th> : null}
                   <th>ช่องทาง</th>
+                  <th>สลิป</th>
                   <th>สถานะ</th>
                   <th className="text-right">จัดการ</th>
                 </tr>
@@ -149,6 +151,20 @@ export default async function SalesPage() {
                       </td>
                     ) : null}
                     <td className="whitespace-nowrap text-xs text-mute">{s.payment_method}</td>
+                    <td>
+                      {s.slip_path ? (
+                        <a
+                          href={`/slip/${s.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-brand-400 underline"
+                        >
+                          ดูสลิป
+                        </a>
+                      ) : (
+                        <span className="text-xs text-mute">-</span>
+                      )}
+                    </td>
                     <td>
                       <StatusBadge status={s.status} />
                     </td>

@@ -14,11 +14,14 @@ export function ActionForm({
   children,
   className = '',
   resetOnSuccess = false,
+  onSuccess,
 }: {
   action: (formData: FormData) => Promise<ActionState>
   children: React.ReactNode
   className?: string
   resetOnSuccess?: boolean
+  /** เรียกหลังบันทึกผ่าน ใช้ล้างค่าที่ฟอร์ม reset() เองไม่ได้ เช่นรูปที่แนบไว้ */
+  onSuccess?: () => void
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const [state, formAction] = useActionState<ActionState, FormData>(
@@ -27,7 +30,11 @@ export function ActionForm({
   )
 
   useEffect(() => {
-    if (resetOnSuccess && state?.ok) formRef.current?.reset()
+    if (!state?.ok) return
+    if (resetOnSuccess) formRef.current?.reset()
+    onSuccess?.()
+    // ตั้งใจไม่ใส่ onSuccess ใน deps เพื่อไม่ให้ยิงซ้ำเวลา parent สร้างฟังก์ชันใหม่
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, resetOnSuccess])
 
   return (
@@ -51,14 +58,18 @@ export function SubmitButton({
   children,
   className = 'btn-primary',
   pendingLabel = 'กำลังบันทึก...',
+  disabled = false,
+  title,
 }: {
   children: React.ReactNode
   className?: string
   pendingLabel?: string
+  disabled?: boolean
+  title?: string
 }) {
   const { pending } = useFormStatus()
   return (
-    <button type="submit" className={className} disabled={pending}>
+    <button type="submit" className={className} disabled={pending || disabled} title={title}>
       {pending ? pendingLabel : children}
     </button>
   )

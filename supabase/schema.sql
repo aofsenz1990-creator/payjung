@@ -75,6 +75,8 @@ create table if not exists sales (
     created_at timestamptz not null default now()
   );
 
+alter table sales add column if not exists slip_path text;
+
 create index if not exists sales_sold_at_idx on sales (sold_at desc);
 
 create index if not exists sales_customer_idx on sales (customer_id);

@@ -41,11 +41,12 @@ export default async function HistoryPage({
       payment_method: string
       seller: string | null
       note: string | null
+      slip_path: string | null
     }>(
       `select s.id, s.code, s.sold_at, s.item_name, g.name as game, c.name as customer,
               s.game_account, s.qty, s.unit_price::float8 as unit_price, s.total::float8 as total,
               s.profit::float8 as profit, s.status, s.payment_method,
-              u.display_name as seller, s.note
+              u.display_name as seller, s.note, s.slip_path
        ${HISTORY_JOINS} ${where}
         order by s.sold_at desc, s.id desc
         limit ${PAGE_SIZE + 1} offset ${(page - 1) * PAGE_SIZE}`,
@@ -256,6 +257,7 @@ export default async function HistoryPage({
                   <th className="text-right">ยอดรวม</th>
                   {showMoney ? <th className="text-right">กำไร</th> : null}
                   <th>ช่องทาง</th>
+                  <th>สลิป</th>
                   <th>ผู้บันทึก</th>
                   <th>สถานะ</th>
                   <th className="text-right">จัดการ</th>
@@ -287,6 +289,20 @@ export default async function HistoryPage({
                       </td>
                     ) : null}
                     <td className="whitespace-nowrap text-xs text-mute">{r.payment_method}</td>
+                    <td>
+                      {r.slip_path ? (
+                        <a
+                          href={`/slip/${r.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-brand-400 underline"
+                        >
+                          ดูสลิป
+                        </a>
+                      ) : (
+                        <span className="text-xs text-mute">-</span>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap text-xs text-mute">{r.seller ?? '-'}</td>
                     <td>
                       <StatusBadge status={r.status} />
