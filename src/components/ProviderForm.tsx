@@ -67,22 +67,34 @@ export function ProviderForm({
         </select>
       </div>
 
-      <div>
-        <label className="label" htmlFor="base_url">
-          ที่อยู่ API
-        </label>
-        <input
-          id="base_url"
-          name="base_url"
-          className="input"
-          defaultValue={editing?.base_url ?? BUYM_DEFAULT_BASE}
-          placeholder={BUYM_DEFAULT_BASE}
-          key={kind}
-        />
-        {isBuym ? (
-          <p className="mt-1 text-xs text-mute">ของ 24BUYM ใช้ค่านี้ได้เลย ไม่ต้องแก้</p>
-        ) : null}
-      </div>
+      {/* 24BUYM มีที่อยู่เดียวตายตัว ล็อกไว้เลยจะได้ไม่ต้องสงสัยว่าต้องกรอกอะไร */}
+      {isBuym ? (
+        <div>
+          <span className="label">ที่อยู่ API</span>
+          <input type="hidden" name="base_url" value={BUYM_DEFAULT_BASE} />
+          <p className="rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 font-mono text-xs text-mute">
+            {BUYM_DEFAULT_BASE}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-mute">
+            ตั้งให้อัตโนมัติแล้ว ไม่ต้องกรอก — ส่วนท้ายอย่าง{' '}
+            <code className="text-slate-300">/getAccount/</code>,{' '}
+            <code className="text-slate-300">/addOrder/</code> ระบบต่อให้เองตอนเรียกใช้
+          </p>
+        </div>
+      ) : (
+        <div>
+          <label className="label" htmlFor="base_url">
+            ที่อยู่ API
+          </label>
+          <input
+            id="base_url"
+            name="base_url"
+            className="input"
+            defaultValue={editing?.base_url ?? ''}
+            placeholder="https://api.example.com/v1"
+          />
+        </div>
+      )}
 
       {/* 24BUYM ส่งคีย์ไปกับ path ของ URL จึงไม่มีเรื่องวิธียืนยันตัวตนให้เลือก */}
       {isBuym ? (
@@ -120,10 +132,15 @@ export function ProviderForm({
           placeholder={editing?.has_key ? 'มีคีย์อยู่แล้ว — เว้นว่างถ้าไม่เปลี่ยน' : 'วางคีย์ที่นี่'}
         />
         <p className="mt-1 text-xs leading-relaxed text-mute">
-          {isBuym
-            ? 'คีย์ของ 24BUYM จะถูกแนบไปกับ URL ตอนเรียก API ตามที่เอกสารกำหนด'
-            : 'เก็บในฐานข้อมูลและใช้เฉพาะฝั่งเซิร์ฟเวอร์'}{' '}
-          ไม่ถูกส่งออกไปที่เบราว์เซอร์
+          {isBuym ? (
+            <>
+              <b className="text-warn">ช่องนี้ช่องเดียวที่ต้องกรอก</b> — วางคีย์ที่ 24BUYM
+              ให้มา (ที่เอกสารเขียนแทนว่า YOUR_USER_KEY) ไม่ต้องเอาไปแปะใน URL
+            </>
+          ) : (
+            'เก็บในฐานข้อมูลและใช้เฉพาะฝั่งเซิร์ฟเวอร์'
+          )}{' '}
+          คีย์ไม่ถูกส่งออกไปที่เบราว์เซอร์
         </p>
       </div>
 
