@@ -218,17 +218,16 @@ export async function shopRegisterAction(formData: FormData): Promise<ActionStat
     return { error: 'ตอนนี้ร้านปิดรับสมัครเอง กรุณาติดต่อร้านเพื่อเปิดบัญชีให้' }
   }
 
-  const name = str(formData, 'name')
   const email = str(formData, 'email')
-  const phone = optStr(formData, 'phone')
-  const gameUid = optStr(formData, 'game_uid')
   const password = str(formData, 'password')
   const confirm = str(formData, 'confirm')
 
-  if (!name) return { error: 'กรุณากรอกชื่อ' }
-  if (!email.includes('@')) return { error: 'กรุณากรอกอีเมลให้ถูกต้อง' }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'กรุณากรอกอีเมลให้ถูกต้อง' }
   if (password.length < 8) return { error: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร' }
   if (password !== confirm) return { error: 'รหัสผ่านสองช่องไม่ตรงกัน' }
+
+  // ยังไม่ได้ถามชื่อตอนสมัคร ใช้ชื่อหน้าอีเมลไปก่อน ร้านแก้ทีหลังได้ที่เมนูรายชื่อลูกค้า
+  const name = email.split('@')[0]
 
   try {
     const admin = supabaseAdmin()
@@ -245,29 +244,10 @@ export async function shopRegisterAction(formData: FormData): Promise<ActionStat
       }
     }
 
-    // ถ้าร้านเคยบันทึกลูกค้าคนนี้ไว้ด้วยเบอร์เดียวกัน ให้ผูกเข้ากับรายชื่อเดิม
-    const existing = phone
-      ? await q1<{ id: number }>(
-          `select id from customers
-            where phone = $1 and auth_user_id is null order by id limit 1`,
-          [phone]
-        )
-      : null
-
-    if (existing) {
-      await q(
-        `update customers set auth_user_id = $2, web_enabled = true,
-                              game_uid = coalesce(game_uid, $3)
-          where id = $1`,
-        [existing.id, data.user.id, gameUid]
-      )
-    } else {
-      await q(
-        `insert into customers (name, phone, game_uid, auth_user_id, web_enabled)
-         values ($1, $2, $3, $4, true)`,
-        [name, phone, gameUid, data.user.id]
-      )
-    }
+    await q(
+      `insert into customers (name, auth_user_id, web_enabled) values ($1, $2, true)`,
+      [name, data.user.id]
+    )
 
     const supabase = await supabaseServer()
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
