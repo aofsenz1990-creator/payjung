@@ -10,6 +10,10 @@ import { STOCK_KIND } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
+// Server Action ของหน้านี้ต้องปรับโครงสร้างฐานข้อมูลตอน instance เย็นด้วย
+// ถ้าฟังก์ชันถูกตัดก่อนจบ ปุ่มบันทึกจะหมุนค้างโดยไม่มี error ให้เห็น
+export const maxDuration = 60
+
 export default async function StockPage() {
   const user = await requirePage('stock')
   const isAdmin = user.role === 'admin'

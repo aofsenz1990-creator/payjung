@@ -16,6 +16,10 @@ import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
+// Server Action ของหน้านี้ต้องปรับโครงสร้างฐานข้อมูลตอน instance เย็นด้วย
+// ถ้าฟังก์ชันถูกตัดก่อนจบ ปุ่มบันทึกจะหมุนค้างโดยไม่มี error ให้เห็น
+export const maxDuration = 60
+
 type ProductRow = {
   id: number
   game_id: number

@@ -104,30 +104,55 @@ let schemaReady: Promise<void> | null = null
 
 function ensureSchema() {
   if (!schemaReady) {
-    schemaReady = (async () => {
-      const sql = getClient()
+    // ต้องมีเพดานเวลาเสมอ เพราะ q() ทุกตัวรอตรงนี้ก่อน
+    // ถ้าตรงนี้ค้าง ทุกคำสั่งของ instance นี้ค้างตามทั้งหมดตลอดกาล
+    // อาการที่เห็นคือกดบันทึกแล้วปุ่มหมุนค้างไม่มีวันจบ และตัวจับเวลาของ q()
+    // ช่วยไม่ได้เพราะค้างตั้งแต่ก่อนถึงคิวคำสั่ง
+    schemaReady = withTimeout(
+      (async () => {
+        const sql = getClient()
 
-      // เช็กก่อนด้วยคำสั่งเดียวว่าตารางครบแล้วหรือยัง
-      // ถ้าครบก็ข้ามการสร้างไปเลย ไม่ต้องยิง DDL ยาว ๆ ทุกครั้งที่ instance เย็น
-      // เช็กด้วยคำสั่งเดียวว่าโครงสร้างเป็นเวอร์ชันล่าสุดแล้วหรือยัง
-      try {
-        const rows = await sql.unsafe<{ value: string | null }[]>(
-          `select value from site_settings where key = 'schema_version'`
+        // เช็กก่อนด้วยคำสั่งเดียวว่าโครงสร้างเป็นเวอร์ชันล่าสุดแล้วหรือยัง
+        // ถ้าครบก็ข้ามการสร้างไปเลย ไม่ต้องยิง DDL ยาว ๆ ทุกครั้งที่ instance เย็น
+        try {
+          const rows = await sql.unsafe<{ value: string | null }[]>(
+            `select value from site_settings where key = 'schema_version'`
+          )
+          if (rows[0]?.value === SCHEMA_VERSION) return
+        } catch {
+          // ยังไม่มีตาราง site_settings = ฐานข้อมูลใหม่เอี่ยม ให้สร้างทั้งชุด
+        }
+
+        // รวมทุก statement ยิงรอบเดียวแบบ simple query (เป็นทรานแซกชันเดียว)
+        //
+        // lock_timeout สำคัญมาก: alter table ต้องขอล็อกระดับสูงสุดของตาราง
+        // ถ้ามีคนกำลังอ่านตารางนั้นอยู่ (อีก instance เรนเดอร์หน้า หรือเสียงแจ้งเตือน
+        // ที่ยิงทุก 10 วินาที) มันจะรอไปเรื่อย ๆ แบบไม่มีกำหนด และระหว่างที่รอ
+        // ยังไปขวางคำสั่งอื่นที่แตะตารางเดียวกันต่อเป็นทอด ๆ
+        // ตั้งเพดานไว้ให้ล้มเร็ว ๆ แล้วลองใหม่รอบหน้าดีกว่าค้างทั้งระบบ
+        await sql
+          .unsafe(
+            `set local lock_timeout = '5s';\n` +
+              `set local statement_timeout = '30s';\n` +
+              SCHEMA_STATEMENTS.join(';\n')
+          )
+          .simple()
+        await sql.unsafe(
+          `insert into site_settings (key, value) values ('schema_version', $1)
+           on conflict (key) do update set value = excluded.value`,
+          [SCHEMA_VERSION]
         )
-        if (rows[0]?.value === SCHEMA_VERSION) return
-      } catch {
-        // ยังไม่มีตาราง site_settings = ฐานข้อมูลใหม่เอี่ยม ให้สร้างทั้งชุด
-      }
-
-      // รวมทุก statement ยิงรอบเดียวแบบ simple query (เป็นทรานแซกชันเดียว)
-      await sql.unsafe(SCHEMA_STATEMENTS.join(';\n')).simple()
-      await sql.unsafe(
-        `insert into site_settings (key, value) values ('schema_version', $1)
-         on conflict (key) do update set value = excluded.value`,
-        [SCHEMA_VERSION]
-      )
-    })().catch((err) => {
+      })(),
+      40_000
+    ).catch((err) => {
       schemaReady = null // ให้ลองใหม่ได้ในรีเควสต์ถัดไป
+      const message = err instanceof Error ? err.message : String(err)
+      if (/lock|timeout|ไม่ตอบ/i.test(message)) {
+        throw new Error(
+          'ระบบกำลังปรับโครงสร้างฐานข้อมูลอยู่ (มีการอัปเดตเวอร์ชันใหม่) ' +
+            'รอสักครู่แล้วกดบันทึกอีกครั้ง — ข้อมูลที่กรอกไว้ยังอยู่'
+        )
+      }
       throw err
     })
   }
