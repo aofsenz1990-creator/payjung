@@ -97,9 +97,10 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
     if (id) {
       await q(
         // ตั้ง % ไว้เมื่อไหร่ ราคาขายมาจากการคำนวณเสมอ ไม่ใช่ค่าที่พิมพ์ในช่องราคาขาย
+        // ปัดขึ้นเป็นจำนวนเต็มบาท (ceil) ไม่ใช่ปัดใกล้สุด เพราะปัดลงจะทำให้กำไรต่ำกว่าที่ตั้งไว้
         `update products set game_id = $1, name = $2, sku = $3, cost_price = $4,
            sell_price = case when $16::numeric is null then $5
-                             else round($4::numeric * (1 + $16::numeric / 100), 2) end,
+                             else ceil($4::numeric * (1 + $16::numeric / 100)) end,
            markup_percent = $16,
            track_stock = $6, low_stock = $7, is_active = $8, image_url = $10,
            is_published = $11, sort_order = $12, provider_id = $13, provider_sku = $14,
@@ -118,7 +119,7 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
                                provider_product_type, markup_percent)
          values ($1, $2, $3, $4,
                  case when $15::numeric is null then $5
-                      else round($4::numeric * (1 + $15::numeric / 100), 2) end,
+                      else ceil($4::numeric * (1 + $15::numeric / 100)) end,
                  $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) returning id`,
         [
           gameId, name, sku, cost, price, trackStock, lowStock, trackStock ? openingQty : 0,
@@ -172,7 +173,7 @@ export async function setGameMarkupAction(formData: FormData): Promise<ActionSta
     const rows = await q<{ id: number }>(
       `update products
           set markup_percent = $2,
-              sell_price = round(cost_price * (1 + $2::numeric / 100), 2)
+              sell_price = ceil(cost_price * (1 + $2::numeric / 100))
         where game_id = $1
        returning id`,
       [gameId, percent]

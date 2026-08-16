@@ -182,7 +182,8 @@ export async function importGameAction(formData: FormData): Promise<ActionState>
           p.pack_price,
           // บวกกำไรเป็นเปอร์เซ็นต์ ใช้ได้ดีกว่าบวกเป็นบาทเพราะแพ็กเกจราคาต่างกันมาก
           // (แพ็ก 10 บาทกับแพ็ก 2,000 บาท ไม่ควรบวกกำไรเท่ากัน)
-          +(p.pack_price * (1 + markup / 100)).toFixed(2),
+          // ปัดขึ้นเป็นจำนวนเต็มบาท ให้ตรงกับที่คำนวณในฐานข้อมูลตอนแก้ราคาทีหลัง
+          Math.ceil(p.pack_price * (1 + markup / 100)),
           Math.round(p.pack_price),
           providerId,
           providerGameId,
