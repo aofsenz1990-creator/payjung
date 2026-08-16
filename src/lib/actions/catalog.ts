@@ -382,6 +382,80 @@ export async function mergeGamesAction(formData: FormData): Promise<ActionState>
   }
 }
 
+/**
+ * แยกช่องทางหนึ่งออกจากเกมที่รวมไว้ กลับไปเป็นเกมของตัวเอง — ใช้ตอนรวมผิด
+ *
+ * ทำได้เพราะตอนรวมเก็บชื่อเกมเดิมไว้ที่แต่ละแพ็ก (provider_variant) จึงรู้ว่า
+ * แพ็กไหนเคยอยู่เกมไหน แยกกลับได้ตรงตัวโดยไม่ต้องเดา
+ */
+export async function splitVariantAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const gameId = int(formData, 'game_id')
+  const variant = str(formData, 'variant')
+  if (!gameId || !variant) return { error: 'ไม่พบช่องทางที่จะแยก' }
+
+  try {
+    // มีช่องทางเดียวก็ไม่ต้องแยก เพราะแยกแล้วเกมเดิมจะว่างเปล่า กลายเป็นแค่เปลี่ยนชื่อ
+    const kinds = await q<{ v: string | null }>(
+      'select distinct provider_variant as v from products where game_id = $1',
+      [gameId]
+    )
+    if (kinds.length < 2) {
+      return { error: 'เกมนี้มีช่องทางเดียวอยู่แล้ว ไม่ต้องแยก' }
+    }
+
+    const src = await q1<{
+      publisher: string | null
+      image_url: string | null
+      description: string | null
+      is_published: boolean
+      sort_order: number
+    }>(
+      'select publisher, image_url, description, is_published, sort_order from games where id = $1',
+      [gameId]
+    )
+    if (!src) return { error: 'ไม่พบเกมนี้' }
+
+    // มีเกมชื่อนี้อยู่แล้วก็ย้ายเข้าไปรวม ไม่งั้นสร้างใหม่
+    // ยกรูปและคำอธิบายจากเกมต้นทางมาด้วย จะได้ไม่ต้องมาตั้งใหม่ทั้งหมด
+    let target = await q1<{ id: number }>(
+      'select id from games where lower(name) = lower($1)',
+      [variant]
+    )
+    if (!target) {
+      const created = await q<{ id: number }>(
+        `insert into games (name, publisher, image_url, description, is_published, sort_order)
+         values ($1, $2, $3, $4, $5, $6) returning id`,
+        [variant, src.publisher, src.image_url, src.description, src.is_published, src.sort_order]
+      )
+      target = created[0]
+    }
+
+    const moved = await q<{ id: number }>(
+      `update products set game_id = $2
+        where game_id = $1 and provider_variant = $3
+       returning id`,
+      [gameId, target.id, variant]
+    )
+    if (moved.length === 0) return { error: 'ไม่พบแพ็กเกจของช่องทางนี้' }
+
+    // ย้ายบิลตาม "แพ็กที่ย้าย" ไม่ใช่ย้ายทั้งเกม เพราะบิลของช่องทางอื่นต้องอยู่ที่เดิม
+    const ids = moved.map((m) => m.id)
+    const holes = ids.map((_, i) => `$${i + 2}`).join(',')
+    await q(`update sales set game_id = $1 where product_id in (${holes})`, [target.id, ...ids])
+
+    refreshProductViews(gameId)
+    refreshProductViews(target.id)
+    return {
+      ok:
+        `แยก "${variant}" ออกเป็นเกมของตัวเองแล้ว — ย้ายไป ${moved.length} แพ็กเกจ · ` +
+        'ราคาและการตั้งค่าของแต่ละแพ็กยังอยู่ครบเหมือนเดิม',
+    }
+  } catch (err) {
+    return { error: friendlyError(err, 'แยกช่องทางไม่สำเร็จ') }
+  }
+}
+
 export async function deleteProductAction(formData: FormData) {
   await requireAdmin()
   const id = int(formData, 'id')

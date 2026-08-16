@@ -9,6 +9,7 @@ import {
   mergeGamesAction,
   setGameMarkupAction,
   setGamePublishedAction,
+  splitVariantAction,
 } from '@/lib/actions/catalog'
 import { toggleProductPublishedAction } from '@/lib/actions/storefront'
 import { money, num } from '@/lib/format'
@@ -99,6 +100,11 @@ export default async function GameDetailPage({
   if (!game) notFound()
 
   const publishedCount = products.filter((p) => p.is_published).length
+
+  // ช่องทางที่รวมอยู่ในเกมนี้ มีมากกว่าหนึ่งแปลว่าเคยรวมมา จึงแยกกลับได้
+  const variantsInGame = [
+    ...new Set(products.map((p) => p.provider_variant).filter(Boolean)),
+  ] as string[]
 
   // ชื่อเกมที่ตัดวงเล็บท้ายออกแล้ว ใช้เป็นค่าตั้งต้นตอนรวมเกม
   // ผู้ให้บริการตั้งชื่อสินค้าเป็น "Ragnarok : zero global (GOC)" ทุกตัว
@@ -502,6 +508,32 @@ export default async function GameDetailPage({
                     ซ่อนทั้งเกม
                   </SubmitButton>
                 </ActionForm>
+              </div>
+            </div>
+          ) : null}
+
+          {/* รวมผิดก็แยกกลับได้ เพราะตอนรวมเก็บชื่อเกมเดิมไว้ที่แต่ละแพ็ก */}
+          {isAdmin && variantsInGame.length > 1 ? (
+            <div className="mb-4 rounded-xl border border-warn/40 bg-warn/10 p-3">
+              <p className="mb-1 text-sm font-medium text-warn">
+                ↩️ แยกช่องทางออก (ใช้ตอนรวมผิด)
+              </p>
+              <p className="mb-2 text-xs leading-relaxed text-mute">
+                เกมนี้มี {variantsInGame.length} ช่องทางรวมอยู่ · กดแยกช่องทางไหน
+                ช่องทางนั้นจะกลับไปเป็นเกมของตัวเอง{' '}
+                <b className="text-slate-200">ราคาและการตั้งค่าของแต่ละแพ็กยังอยู่ครบ</b> ·
+                รูปและคำอธิบายจะถูกคัดลอกไปให้
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {variantsInGame.map((v) => (
+                  <ActionForm key={v} action={splitVariantAction}>
+                    <input type="hidden" name="game_id" value={game.id} />
+                    <input type="hidden" name="variant" value={v} />
+                    <SubmitButton className="btn-ghost btn-sm" pendingLabel="กำลังแยก...">
+                      แยก &quot;{v}&quot; ออก
+                    </SubmitButton>
+                  </ActionForm>
+                ))}
               </div>
             </div>
           ) : null}
