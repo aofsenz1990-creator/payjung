@@ -1,5 +1,11 @@
 import { money, num } from '@/lib/format'
-import { SALE_STATUS, type SaleStatus } from '@/lib/constants'
+import {
+  DISPATCH_STATE,
+  DISPATCH_TONE,
+  SALE_STATUS,
+  type DispatchState,
+  type SaleStatus,
+} from '@/lib/constants'
 
 export function PageHeader({
   title,
@@ -98,6 +104,15 @@ export function Badge({
     brand: 'bg-brand-500/15 text-brand-400',
   } as const
   return <span className={`chip ${map[tone]}`}>{children}</span>
+}
+
+/** สถานะการส่งออเดอร์ต่อให้ผู้ให้บริการ — ว่าง = บิลนี้ไม่ได้ต่อ API (ลงมือเอง) */
+export function DispatchBadge({ state }: { state: string | null }) {
+  if (!state || !(state in DISPATCH_STATE)) {
+    return <span className="text-xs text-mute">-</span>
+  }
+  const key = state as DispatchState
+  return <Badge tone={DISPATCH_TONE[key]}>{DISPATCH_STATE[key]}</Badge>
 }
 
 export function StatusBadge({ status }: { status: string }) {

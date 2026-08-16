@@ -6,6 +6,7 @@ import { q, q1 } from '@/lib/db'
 import { requireAdmin, requirePage } from '@/lib/auth'
 import { getShopCustomer, getSiteSettings, registrationOpen, SITE_KEYS } from '@/lib/shop'
 import { SlipError, uploadImage } from '@/lib/storage'
+import { autoDispatchOn, dispatchSale, markForDispatch } from '@/lib/dispatch'
 import { supabaseAdmin, supabaseServer } from '@/lib/supabase'
 import { bool, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
@@ -334,7 +335,7 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
     }
 
     const code = `WEB-${Date.now().toString(36).toUpperCase()}`
-    const rows = await q<{ code: string; balance_after: number }>(
+    const rows = await q<{ sale_id: number; code: string; balance_after: number }>(
       `with cust as (
          update customers set credit = credit - $1
           where id = $2 and credit >= $1
@@ -363,7 +364,7 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
          select s.product_id, 'out', s.qty, s.unit_cost, 'ลูกค้าสั่งซื้อผ่านหน้าเว็บ', s.id
            from s join products p on p.id = s.product_id where p.track_stock
        )
-       select s.code, cust.credit::float8 as balance_after from s, cust`,
+       select s.id as sale_id, s.code, cust.credit::float8 as balance_after from s, cust`,
       [
         total,
         customer.id,
@@ -382,12 +383,29 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
 
     if (rows.length === 0) return { error: 'เครดิตไม่พอ กรุณาลองใหม่' }
 
+    // ส่งออเดอร์ต่อไปยังผู้ให้บริการ
+    // ห่อ try ไว้ทั้งก้อนเพราะเครดิตลูกค้าถูกตัดและออกบิลไปเรียบร้อยแล้ว
+    // ถ้าขั้นนี้พลาด ห้ามทำให้การสั่งซื้อล้มตาม — บิลจะค้างในคิวแล้วระบบตามส่งให้เองทีหลัง
+    let handoff = 'ทางร้านกำลังดำเนินการเติมให้'
+    try {
+      if (await markForDispatch(rows[0].sale_id)) {
+        if (await autoDispatchOn()) {
+          const outcome = await dispatchSale(rows[0].sale_id)
+          if (outcome?.state === 'success') handoff = 'เติมเข้าเกมเรียบร้อยแล้ว'
+          else if (outcome?.state === 'sent') handoff = 'ระบบกำลังเติมให้อัตโนมัติ รอสักครู่'
+        }
+      }
+    } catch {
+      // รายละเอียดปัญหาฝั่งผู้ให้บริการเป็นเรื่องหลังร้าน ไม่ต้องบอกลูกค้า
+      // พนักงานจะเห็นสาเหตุเต็ม ๆ ที่หน้าลงยอดขาย
+    }
+
     revalidatePath('/shop/me')
     revalidatePath('/sales')
     revalidatePath('/')
     return {
       ok:
-        `สั่งซื้อสำเร็จ เลขที่ ${rows[0].code} — ทางร้านกำลังดำเนินการเติมให้ ` +
+        `สั่งซื้อสำเร็จ เลขที่ ${rows[0].code} — ${handoff} ` +
         `เครดิตคงเหลือ ${rows[0].balance_after.toLocaleString('th-TH')} บาท`,
     }
   } catch (err) {

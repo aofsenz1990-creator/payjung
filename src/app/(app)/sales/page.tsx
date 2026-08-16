@@ -2,11 +2,19 @@ import Link from 'next/link'
 import { q } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
 import { createSaleAction, cancelSaleAction, markPaidAction, refundSaleAction } from '@/lib/actions/sales'
+import { sendToProviderAction, stopDispatchAction } from '@/lib/actions/dispatch'
 import { dateTime, money, nowLocalInput, num, todayISO } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { SaleForm, type CustomerOption, type GameOption, type ProductOption } from '@/components/SaleForm'
-import { Empty, MoneyStat, PageHeader, SectionTitle, StatusBadge } from '@/components/ui'
+import {
+  DispatchBadge,
+  Empty,
+  MoneyStat,
+  PageHeader,
+  SectionTitle,
+  StatusBadge,
+} from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,11 +49,16 @@ export default async function SalesPage() {
       channel: string
       payment_method: string
       seller: string | null
+      provider_state: string | null
+      provider_message: string | null
+      provider_name: string | null
     }>(
       `select s.id, s.code, s.sold_at, s.item_name, g.name as game, coalesce(c.name, s.customer_name) as customer, s.source,
               s.game_account, s.qty, s.total::float8 as total, s.profit::float8 as profit, s.slip_path,
-              s.status, s.payment_method, s.channel, u.display_name as seller
+              s.status, s.payment_method, s.channel, u.display_name as seller,
+              s.provider_state, s.provider_message, ap.name as provider_name
          from sales s
+         left join api_providers ap on ap.id = s.provider_id
          left join games g on g.id = s.game_id
          left join customers c on c.id = s.customer_id
          left join profiles u on u.id = s.created_by
@@ -128,6 +141,7 @@ export default async function SalesPage() {
                   <th>ช่องทาง</th>
                   <th>สลิป</th>
                   <th>สถานะ</th>
+                  <th>การเติมผ่าน API</th>
                   <th className="text-right">จัดการ</th>
                 </tr>
               </thead>
@@ -179,8 +193,45 @@ export default async function SalesPage() {
                     <td>
                       <StatusBadge status={s.status} />
                     </td>
+                    {/* บิลที่ผูกกับผู้ให้บริการ API จะมีสถานะการเติมของตัวเองแยกจากสถานะบิล */}
                     <td>
-                      <div className="flex justify-end gap-1.5">
+                      <DispatchBadge state={s.provider_state} />
+                      {s.provider_name ? (
+                        <span className="mt-0.5 block text-xs text-mute">{s.provider_name}</span>
+                      ) : null}
+                      {s.provider_message ? (
+                        <span className="mt-0.5 block max-w-[15rem] text-xs leading-relaxed text-mute">
+                          {s.provider_message}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap justify-end gap-1.5">
+                        {/* ส่งเอง / ส่งซ้ำ — ใช้ตอนปิดสวิตช์อัตโนมัติ หรือรอบก่อนส่งไม่ผ่าน */}
+                        {s.status !== 'cancelled' &&
+                        s.provider_state &&
+                        ['queued', 'manual', 'error'].includes(s.provider_state) ? (
+                          <ActionForm action={sendToProviderAction}>
+                            <input type="hidden" name="id" value={s.id} />
+                            <SubmitButton
+                              className="btn-primary btn-sm"
+                              pendingLabel="กำลังส่ง..."
+                            >
+                              ส่งให้ผู้ให้บริการ
+                            </SubmitButton>
+                          </ActionForm>
+                        ) : null}
+                        {/* กันเติมซ้ำ: พนักงานที่เติมเข้าเกมเองต้องกดปุ่มนี้ก่อน ไม่งั้นระบบจะส่งต่อให้อีกรอบ */}
+                        {s.status !== 'cancelled' &&
+                        s.provider_state &&
+                        ['queued', 'error'].includes(s.provider_state) ? (
+                          <ActionForm action={stopDispatchAction}>
+                            <input type="hidden" name="id" value={s.id} />
+                            <SubmitButton className="btn-ghost btn-sm" pendingLabel="...">
+                              เติมเอง
+                            </SubmitButton>
+                          </ActionForm>
+                        ) : null}
 {s.channel === 'web' && s.status !== 'cancelled' ? (
                           <ActionForm action={refundSaleAction}>
                             <input type="hidden" name="id" value={s.id} />

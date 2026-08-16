@@ -5,11 +5,11 @@ import { redirect } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
 import { BuymError, getAccount, getProducts } from '@/lib/providers/24buym'
+import { PROVIDER_KINDS, providerMeta } from '@/lib/providers/constants'
 import { bool, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
 
 const AUTH_TYPES = ['bearer', 'apikey', 'basic', 'none']
-const PROVIDER_KINDS = ['custom', '24buym']
 
 /**
  * ทดสอบว่าคีย์ใช้งานได้จริงไหม โดยเรียก endpoint ดูข้อมูลบัญชี
@@ -69,6 +69,7 @@ export async function saveProviderAction(formData: FormData): Promise<ActionStat
     : 'bearer'
   const kind = PROVIDER_KINDS.includes(str(formData, 'kind')) ? str(formData, 'kind') : 'custom'
   const apiKey = str(formData, 'api_key')
+  const username = optStr(formData, 'username')
   const note = optStr(formData, 'note')
   const priority = int(formData, 'priority', 100)
   const isActive = bool(formData, 'is_active')
@@ -77,23 +78,27 @@ export async function saveProviderAction(formData: FormData): Promise<ActionStat
   if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
     return { error: 'ที่อยู่ API ต้องขึ้นต้นด้วย http:// หรือ https://' }
   }
+  if (providerMeta(kind).needsUsername && !username) {
+    return { error: 'เจ้านี้ต้องกรอก ID ผู้ใช้ที่ผู้ให้บริการออกให้ด้วย' }
+  }
 
   try {
     if (id) {
-      // เว้นช่องคีย์ไว้ = ใช้คีย์เดิม ไม่ต้องพิมพ์ใหม่ทุกครั้งที่แก้ข้อมูลอื่น
+      // เว้นช่องคีย์/รหัสผ่านไว้ = ใช้ค่าเดิม ไม่ต้องพิมพ์ใหม่ทุกครั้งที่แก้ข้อมูลอื่น
       await q(
         `update api_providers
             set name = $1, base_url = $2, auth_type = $3, note = $4,
-                priority = $5, is_active = $6, kind = $9,
+                priority = $5, is_active = $6, kind = $9, username = $10,
                 api_key = case when $7 = '' then api_key else $7 end
           where id = $8`,
-        [name, baseUrl, authType, note, priority, isActive, apiKey, Number(id), kind]
+        [name, baseUrl, authType, note, priority, isActive, apiKey, Number(id), kind, username]
       )
     } else {
       await q(
-        `insert into api_providers (name, base_url, auth_type, api_key, note, priority, is_active, kind)
-         values ($1, $2, $3, nullif($4, ''), $5, $6, $7, $8)`,
-        [name, baseUrl, authType, apiKey, note, priority, isActive, kind]
+        `insert into api_providers
+           (name, base_url, auth_type, api_key, note, priority, is_active, kind, username)
+         values ($1, $2, $3, nullif($4, ''), $5, $6, $7, $8, $9)`,
+        [name, baseUrl, authType, apiKey, note, priority, isActive, kind, username]
       )
     }
   } catch (err) {

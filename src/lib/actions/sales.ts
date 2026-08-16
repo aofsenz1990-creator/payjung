@@ -263,9 +263,16 @@ export async function refundSaleAction(formData: FormData): Promise<ActionState>
 
 export async function markPaidAction(formData: FormData) {
   await requireAnyPage('sales', 'history')
-  await q(`update sales set status = 'paid' where id = $1 and status = 'pending'`, [
-    int(formData, 'id'),
-  ])
+  // ปิดคิวส่งอัตโนมัติไปพร้อมกัน — พนักงานกดปุ่มนี้แปลว่าเติมเข้าเกมเองเรียบร้อยแล้ว
+  // ถ้าไม่ปิด ระบบจะส่งออเดอร์ต่อให้ผู้ให้บริการอีกรอบ = เติมซ้ำสองครั้ง
+  await q(
+    `update sales
+        set status = 'paid',
+            provider_state = case when provider_state in ('queued', 'error')
+                                  then 'manual' else provider_state end
+      where id = $1 and status = 'pending'`,
+    [int(formData, 'id')]
+  )
   refreshSalesViews()
 }
 

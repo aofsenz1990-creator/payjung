@@ -11,6 +11,13 @@ import {
   toggleProductPublishedAction,
 } from '@/lib/actions/storefront'
 import { deleteNewsAction, saveNewsAction, saveSiteSettingsAction } from '@/lib/actions/shop'
+import {
+  refreshBalanceAction,
+  setLowBalanceAction,
+  toggleAutoDispatchAction,
+} from '@/lib/actions/dispatch'
+import { autoDispatchOn } from '@/lib/dispatch'
+import { providerMeta } from '@/lib/providers/constants'
 import { DEFAULT_SHOP_BG, DEFAULT_SHOP_COVER, getSiteSettings, SITE_KEYS } from '@/lib/shop'
 import { ImageInput } from '@/components/ImageInput'
 import { ProviderForm } from '@/components/ProviderForm'
@@ -28,10 +35,14 @@ type Provider = {
   base_url: string | null
   auth_type: string
   has_key: boolean
+  username: string | null
   note: string | null
   priority: number
   is_active: boolean
   products: number
+  balance: number | null
+  balance_at: string | Date | null
+  low_balance: number
 }
 
 type GameRow = {
@@ -99,7 +110,8 @@ export default async function StorefrontPage({
     await Promise.all([
     q<Provider>(
       `select p.id, p.name, p.kind, p.base_url, p.auth_type, (p.api_key is not null) as has_key,
-              p.note, p.priority, p.is_active,
+              p.username, p.note, p.priority, p.is_active,
+              p.balance::float8 as balance, p.balance_at, p.low_balance::float8 as low_balance,
               (select count(*) from products pr where pr.provider_id = p.id)::int as products
          from api_providers p order by p.priority, p.name`
     ),
@@ -122,7 +134,8 @@ export default async function StorefrontPage({
     editProvider
       ? q1<Provider>(
           `select id, name, kind, base_url, auth_type, (api_key is not null) as has_key,
-                  note, priority, is_active
+                  username, note, priority, is_active,
+                  balance::float8 as balance, balance_at, low_balance::float8 as low_balance
              from api_providers where id = $1`,
           [Number(editProvider)]
         )
@@ -160,6 +173,12 @@ export default async function StorefrontPage({
   const publishedProducts = products.filter((p) => p.is_published).length
   const unmapped = products.filter((p) => p.is_published && !p.provider_name).length
 
+  const autoOn = await autoDispatchOn()
+  // เจ้าที่เปิดใช้อยู่ ตั้งยอดเตือนไว้ และยอดคงเหลือต่ำกว่าที่ตั้ง
+  const lowProviders = providers.filter(
+    (p) => p.is_active && p.low_balance > 0 && p.balance != null && p.balance < p.low_balance
+  )
+
   return (
     <>
       <PageHeader
@@ -167,15 +186,59 @@ export default async function StorefrontPage({
         subtitle="ตั้งค่าเกม รูปภาพ และแพ็กเกจที่จะแสดงบนหน้าเว็บสำหรับลูกค้า พร้อมผูกกับผู้ให้บริการ API ที่จะเติมให้"
       />
 
-      <div className="mb-6 rounded-xl border border-good/30 bg-good/10 px-4 py-3 text-xs leading-relaxed text-good">
+      <div className="mb-4 rounded-xl border border-good/30 bg-good/10 px-4 py-3 text-xs leading-relaxed text-good">
         <b>หน้าเว็บลูกค้าเปิดใช้งานแล้ว</b> —{' '}
         <a href="/shop" target="_blank" rel="noreferrer" className="underline">
           เปิดดูหน้าเว็บ ↗
         </a>{' '}
         ลูกค้าค้นหาเกม เลือกแพ็กเกจ ใส่จำนวน แล้วกดซื้อโดยตัดจากเครดิตที่ร้านเติมให้
-        (เติมเครดิตได้ที่เมนู <b>รายชื่อลูกค้า</b>) ส่วนการยิงคำสั่งไปยัง API
-        ของผู้ให้บริการยังไม่ได้ต่อ — ตอนนี้บิลจากเว็บจะขึ้นสถานะ “รอดำเนินการ” ให้ร้านเติมเอง
+        (เติมเครดิตได้ที่เมนู <b>รายชื่อลูกค้า</b>)
       </div>
+
+      {/* ---------------- สวิตช์ส่งออเดอร์อัตโนมัติ ---------------- */}
+      <div
+        className={`mb-4 rounded-xl border px-4 py-3 ${
+          autoOn ? 'border-good/30 bg-good/10' : 'border-warn/40 bg-warn/10'
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className={`text-sm font-semibold ${autoOn ? 'text-good' : 'text-warn'}`}>
+              {autoOn ? '⚡ ส่งออเดอร์อัตโนมัติ: เปิดอยู่' : '⏸ ส่งออเดอร์อัตโนมัติ: ปิดอยู่'}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-mute">
+              {autoOn ? (
+                <>
+                  ลูกค้ากดซื้อ → ระบบตัดเครดิต → ยิงคำสั่งเติมไปยังผู้ให้บริการทันที
+                  ถ้าปลายทางแจ้งว่าเติมไม่สำเร็จ <b className="text-slate-200">ระบบคืนเครดิตให้ลูกค้าเอง</b>
+                </>
+              ) : (
+                <>
+                  ออเดอร์ใหม่จะรอไว้ในคิว ให้พนักงานตรวจไอดีเกมแล้วกดปุ่ม{' '}
+                  <b className="text-slate-200">ส่งให้ผู้ให้บริการ</b> เองที่หน้าลงยอดขาย
+                </>
+              )}
+            </p>
+          </div>
+          <ActionForm action={toggleAutoDispatchAction}>
+            <SubmitButton
+              className={autoOn ? 'btn-ghost' : 'btn-primary'}
+              pendingLabel="กำลังบันทึก..."
+            >
+              {autoOn ? 'ปิดการส่งอัตโนมัติ' : 'เปิดการส่งอัตโนมัติ'}
+            </SubmitButton>
+          </ActionForm>
+        </div>
+      </div>
+
+      {/* เตือนเมื่อกระเป๋าเงินที่ผู้ให้บริการใกล้หมด — ถ้าหมดจริงออเดอร์จะส่งไม่ออกทั้งหมด */}
+      {lowProviders.length > 0 ? (
+        <div className="mb-4 rounded-xl border border-bad/40 bg-bad/10 px-4 py-3 text-xs leading-relaxed text-bad">
+          <b>⚠ ยอดที่ผู้ให้บริการใกล้หมด</b> —{' '}
+          {lowProviders.map((p) => `${p.name} เหลือ ${money(p.balance ?? 0)}`).join(' · ')}{' '}
+          เติมเงินเข้าบัญชีผู้ให้บริการก่อน ไม่งั้นออเดอร์ของลูกค้าจะส่งไม่ออก
+        </div>
+      ) : null}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="card">
@@ -274,9 +337,9 @@ export default async function StorefrontPage({
                 <thead>
                   <tr>
                     <th>ชื่อ</th>
-                    <th>ที่อยู่ API</th>
                     <th>ชนิด</th>
                     <th>คีย์</th>
+                    <th>ยอดคงเหลือของร้านเรา</th>
                     <th className="text-right">แพ็กเกจที่ผูก</th>
                     <th className="text-right">ลำดับ</th>
                     <th>สถานะ</th>
@@ -290,16 +353,71 @@ export default async function StorefrontPage({
                         <span className="block font-medium text-white">{p.name}</span>
                         {p.note ? <span className="block text-xs text-mute">{p.note}</span> : null}
                       </td>
-                      <td className="max-w-[16rem] truncate font-mono text-xs text-mute">
-                        {p.base_url ?? '-'}
+                      <td className="text-xs text-slate-300">
+                        {providerMeta(p.kind).autoSupported ? (
+                          <Badge tone="good">ส่งอัตโนมัติได้</Badge>
+                        ) : (
+                          <Badge tone="warn">ต้องเติมเอง</Badge>
+                        )}
+                        {p.username ? (
+                          <span className="mt-1 block font-mono text-xs text-mute">
+                            {p.username}
+                          </span>
+                        ) : null}
                       </td>
-                      <td className="text-xs text-slate-300">{p.kind}</td>
                       <td>
                         {p.has_key ? (
                           <Badge tone="good">ตั้งแล้ว</Badge>
                         ) : (
                           <Badge tone="warn">ยังไม่ตั้ง</Badge>
                         )}
+                      </td>
+                      {/* กระเป๋าเงินของร้านเราที่ปลายทาง — พอยต์หมดเมื่อไหร่ออเดอร์ส่งไม่ออกทันที */}
+                      <td>
+                        {p.balance == null ? (
+                          <span className="text-xs text-mute">ยังไม่เคยเช็ก</span>
+                        ) : (
+                          <span
+                            className={`block font-semibold ${
+                              p.low_balance > 0 && p.balance < p.low_balance
+                                ? 'text-bad'
+                                : 'text-good'
+                            }`}
+                          >
+                            {money(p.balance)}
+                            <span className="ml-1 text-xs font-normal text-mute">
+                              {providerMeta(p.kind).unit}
+                            </span>
+                          </span>
+                        )}
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {providerMeta(p.kind).autoSupported ? (
+                            <ActionForm action={refreshBalanceAction}>
+                              <input type="hidden" name="provider_id" value={p.id} />
+                              <SubmitButton className="btn-ghost btn-sm" pendingLabel="...">
+                                เช็กยอด
+                              </SubmitButton>
+                            </ActionForm>
+                          ) : null}
+                          <ActionForm action={setLowBalanceAction}>
+                            <input type="hidden" name="provider_id" value={p.id} />
+                            <span className="flex items-center gap-1">
+                              <span className="text-xs text-mute">เตือนต่ำกว่า</span>
+                              <input
+                                name="low_balance"
+                                type="number"
+                                min="0"
+                                step="1"
+                                className="input w-24 px-2 py-1 text-xs"
+                                defaultValue={p.low_balance || ''}
+                                placeholder="0"
+                              />
+                              <SubmitButton className="btn-ghost btn-sm" pendingLabel="...">
+                                ตั้ง
+                              </SubmitButton>
+                            </span>
+                          </ActionForm>
+                        </div>
                       </td>
                       <td className="text-right">{num(p.products)}</td>
                       <td className="text-right text-mute">{num(p.priority)}</td>

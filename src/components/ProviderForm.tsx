@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { ActionForm, SubmitButton, type ActionState } from '@/components/ActionForm'
-import { BUYM_DEFAULT_BASE } from '@/lib/providers/constants'
+import { PROVIDER_KIND_META, providerMeta } from '@/lib/providers/constants'
 
 export type ProviderDraft = {
   id: number
@@ -11,6 +11,7 @@ export type ProviderDraft = {
   base_url: string | null
   auth_type: string
   has_key: boolean
+  username: string | null
   note: string | null
   priority: number
   is_active: boolean
@@ -31,6 +32,9 @@ export function ProviderForm({
   editing: ProviderDraft | null
 }) {
   const [kind, setKind] = useState(editing?.kind ?? '24buym')
+  const meta = providerMeta(kind)
+  // ที่อยู่ API ตายตัว = ล็อกช่องไว้เลย จะได้ไม่ต้องสงสัยว่าต้องกรอกอะไร
+  const fixedBase = meta.fixedBaseUrl
   const isBuym = kind === '24buym'
 
   return (
@@ -62,18 +66,26 @@ export function ProviderForm({
           value={kind}
           onChange={(e) => setKind(e.target.value)}
         >
-          <option value="24buym">24BUYM (รองรับเต็มรูปแบบ)</option>
-          <option value="custom">อื่น ๆ (เก็บข้อมูลไว้ก่อน)</option>
+          {PROVIDER_KIND_META.map((m) => (
+            <option key={m.kind} value={m.kind}>
+              {m.label}
+            </option>
+          ))}
         </select>
+        {!meta.autoSupported ? (
+          <p className="mt-1 text-xs leading-relaxed text-warn">
+            เจ้านี้ยังส่งออเดอร์อัตโนมัติไม่ได้ — เก็บข้อมูลบัญชีไว้ได้ก่อน
+            ออเดอร์ของแพ็กเกจที่ผูกกับเจ้านี้จะขึ้นว่า &quot;ต้องเติมเอง&quot; ที่หน้าลงยอดขาย
+          </p>
+        ) : null}
       </div>
 
-      {/* 24BUYM มีที่อยู่เดียวตายตัว ล็อกไว้เลยจะได้ไม่ต้องสงสัยว่าต้องกรอกอะไร */}
-      {isBuym ? (
+      {fixedBase ? (
         <div>
           <span className="label">ที่อยู่ API</span>
-          <input type="hidden" name="base_url" value={BUYM_DEFAULT_BASE} />
+          <input type="hidden" name="base_url" value={fixedBase} />
           <p className="rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 font-mono text-xs text-mute">
-            {BUYM_DEFAULT_BASE}
+            {fixedBase}
           </p>
           <p className="mt-1 text-xs leading-relaxed text-mute">
             ตั้งให้อัตโนมัติแล้ว ไม่ต้องกรอก — ส่วนท้ายอย่าง{' '}
@@ -119,9 +131,26 @@ export function ProviderForm({
         </div>
       )}
 
+      {/* ผู้ให้บริการที่ใช้ ID + รหัสผ่าน ต้องกรอก ID ด้วย ส่วนเจ้าที่ใช้คีย์เดี่ยวไม่ต้อง */}
+      {meta.needsUsername ? (
+        <div>
+          <label className="label" htmlFor="username">
+            ID ผู้ใช้ / เลขบัญชีร้าน
+          </label>
+          <input
+            id="username"
+            name="username"
+            className="input"
+            autoComplete="off"
+            defaultValue={editing?.username ?? ''}
+            placeholder="ID ที่ผู้ให้บริการออกให้ร้านเรา"
+          />
+        </div>
+      ) : null}
+
       <div>
         <label className="label" htmlFor="api_key">
-          {isBuym ? 'USER_KEY' : 'คีย์ / โทเคน'}
+          {isBuym ? 'USER_KEY' : meta.needsUsername ? 'รหัสผ่าน' : 'คีย์ / โทเคน'}
         </label>
         <input
           id="api_key"
@@ -129,7 +158,11 @@ export function ProviderForm({
           type="password"
           className="input"
           autoComplete="new-password"
-          placeholder={editing?.has_key ? 'มีคีย์อยู่แล้ว — เว้นว่างถ้าไม่เปลี่ยน' : 'วางคีย์ที่นี่'}
+          placeholder={
+            editing?.has_key
+              ? `มี${meta.needsUsername ? 'รหัสผ่าน' : 'คีย์'}อยู่แล้ว — เว้นว่างถ้าไม่เปลี่ยน`
+              : `วาง${meta.needsUsername ? 'รหัสผ่าน' : 'คีย์'}ที่นี่`
+          }
         />
         <p className="mt-1 text-xs leading-relaxed text-mute">
           {isBuym ? (
@@ -140,7 +173,7 @@ export function ProviderForm({
           ) : (
             'เก็บในฐานข้อมูลและใช้เฉพาะฝั่งเซิร์ฟเวอร์'
           )}{' '}
-          คีย์ไม่ถูกส่งออกไปที่เบราว์เซอร์
+          ไม่ถูกส่งออกไปที่เบราว์เซอร์
         </p>
       </div>
 

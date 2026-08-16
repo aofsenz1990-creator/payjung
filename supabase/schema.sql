@@ -29,6 +29,12 @@ create table if not exists api_providers (
 create unique index if not exists api_providers_name_uniq on api_providers (lower(name));
 
 alter table api_providers add column if not exists kind text not null default 'custom';
+-- ผู้ให้บริการบางเจ้าใช้ ID + รหัสผ่าน (รหัสผ่านเก็บในคอลัมน์ api_key เดิม)
+alter table api_providers add column if not exists username text;
+-- ยอดเงิน/พอยต์คงเหลือของร้านที่ผู้ให้บริการ
+alter table api_providers add column if not exists balance numeric(12,2);
+alter table api_providers add column if not exists balance_at timestamptz;
+alter table api_providers add column if not exists low_balance numeric(12,2) not null default 0;
 
 create table if not exists games (
     id serial primary key,
@@ -148,6 +154,23 @@ alter table sales add column if not exists source text;
 create index if not exists sales_source_idx on sales (source);
 
 alter table sales add column if not exists channel text not null default 'shop';
+
+-- การส่งออเดอร์ต่อไปยังผู้ให้บริการ API
+-- provider_state: null = ไม่ต้องส่ง, queued = รอส่ง, sending = กำลังส่ง (ล็อกกันส่งซ้ำ),
+--                 sent = ปลายทางรับเข้าคิวแล้ว, success = สำเร็จ,
+--                 failed = ล้มเหลว (คืนเครดิตแล้ว), error = ส่งไม่ออก ต้องให้คนดู
+alter table sales add column if not exists provider_id int references api_providers(id) on delete set null;
+alter table sales add column if not exists provider_state text;
+alter table sales add column if not exists provider_order_id text;
+alter table sales add column if not exists provider_message text;
+alter table sales add column if not exists provider_attempts int not null default 0;
+alter table sales add column if not exists provider_sent_at timestamptz;
+alter table sales add column if not exists provider_checked_at timestamptz;
+alter table sales add column if not exists provider_ref text;
+create unique index if not exists sales_provider_ref_uniq
+  on sales (provider_ref) where provider_ref is not null;
+create index if not exists sales_provider_state_idx
+  on sales (provider_state) where provider_state is not null;
 
 create table if not exists credit_transactions (
     id serial primary key,

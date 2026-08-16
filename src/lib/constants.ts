@@ -32,6 +32,32 @@ export const SALE_STATUS = {
 
 export type SaleStatus = keyof typeof SALE_STATUS
 
+/**
+ * สถานะการส่งออเดอร์ต่อไปยังผู้ให้บริการ (เก็บใน sales.provider_state)
+ * อยู่ที่นี่เพราะทั้งฝั่งเซิร์ฟเวอร์และหน้าจอต้องใช้ร่วมกัน
+ */
+export const DISPATCH_STATE = {
+  queued: 'รอส่งให้ผู้ให้บริการ',
+  sending: 'กำลังส่ง...',
+  sent: 'ปลายทางรับแล้ว กำลังเติม',
+  success: 'เติมสำเร็จ',
+  failed: 'ปลายทางเติมไม่สำเร็จ',
+  error: 'ส่งไม่สำเร็จ ต้องตรวจสอบ',
+  manual: 'ต้องเติมเอง',
+} as const
+
+export type DispatchState = keyof typeof DISPATCH_STATE
+
+export const DISPATCH_TONE: Record<DispatchState, 'good' | 'bad' | 'warn' | 'neutral'> = {
+  queued: 'warn',
+  sending: 'warn',
+  sent: 'warn',
+  success: 'good',
+  failed: 'bad',
+  error: 'bad',
+  manual: 'neutral',
+}
+
 export const STOCK_KIND = {
   in: 'รับเข้า',
   out: 'ตัดออก',
