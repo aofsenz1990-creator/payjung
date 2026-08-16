@@ -153,10 +153,13 @@ export function BuyForm({
       <input type="hidden" name="qty" value={qty} />
 
       <div>
-        <p className="label">เลือกแพ็กเกจ</p>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <p className="label">เลือกสินค้าที่ต้องการ</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {shown.map((p) => {
-            const active = p.id === productId
+            // เทียบกับแพ็กที่ระบบใช้จริง ไม่ใช่ค่าที่ผู้ใช้กด
+            // เพราะตอนเปิดหน้ามาครั้งแรกยังไม่มีใครกด แต่ระบบเลือกแพ็กแรกไว้ให้แล้ว
+            // ถ้าเทียบกับค่าที่กด การ์ดจะไม่ขึ้นไฮไลต์ทั้งที่ส่งค่านั้นไปจริง
+            const active = p.id === selected?.id
             const soldOut = p.track_stock && p.stock_qty <= 0
             return (
               <button
@@ -164,12 +167,12 @@ export function BuyForm({
                 type="button"
                 disabled={soldOut}
                 onClick={() => setProductId(p.id)}
-                className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
+                className={`flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-center transition ${
                   soldOut
                     ? 'cursor-not-allowed border-ink-800 bg-ink-900 opacity-50'
                     : active
-                      ? 'border-brand-500 bg-brand-600/15'
-                      : 'border-ink-700 bg-ink-850 hover:border-ink-600'
+                      ? 'border-brand-500 bg-brand-600/15 shadow-lg shadow-brand-600/10'
+                      : 'border-ink-700 bg-ink-850 hover:border-ink-600 hover:bg-ink-800'
                 }`}
               >
                 {p.image_url ? (
@@ -177,20 +180,22 @@ export function BuyForm({
                   <img
                     src={p.image_url}
                     alt={p.name}
-                    className="size-12 shrink-0 rounded-lg bg-ink-900 object-contain p-1"
+                    className="size-14 shrink-0 rounded-lg bg-ink-900/60 object-contain p-1"
                   />
                 ) : (
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-ink-900 text-xl">
+                  <span className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-ink-900/60 text-2xl">
                     💎
                   </span>
                 )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-white">{p.name}</span>
-                  <span className="block text-sm text-brand-400">
-                    {baht.format(p.sell_price)} บาท
+                <span className="w-full">
+                  <span className="block text-sm leading-snug font-medium text-white">
+                    {p.name}
+                  </span>
+                  <span className="mt-1 block text-lg font-bold text-brand-400">
+                    ฿{baht.format(p.sell_price)}
                   </span>
                   {p.track_stock ? (
-                    <span className="block text-xs text-mute">
+                    <span className="mt-0.5 block text-xs text-mute">
                       {soldOut ? 'สินค้าหมด' : `เหลือ ${p.stock_qty} ชิ้น`}
                     </span>
                   ) : null}
