@@ -217,8 +217,14 @@ export const overtopup: ProviderAdapter = {
   async fetchCatalog(config) {
     const out: CatalogEntry[] = []
 
-    for (const kind of ['uid', 'card'] as const) {
-      const list = await api<ProductList>(config.baseUrl, config.secret, `${kind}/products`)
+    // ยิงพร้อมกันทั้งสองชนิด — ยิงเรียงกันแล้วรวมเวลาเกินที่ Vercel ยอมให้ทำงานต่อรีเควสต์
+    const kinds = ['uid', 'card'] as const
+    const lists = await Promise.all(
+      kinds.map((kind) => api<ProductList>(config.baseUrl, config.secret, `${kind}/products`))
+    )
+
+    for (const [i, kind] of kinds.entries()) {
+      const list = lists[i]
       for (const product of list ?? []) {
         if (!product?.id) continue
         // เกมที่ต้องกรอกมากกว่าไอดีกับเซิร์ฟเวอร์ ระบบเรายังส่งให้ไม่ครบ

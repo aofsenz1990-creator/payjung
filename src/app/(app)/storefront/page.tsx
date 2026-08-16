@@ -28,6 +28,11 @@ import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
+// การดึงรายการสินค้าจากผู้ให้บริการเป็น Server Action ของหน้านี้
+// ผู้ให้บริการบางเจ้ามีสินค้าหลายพันรายการ ยิงถามแล้วเขียนลงฐานข้อมูลกินเวลาเกินค่าเริ่มต้น
+// ถ้าไม่ยืดเวลาไว้ ฟังก์ชันจะถูกตัดกลางคันแล้วขึ้นค้างที่ปุ่ม "กำลังดึง..."
+export const maxDuration = 60
+
 type Provider = {
   id: number
   name: string
