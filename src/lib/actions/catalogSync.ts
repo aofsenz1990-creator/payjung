@@ -101,7 +101,7 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
 
 /**
  * นำเข้าเกมหนึ่งเกมจากรายการที่ดึงมา สร้างเกมและแพ็กเกจในระบบให้อัตโนมัติ
- * ตั้งราคาขายเท่าทุนไว้ก่อน ให้ร้านไปปรับกำไรเองทีหลัง
+ * บวกกำไรเป็นเปอร์เซ็นต์จากต้นทุน ไม่ใส่ก็ตั้งราคาขายเท่าทุนไว้ก่อนแล้วไปตั้งทีหลังได้
  */
 export async function importGameAction(formData: FormData): Promise<ActionState> {
   await requireAdmin()
@@ -174,19 +174,22 @@ export async function importGameAction(formData: FormData): Promise<ActionState>
         `insert into products
            (game_id, name, cost_price, sell_price, is_active, sort_order,
             provider_id, provider_game_id, provider_server_id, provider_sku,
-            provider_product_type)
-         values ($1, $2, $3, $4, true, $5, $6, $7, $8, $9, $10)`,
+            provider_product_type, markup_percent)
+         values ($1, $2, $3, $4, true, $5, $6, $7, $8, $9, $10, $11)`,
         [
           gameId,
           label,
           p.pack_price,
-          +(p.pack_price + markup).toFixed(2),
+          // บวกกำไรเป็นเปอร์เซ็นต์ ใช้ได้ดีกว่าบวกเป็นบาทเพราะแพ็กเกจราคาต่างกันมาก
+          // (แพ็ก 10 บาทกับแพ็ก 2,000 บาท ไม่ควรบวกกำไรเท่ากัน)
+          +(p.pack_price * (1 + markup / 100)).toFixed(2),
           Math.round(p.pack_price),
           providerId,
           providerGameId,
           p.server_id,
           p.pack_code,
           productType,
+          markup > 0 ? markup : null,
         ]
       )
       added++
@@ -198,7 +201,9 @@ export async function importGameAction(formData: FormData): Promise<ActionState>
       ok:
         `นำเข้า "${gameName}" แล้ว — เพิ่มใหม่ ${added} แพ็กเกจ` +
         (skipped > 0 ? ` (ข้ามที่มีอยู่แล้ว ${skipped})` : '') +
-        (markup > 0 ? ` · บวกกำไรแพ็กละ ${markup} บาท` : ' · ราคาขายเท่าทุน ไปปรับกำไรที่หน้าเกมได้'),
+        (markup > 0
+          ? ` · บวกกำไร ${markup}% จากต้นทุน`
+          : ' · ราคาขายเท่าทุน ไปตั้งกำไรทีเดียวทั้งเกมได้ที่หน้าเกม'),
     }
   } catch (err) {
     return { error: friendlyError(err, 'นำเข้าไม่สำเร็จ') }

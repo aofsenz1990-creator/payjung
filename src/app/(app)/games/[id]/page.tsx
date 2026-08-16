@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { OVERTOPUP_PRODUCT_TYPES } from '@/lib/providers/constants'
 import { requirePage } from '@/lib/auth'
-import { deleteProductAction, saveProductAction } from '@/lib/actions/catalog'
+import { deleteProductAction, saveProductAction, setGameMarkupAction } from '@/lib/actions/catalog'
 import { money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
@@ -28,6 +28,7 @@ type ProductRow = {
   provider_id: number | null
   provider_sku: string | null
   provider_product_type: string | null
+  markup_percent: number | null
 }
 
 export default async function GameDetailPage({
@@ -52,7 +53,7 @@ export default async function GameDetailPage({
     q<ProductRow>(
       `select p.id, p.game_id, p.name, p.sku, p.cost_price::float8 as cost_price,
               p.sell_price::float8 as sell_price, p.track_stock, p.stock_qty, p.low_stock,
-              p.is_active,
+              p.is_active, p.markup_percent::float8 as markup_percent,
               coalesce((select sum(s.qty) from sales s
                          where s.product_id = p.id and s.status = 'paid'), 0)::int as sold
          from products p where p.game_id = $1
@@ -64,7 +65,7 @@ export default async function GameDetailPage({
           `select id, game_id, name, sku, cost_price::float8 as cost_price,
                   sell_price::float8 as sell_price, track_stock, stock_qty, low_stock, is_active,
                   image_url, is_published, sort_order, provider_id, provider_sku,
-                  provider_product_type
+                  provider_product_type, markup_percent::float8 as markup_percent
              from products where id = $1`,
           [Number(edit)]
         )
@@ -167,6 +168,28 @@ export default async function GameDetailPage({
                   required
                 />
               </div>
+            </div>
+
+            {/* กรอก % ไว้ = ราคาขายคิดจากต้นทุนให้เอง และคิดใหม่ทุกครั้งที่ต้นทุนเปลี่ยน */}
+            <div>
+              <label className="label" htmlFor="markup_percent">
+                บวกกำไรจากต้นทุน (%)
+              </label>
+              <input
+                id="markup_percent"
+                name="markup_percent"
+                type="number"
+                min={0}
+                step="0.01"
+                className="input"
+                defaultValue={editing?.markup_percent ?? ''}
+                placeholder="เว้นว่าง = ตั้งราคาขายเอง"
+              />
+              <p className="mt-1 text-xs leading-relaxed text-mute">
+                กรอกไว้แล้ว <b className="text-slate-200">ระบบจะคิดราคาขายให้เอง</b>{' '}
+                (ช่องราคาขายด้านบนจะถูกทับ) และคิดใหม่ทุกครั้งที่ต้นทุนเปลี่ยน
+                กำไรจึงคงที่โดยไม่ต้องมาไล่แก้เอง
+              </p>
             </div>
 
             <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
@@ -362,6 +385,49 @@ export default async function GameDetailPage({
           >
             แพ็กเกจของ {game.name}
           </SectionTitle>
+          {/* ตั้งกำไรทีเดียวทั้งเกม — เกมที่เพิ่งนำเข้ามาราคาขายยังเท่าทุนทุกแพ็ก
+              ถ้าไม่มีปุ่มนี้ต้องมานั่งแก้ทีละแพ็กซึ่งเสียเวลามาก */}
+          {products.length > 0 && isAdmin ? (
+            <div className="mb-4 rounded-xl border border-brand-500/30 bg-brand-500/10 p-3">
+              <p className="mb-2 text-sm font-medium text-slate-100">
+                💰 ตั้งกำไรทุกแพ็กเกจในเกมนี้ทีเดียว
+              </p>
+              <ActionForm action={setGameMarkupAction}>
+                <input type="hidden" name="game_id" value={game.id} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    name="markup_percent"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="input w-32"
+                    placeholder="เช่น 15"
+                    defaultValue={products.find((p) => p.markup_percent != null)?.markup_percent ?? ''}
+                    aria-label="เปอร์เซ็นต์กำไร"
+                  />
+                  <span className="text-sm text-mute">%</span>
+                  <SubmitButton className="btn-primary" pendingLabel="กำลังตั้ง...">
+                    ตั้งราคาขายให้ทุกแพ็ก
+                  </SubmitButton>
+                </div>
+              </ActionForm>
+              <p className="mt-2 text-xs leading-relaxed text-mute">
+                ราคาขาย = ต้นทุน + กำไรที่ตั้งไว้ เช่นต้นทุน 123 บวก 15% ได้ราคาขาย 141.45{' '}
+                <b className="text-slate-200">
+                  ตั้งครั้งเดียวแล้วราคาขายจะคิดใหม่ให้เองทุกครั้งที่ต้นทุนเปลี่ยน
+                </b>{' '}
+                กำไรจึงไม่หดเวลาผู้ให้บริการขึ้นราคา
+              </p>
+              <ActionForm action={setGameMarkupAction} className="mt-2">
+                <input type="hidden" name="game_id" value={game.id} />
+                <input type="hidden" name="clear" value="1" />
+                <SubmitButton className="btn-ghost btn-sm" pendingLabel="...">
+                  เลิกคิดอัตโนมัติ (คงราคาเดิมไว้)
+                </SubmitButton>
+              </ActionForm>
+            </div>
+          ) : null}
+
           {products.length === 0 ? (
             <Empty>ยังไม่มีแพ็กเกจ เพิ่มจากฟอร์มด้านซ้าย</Empty>
           ) : (
@@ -388,6 +454,12 @@ export default async function GameDetailPage({
                           <span className="block font-medium text-white">{p.name}</span>
                           {p.sku ? (
                             <span className="block font-mono text-xs text-mute">{p.sku}</span>
+                          ) : null}
+                          {/* บอกว่าแพ็กนี้ราคาขายมาจากการคำนวณ ไม่ใช่ที่พิมพ์ไว้เอง */}
+                          {p.markup_percent != null ? (
+                            <span className="block text-xs text-brand-400">
+                              คิดราคาอัตโนมัติ +{p.markup_percent}%
+                            </span>
                           ) : null}
                         </td>
                         {isAdmin ? (

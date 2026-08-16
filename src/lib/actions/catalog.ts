@@ -84,22 +84,30 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
   const providerId = str(formData, 'provider_id') ? int(formData, 'provider_id') : null
   const providerSku = optStr(formData, 'provider_sku')
   const providerProductType = optStr(formData, 'provider_product_type')
+  // กรอก % ไว้ = ให้ระบบคิดราคาขายจากต้นทุนให้เอง เว้นว่าง = ตั้งราคาขายเอง
+  const markupRaw = optStr(formData, 'markup_percent')
+  const markup = markupRaw === null ? null : decimal(formData, 'markup_percent')
 
   if (!gameId) return { error: 'กรุณาเลือกเกม' }
   if (!name) return { error: 'กรุณากรอกชื่อแพ็กเกจ เช่น 100 เพชร' }
   if (price < 0 || cost < 0) return { error: 'ราคาต้องไม่ติดลบ' }
+  if (markup !== null && markup < 0) return { error: 'เปอร์เซ็นต์กำไรต้องไม่ติดลบ' }
 
   try {
     if (id) {
       await q(
-        `update products set game_id = $1, name = $2, sku = $3, cost_price = $4, sell_price = $5,
+        // ตั้ง % ไว้เมื่อไหร่ ราคาขายมาจากการคำนวณเสมอ ไม่ใช่ค่าที่พิมพ์ในช่องราคาขาย
+        `update products set game_id = $1, name = $2, sku = $3, cost_price = $4,
+           sell_price = case when $16::numeric is null then $5
+                             else round($4::numeric * (1 + $16::numeric / 100), 2) end,
+           markup_percent = $16,
            track_stock = $6, low_stock = $7, is_active = $8, image_url = $10,
            is_published = $11, sort_order = $12, provider_id = $13, provider_sku = $14,
            provider_product_type = $15
          where id = $9`,
         [
           gameId, name, sku, cost, price, trackStock, lowStock, isActive, Number(id),
-          imageUrl, isPublished, sortOrder, providerId, providerSku, providerProductType,
+          imageUrl, isPublished, sortOrder, providerId, providerSku, providerProductType, markup,
         ]
       )
     } else {
@@ -107,11 +115,14 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
       const rows = await q<{ id: number }>(
         `insert into products (game_id, name, sku, cost_price, sell_price, track_stock, low_stock,
                                stock_qty, image_url, is_published, sort_order, provider_id, provider_sku,
-                               provider_product_type)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) returning id`,
+                               provider_product_type, markup_percent)
+         values ($1, $2, $3, $4,
+                 case when $15::numeric is null then $5
+                      else round($4::numeric * (1 + $15::numeric / 100), 2) end,
+                 $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) returning id`,
         [
           gameId, name, sku, cost, price, trackStock, lowStock, trackStock ? openingQty : 0,
-          imageUrl, isPublished, sortOrder, providerId, providerSku, providerProductType,
+          imageUrl, isPublished, sortOrder, providerId, providerSku, providerProductType, markup,
         ]
       )
       if (trackStock && openingQty > 0) {
@@ -131,6 +142,54 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
   revalidatePath('/storefront')
   if (id) redirect(`/games/${gameId}`)
   return { ok: `บันทึกแพ็กเกจ "${name}" แล้ว` }
+}
+
+/**
+ * ตั้งกำไรเป็นเปอร์เซ็นต์ให้ทุกแพ็กเกจในเกมเดียวทีเดียว
+ * ใช้ตอนเพิ่งนำเข้าเกมมาแล้วราคาขายยังเท่าทุนอยู่ทั้งหมด
+ *
+ * ตั้ง % ไว้แล้วราคาขายจะคิดใหม่ให้เองทุกครั้งที่ต้นทุนเปลี่ยน
+ * เช่นผู้ให้บริการขึ้นราคาแล้วเราดึงรายการใหม่ กำไรจะยังเท่าเดิมโดยไม่ต้องไล่แก้ทีละแพ็ก
+ */
+export async function setGameMarkupAction(formData: FormData): Promise<ActionState> {
+  await requirePage('games')
+  const gameId = int(formData, 'game_id')
+  if (!gameId) return { error: 'ไม่พบเกมนี้' }
+
+  // กดปุ่มล้าง = เลิกคิดอัตโนมัติ แต่ราคาขายที่ตั้งไว้แล้วคงเดิม ไม่ตีกลับเป็นเท่าทุน
+  if (str(formData, 'clear') === '1') {
+    await q('update products set markup_percent = null where game_id = $1', [gameId])
+    revalidatePath(`/games/${gameId}`)
+    return { ok: 'เลิกคิดราคาขายอัตโนมัติแล้ว — ราคาที่ตั้งไว้ยังอยู่เหมือนเดิม' }
+  }
+
+  const raw = optStr(formData, 'markup_percent')
+  if (raw === null) return { error: 'กรุณากรอกเปอร์เซ็นต์กำไร' }
+  const percent = decimal(formData, 'markup_percent')
+  if (percent < 0) return { error: 'เปอร์เซ็นต์กำไรต้องไม่ติดลบ' }
+
+  try {
+    const rows = await q<{ id: number }>(
+      `update products
+          set markup_percent = $2,
+              sell_price = round(cost_price * (1 + $2::numeric / 100), 2)
+        where game_id = $1
+       returning id`,
+      [gameId, percent]
+    )
+
+    revalidatePath(`/games/${gameId}`)
+    revalidatePath('/games')
+    revalidatePath('/storefront')
+    revalidatePath('/shop')
+    return {
+      ok:
+        `ตั้งกำไร ${percent}% ให้ ${rows.length} แพ็กเกจแล้ว — ` +
+        'ถ้าต้นทุนเปลี่ยนทีหลัง ราคาขายจะคิดใหม่ให้เองโดยกำไรเท่าเดิม',
+    }
+  } catch (err) {
+    return { error: friendlyError(err, 'ตั้งราคาขายไม่สำเร็จ') }
+  }
 }
 
 export async function deleteProductAction(formData: FormData) {

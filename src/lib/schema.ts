@@ -87,6 +87,9 @@ export const SCHEMA_STATEMENTS: string[] = [
   `alter table products add column if not exists provider_server_id text not null default '0'`,
   // ชนิดสินค้าฝั่งผู้ให้บริการ — OverTopup แยก gtopup_uid / card ซึ่งส่งพารามิเตอร์คนละชุด
   `alter table products add column if not exists provider_product_type text`,
+  // บวกกำไรเป็นเปอร์เซ็นต์จากต้นทุน — ตั้งไว้แล้วราคาขายจะคำนวณให้เองทุกครั้งที่ต้นทุนเปลี่ยน
+  // null = ตั้งราคาขายเอง ระบบไม่ยุ่ง
+  `alter table products add column if not exists markup_percent numeric(6,2)`,
 
   // รายการสินค้าที่ดึงมาจากผู้ให้บริการ เก็บไว้ให้เลือกจับคู่โดยไม่ต้องยิง API ซ้ำ
   `create table if not exists provider_catalog (

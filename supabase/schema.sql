@@ -155,8 +155,10 @@ alter table sales add column if not exists source text;
 
 create index if not exists sales_source_idx on sales (source);
 
--- ชนิดสินค้าฝั่งผู้ให้บริการ (OverTopup แยก gtopup_uid / card)
+-- ชนิดสินค้าฝั่งผู้ให้บริการ (OverTopup แยก uid / card)
 alter table products add column if not exists provider_product_type text;
+-- บวกกำไรเป็นเปอร์เซ็นต์จากต้นทุน (null = ตั้งราคาขายเอง)
+alter table products add column if not exists markup_percent numeric(6,2);
 
 alter table sales add column if not exists channel text not null default 'shop';
 

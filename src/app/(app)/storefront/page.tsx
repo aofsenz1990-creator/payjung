@@ -583,9 +583,9 @@ export default async function StorefrontPage({
                               min={0}
                               step="0.01"
                               className="input w-24 py-1 text-xs"
-                              placeholder="บวกกำไร"
+                              placeholder="กำไร %"
                               defaultValue={0}
-                              title="บวกกำไรต่อแพ็ก (บาท) — ปล่อย 0 = ขายเท่าทุน"
+                              title="บวกกำไรเป็นเปอร์เซ็นต์จากต้นทุน — ปล่อย 0 = ขายเท่าทุน แล้วไปตั้งทีหลังที่หน้าเกม"
                             />
                             <SubmitButton className="btn-ghost btn-sm" pendingLabel="...">
                               นำเข้า
