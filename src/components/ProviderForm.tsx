@@ -137,7 +137,7 @@ export function ProviderForm({
       {meta.needsUsername ? (
         <div>
           <label className="label" htmlFor="username">
-            ID ผู้ใช้ / อีเมลที่ใช้ล็อกอิน
+            ID ผู้ใช้สำหรับ API
           </label>
           <input
             id="username"
@@ -145,10 +145,11 @@ export function ProviderForm({
             className="input"
             autoComplete="off"
             defaultValue={editing?.username ?? ''}
-            placeholder="เช่น you@example.com"
+            placeholder="ค่าที่ผู้ให้บริการออกให้สำหรับเรียก API"
           />
-          <p className="mt-1 text-xs leading-relaxed text-mute">
-            ID เดียวกับที่ใช้ล็อกอินหน้าเว็บของผู้ให้บริการ
+          <p className="mt-1 text-xs leading-relaxed text-warn">
+            มัก<b>ไม่ใช่</b>อีเมลที่ใช้ล็อกอินหน้าเว็บ — ต้องขอจากผู้ให้บริการโดยตรง
+            และหลายเจ้าต้องให้เจ้าหน้าที่เปิดสิทธิ์ใช้ API ให้ก่อน
           </p>
         </div>
       ) : null}

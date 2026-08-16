@@ -29,8 +29,12 @@ const ERROR_HINT: Record<string, string> = {
   ip_not_authorized:
     'OverTopup ไม่อนุญาต IP ที่ยิงเข้าไป — เว็บเราอยู่บน Vercel ซึ่ง IP เปลี่ยนตลอด ' +
     'ต้องให้ OverTopup ปิดการล็อก IP ให้บัญชีเรา',
-  invalid_username: 'ID ผู้ใช้ไม่ถูกต้อง — แก้ที่หน้าจัดการเว็บไซต์',
-  invalid_password: 'รหัสผ่านไม่ถูกต้อง — แก้ที่หน้าจัดการเว็บไซต์',
+  invalid_username:
+    'OverTopup หาบัญชีนี้ไม่เจอ — ID สำหรับ API เป็นคนละตัวกับอีเมลที่ล็อกอินหน้าเว็บ ' +
+    'และบัญชีต้องถูกเปิดสิทธิ์ใช้ API ก่อน ติดต่อ LINE @over_topup เพื่อขอเปิดและขอ ID',
+  account_not_authorized:
+    'บัญชีนี้ยังไม่ได้เปิดสิทธิ์ใช้ API — ติดต่อ LINE @over_topup เพื่อขอเปิดใช้งาน',
+  invalid_password: 'รหัสผ่านไม่ถูกต้อง — รหัสผ่าน API อาจเป็นคนละตัวกับรหัสผ่านหน้าเว็บ',
   account_suspended: 'บัญชีของร้านที่ OverTopup ถูกระงับ — ติดต่อ OverTopup',
   insufficient_coin: 'เหรียญของร้านที่ OverTopup ไม่พอ — เติมเงินเข้าบัญชี OverTopup ก่อน',
   product_out_stock: 'สินค้าหมดที่ฝั่ง OverTopup',
@@ -85,7 +89,10 @@ async function call<T>(
   const body_ = data as ErrorBody
   if (body_?.error) {
     const code = body_.error
-    const detail = ERROR_HINT[code] ?? body_.error_description ?? ''
+    // แสดงทั้งคำอธิบายของเราและข้อความที่ OverTopup ส่งมาเอง (เขาส่งเป็นภาษาไทยอยู่แล้ว)
+    // เมื่อก่อนทับข้อความเขาทิ้ง ทำให้เสียเบาะแสที่ช่วยหาสาเหตุได้
+    const parts = [ERROR_HINT[code], body_.error_description && `ปลายทางแจ้ง: ${body_.error_description}`]
+    const detail = parts.filter(Boolean).join(' · ')
     throw new ProviderError(
       detail ? `${detail} (${code})` : `OverTopup แจ้งข้อผิดพลาด: ${code}`,
       RETRYABLE.has(code)
