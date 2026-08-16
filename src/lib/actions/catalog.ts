@@ -489,6 +489,72 @@ export async function splitVariantAction(formData: FormData): Promise<ActionStat
   }
 }
 
+/**
+ * บันทึกกำไรเป็นเปอร์เซ็นต์ของหลายแพ็กเกจพร้อมกัน
+ * ช่องกรอกอยู่ในตารางแพ็กเกจ แก้ได้หลายแถวแล้วกดบันทึกทีเดียว
+ *
+ * เว้นช่องว่าง = เลิกคิดอัตโนมัติสำหรับแพ็กนั้น โดยราคาขายที่ตั้งไว้ยังอยู่เหมือนเดิม
+ * เขียนเป็นคำสั่งเดียวเพราะเกมหนึ่งมีได้หลายสิบแพ็ก ยิงทีละแถวจะช้าเกินไป
+ */
+export async function saveMarkupsAction(formData: FormData): Promise<ActionState> {
+  await requirePage('games')
+  const gameId = int(formData, 'game_id')
+  if (!gameId) return { error: 'ไม่พบเกมนี้' }
+
+  // อ่านทุกช่องที่ชื่อขึ้นต้นด้วย markup_ แล้วตามด้วยรหัสแพ็กเกจ
+  const rows: Array<[number, number | null]> = []
+  for (const [key, raw] of formData.entries()) {
+    if (!key.startsWith('markup_') || typeof raw !== 'string') continue
+    const productId = Number(key.slice('markup_'.length))
+    if (!Number.isFinite(productId) || productId <= 0) continue
+
+    const text = raw.trim()
+    if (text === '') {
+      rows.push([productId, null])
+      continue
+    }
+    const pct = Number(text.replace(/,/g, ''))
+    if (!Number.isFinite(pct) || pct < 0) {
+      return { error: 'เปอร์เซ็นต์กำไรต้องเป็นตัวเลขและไม่ติดลบ' }
+    }
+    rows.push([productId, pct])
+  }
+
+  if (rows.length === 0) return { error: 'ไม่มีอะไรให้บันทึก' }
+
+  try {
+    // สร้างตารางชั่วคราวจากค่าที่กรอกมา แล้วอัปเดตทีเดียวทั้งชุด
+    const values = rows
+      .map((_, i) => (i === 0 ? `($1::int, $2::numeric)` : `($${i * 2 + 1}, $${i * 2 + 2})`))
+      .join(',')
+    const params: unknown[] = rows.flat()
+    params.push(gameId)
+
+    const updated = await q<{ id: number }>(
+      `update products p
+          set markup_percent = v.pct,
+              sell_price = case when v.pct is null then p.sell_price
+                                else ceil(p.cost_price * (1 + v.pct / 100)) end
+         from (values ${values}) as v(id, pct)
+        where p.id = v.id
+          and p.game_id = $${params.length}
+          and p.markup_percent is distinct from v.pct
+       returning p.id`,
+      params
+    )
+
+    refreshProductViews(gameId)
+    if (updated.length === 0) return { ok: 'ไม่มีแพ็กเกจไหนเปลี่ยน — ค่าที่กรอกตรงกับของเดิมอยู่แล้ว' }
+    return {
+      ok:
+        `บันทึกกำไร ${updated.length} แพ็กเกจแล้ว — คิดราคาขายใหม่ให้เรียบร้อย ` +
+        '(ปัดขึ้นเป็นจำนวนเต็มบาท)',
+    }
+  } catch (err) {
+    return { error: friendlyError(err, 'บันทึกกำไรไม่สำเร็จ') }
+  }
+}
+
 export async function deleteProductAction(formData: FormData) {
   await requireAdmin()
   const id = int(formData, 'id')

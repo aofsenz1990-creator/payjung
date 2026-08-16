@@ -15,6 +15,7 @@ export function ActionForm({
   className = '',
   resetOnSuccess = false,
   onSuccess,
+  id,
 }: {
   action: (formData: FormData) => Promise<ActionState>
   children: React.ReactNode
@@ -22,6 +23,11 @@ export function ActionForm({
   resetOnSuccess?: boolean
   /** เรียกหลังบันทึกผ่าน ใช้ล้างค่าที่ฟอร์ม reset() เองไม่ได้ เช่นรูปที่แนบไว้ */
   onSuccess?: () => void
+  /**
+   * ตั้ง id ให้ฟอร์ม เพื่อให้ช่องกรอกที่อยู่นอกฟอร์มผูกเข้ามาได้ด้วย form="ไอดีนี้"
+   * ใช้ตอนที่ช่องกรอกต้องอยู่ในตารางซึ่งมีฟอร์มอื่นอยู่แล้ว เพราะฟอร์มซ้อนกันไม่ได้
+   */
+  id?: string
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const [state, formAction] = useActionState<ActionState, FormData>(
@@ -38,7 +44,7 @@ export function ActionForm({
   }, [state, resetOnSuccess])
 
   return (
-    <form ref={formRef} action={formAction} className={className}>
+    <form ref={formRef} id={id} action={formAction} className={className}>
       {children}
       {state?.error ? (
         <p className="mt-3 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">

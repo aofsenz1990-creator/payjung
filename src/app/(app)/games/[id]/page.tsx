@@ -8,6 +8,7 @@ import {
   saveProductAction,
   mergeGamesAction,
   setGameMarkupAction,
+  saveMarkupsAction,
   setGamePublishedAction,
   splitVariantAction,
 } from '@/lib/actions/catalog'
@@ -585,6 +586,23 @@ export default async function GameDetailPage({
             </div>
           ) : null}
 
+          {/* ฟอร์มว่างตัวนี้เป็นปลายทางของช่องกรอกกำไรที่อยู่ในตาราง
+              ผูกกันด้วย id เพราะในตารางมีฟอร์มอื่นอยู่แล้ว วางฟอร์มซ้อนกันไม่ได้ */}
+          {products.length > 0 && isAdmin ? (
+            <ActionForm id="markup-form" action={saveMarkupsAction} className="mb-4">
+              <input type="hidden" name="game_id" value={game.id} />
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-700 bg-ink-850 p-3">
+                <p className="text-xs leading-relaxed text-mute">
+                  แก้ช่อง <b className="text-slate-200">ปรับกำไร %</b> ในตารางได้หลายแถว
+                  แล้วกดบันทึกทีเดียว · เว้นว่าง = กลับไปตั้งราคาขายเอง (ราคาเดิมไม่หาย)
+                </p>
+                <SubmitButton className="btn-primary" pendingLabel="กำลังบันทึก...">
+                  บันทึกกำไรที่แก้ไว้
+                </SubmitButton>
+              </div>
+            </ActionForm>
+          ) : null}
+
           {products.length === 0 ? (
             <Empty>ยังไม่มีแพ็กเกจ เพิ่มจากฟอร์มด้านซ้าย</Empty>
           ) : (
@@ -596,6 +614,7 @@ export default async function GameDetailPage({
                     {isAdmin ? <th className="text-right">ต้นทุน</th> : null}
                     <th className="text-right">ราคาขาย</th>
                     {isAdmin ? <th className="text-right">กำไร/หน่วย</th> : null}
+                    {isAdmin ? <th className="w-28 text-right">ปรับกำไร %</th> : null}
                     <th className="text-right">สต๊อก</th>
                     <th className="text-right">ขายไปแล้ว</th>
                     <th>สถานะ</th>
@@ -635,6 +654,23 @@ export default async function GameDetailPage({
                         {isAdmin ? (
                           <td className={`text-right ${margin >= 0 ? 'text-good' : 'text-bad'}`}>
                             {money(margin)}
+                          </td>
+                        ) : null}
+                        {/* ช่องกรอกอยู่ในตาราง แต่ผูกกับฟอร์มด้านบนด้วย form="markup-form"
+                            เพราะในตารางมีฟอร์มปุ่มเปิดขาย/ลบอยู่แล้ว ซ้อนฟอร์มกันไม่ได้ */}
+                        {isAdmin ? (
+                          <td className="text-right">
+                            <input
+                              form="markup-form"
+                              name={`markup_${p.id}`}
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              defaultValue={p.markup_percent ?? ''}
+                              className="input w-24 px-2 py-1 text-right text-xs"
+                              placeholder="ตั้งเอง"
+                              aria-label={`กำไรเปอร์เซ็นต์ของ ${p.name}`}
+                            />
                           </td>
                         ) : null}
                         <td className="text-right">
