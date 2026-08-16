@@ -35,6 +35,8 @@ alter table api_providers add column if not exists username text;
 alter table api_providers add column if not exists balance numeric(12,2);
 alter table api_providers add column if not exists balance_at timestamptz;
 alter table api_providers add column if not exists low_balance numeric(12,2) not null default 0;
+-- ยิงเข้าสภาพแวดล้อมทดสอบของผู้ให้บริการแทนของจริง
+alter table api_providers add column if not exists sandbox boolean not null default false;
 
 create table if not exists games (
     id serial primary key,

@@ -37,11 +37,11 @@ export async function POST(
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
-  // OverTopup ส่งมาเป็น form-urlencoded แต่เผื่อเจ้าอื่นส่ง JSON ไว้ด้วย
+  // v2 ส่งเป็น JSON แต่รองรับ form-urlencoded ไว้ด้วยเผื่อเจ้าอื่น
   let fields: Record<string, string> = {}
   try {
     const type = request.headers.get('content-type') ?? ''
-    if (type.includes('application/json')) {
+    if (type.includes('application/json') || type === '') {
       const body = (await request.json()) as Record<string, unknown>
       for (const [k, v] of Object.entries(body)) {
         if (typeof v === 'string' || typeof v === 'number') fields[k] = String(v)
@@ -58,11 +58,17 @@ export async function POST(
     return NextResponse.json({ error: 'bad body' }, { status: 400 })
   }
 
-  const ref = fields.reference_no?.trim()
-  const orderNo = fields.order_no?.trim() || null
-  if (!ref) return NextResponse.json({ error: 'missing reference_no' }, { status: 400 })
+  // v2 ส่ง reference_id / order_id / status / message
+  // (รับชื่อฟิลด์แบบเก่าไว้ด้วย เผื่อผู้ให้บริการรายอื่นใช้คนละชื่อ)
+  const ref = (fields.reference_id ?? fields.reference_no ?? '').trim()
+  const orderNo = (fields.order_id ?? fields.order_no ?? '').trim() || null
+  if (!ref) return NextResponse.json({ error: 'missing reference_id' }, { status: 400 })
 
-  const result = mapStatus(fields.order_status, fields.note || fields.note_cancel || null, orderNo)
+  const result = mapStatus(
+    fields.status ?? fields.order_status,
+    fields.message || fields.note || null,
+    orderNo
+  )
 
   try {
     const outcome = await applyCallback({ ref, orderId: orderNo, result })

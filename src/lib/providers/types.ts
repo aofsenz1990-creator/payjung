@@ -16,6 +16,8 @@ export type ProviderConfig = {
   username: string | null
   /** คีย์ หรือรหัสผ่าน แล้วแต่ชนิดของเจ้านั้น */
   secret: string
+  /** ยิงเข้าสภาพแวดล้อมทดสอบของผู้ให้บริการแทนของจริง (ไม่เสียเงิน) */
+  sandbox: boolean
 }
 
 /** สิ่งที่ต้องบอกปลายทางเวลาสั่งเติมหนึ่งรายการ */
@@ -41,6 +43,12 @@ export type OrderInput = {
    * ตัวเชื่อมที่ไม่ใช้ก็ไม่ต้องสนใจ
    */
   callbackUrl?: string | null
+  /**
+   * ราคาทุนต่อหน่วยที่ระบบเราบันทึกไว้
+   * เจ้าที่รับค่านี้จะเอาไปเทียบกับราคาปัจจุบัน ถ้าไม่ตรงจะปฏิเสธออเดอร์
+   * แทนที่จะตัดเงินตามราคาใหม่เงียบ ๆ — กันขายขาดทุนโดยไม่รู้ตัว
+   */
+  unitPrice?: number | null
 }
 
 /** ผลของการยิงคำสั่งเติม — ได้แค่ "ปลายทางรับเรื่องแล้ว" ยังไม่ใช่ "เติมสำเร็จ" */
@@ -115,7 +123,7 @@ export type ProviderAdapter = {
   /** ตามสถานะด้วยเลขออเดอร์ปลายทาง หรือด้วยเลขอ้างอิงของเราถ้ายังไม่รู้เลขออเดอร์ */
   checkOrder(
     config: ProviderConfig,
-    order: { ref: string; orderId: string | null }
+    order: { ref: string; orderId: string | null; productType?: string | null }
   ): Promise<CheckResult>
   /**
    * ดึงรายการสินค้าทั้งหมดมาเก็บไว้ให้เลือกจับคู่

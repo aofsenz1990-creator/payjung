@@ -42,6 +42,8 @@ export const SCHEMA_STATEMENTS: string[] = [
   `alter table api_providers add column if not exists balance_at timestamptz`,
   // ต่ำกว่านี้ให้ขึ้นเตือนบนหน้าจอ (0 = ไม่เตือน)
   `alter table api_providers add column if not exists low_balance numeric(12,2) not null default 0`,
+  // ยิงเข้าสภาพแวดล้อมทดสอบของผู้ให้บริการแทนของจริง — ใช้ซ้อมทั้งกระบวนการโดยไม่เสียเงิน
+  `alter table api_providers add column if not exists sandbox boolean not null default false`,
 
   `create table if not exists games (
     id serial primary key,

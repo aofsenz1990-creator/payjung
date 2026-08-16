@@ -3,15 +3,18 @@
  * แยกออกมาจาก 24buym.ts เพราะไฟล์นั้นเป็น server-only
  */
 export const BUYM_DEFAULT_BASE = 'https://new-api.24buymseller.com'
-export const OVERTOPUP_DEFAULT_BASE = 'https://www.overtopup.com/api'
+/** Reseller API v2 — โหมดทดสอบเติม /sandbox ต่อท้าย */
+export const OVERTOPUP_DEFAULT_BASE = 'https://www.overtopup.com/api/v2'
+export const OVERTOPUP_SANDBOX_BASE = 'https://www.overtopup.com/api/v2/sandbox'
 
 /**
- * ชนิดสินค้าของ OverTopup — ส่งพารามิเตอร์คนละชุดกัน จึงต้องเลือกให้ถูกรายแพ็กเกจ
+ * ชนิดสินค้าของ OverTopup — ใช้ path คนละอันและส่งพารามิเตอร์คนละชุด
  * เก็บไว้ที่ products.provider_product_type
  */
 export const OVERTOPUP_PRODUCT_TYPES = [
-  { value: 'gtopup_uid', label: 'เติมด้วย UID (สั่งได้ทีละ 1 ชิ้น)' },
-  { value: 'card', label: 'บัตรเงินสด (ระบุจำนวนได้)' },
+  { value: 'uid', label: 'เติมด้วย UID' },
+  { value: 'card', label: 'บัตรเงินสด' },
+  { value: 'idpass', label: 'เติมด้วยไอดี+รหัสผ่าน (ต้องเติมเอง)' },
 ] as const
 
 /**
@@ -29,6 +32,8 @@ export type ProviderKindMeta = {
   fixedBaseUrl?: string
   /** ต่ออัตโนมัติได้จริงแล้วหรือยัง (false = เก็บข้อมูลไว้ก่อน ยังส่งออเดอร์ไม่ได้) */
   autoSupported: boolean
+  /** มีสภาพแวดล้อมทดสอบให้ยิงโดยไม่เสียเงินจริง */
+  hasSandbox?: boolean
   /** ชื่อหน่วยเงินที่เจ้านั้นใช้เรียก */
   unit: string
 }
@@ -44,11 +49,13 @@ export const PROVIDER_KIND_META: ProviderKindMeta[] = [
   },
   {
     kind: 'overtopup',
+    // Reseller API v2 ใช้ API Key ตัวเดียวแบบ Bearer ไม่ใช่ ID + รหัสผ่าน
     label: 'OverTopup (ต่ออัตโนมัติได้)',
-    needsUsername: true,
+    needsUsername: false,
     fixedBaseUrl: OVERTOPUP_DEFAULT_BASE,
     autoSupported: true,
-    unit: 'เหรียญ',
+    hasSandbox: true,
+    unit: 'บาท',
   },
   {
     kind: 'userpass',

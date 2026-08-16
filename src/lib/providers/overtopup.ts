@@ -3,64 +3,75 @@ import { OVERTOPUP_DEFAULT_BASE } from './constants'
 import { ProviderError, type CatalogEntry, type ProviderAdapter } from './types'
 
 /**
- * ตัวเชื่อมต่อ API ของ OverTopup
- * เอกสาร: https://www.overtopup.com/api/document
+ * ตัวเชื่อมต่อ OverTopup Reseller API (v2)
+ * เอกสาร: https://documenter.getpostman.com/view/29486531/2sBY4PNzXY
+ * ขอเปิดสิทธิ์และดูคีย์ได้ที่ OverTopup > User > Reseller API
  *
- * จุดที่ต่างจาก 24BUYM และต้องระวัง:
- *  1. ยืนยันตัวตนด้วย username + password ส่งไปในบอดี้ทุกครั้ง (ไม่ใช่คีย์เดี่ยว)
- *  2. บอดี้เป็น form-urlencoded ไม่ใช่ JSON
- *  3. ข้อผิดพลาดไม่ได้ส่งมาเป็น HTTP status แต่เป็นฟิลด์ error ในบอดี้ (HTTP อาจเป็น 200)
- *  4. ตามสถานะได้ด้วย order_no เท่านั้น — ค้นด้วย reference_no ของเราไม่ได้
- *     ทำให้ถ้ายิงไปแล้วไม่ได้ผลกลับ เราจะเช็กเองไม่ได้ ต้องพึ่ง callback หรือให้คนไปดู
- *  5. เติมแบบ UID สั่งได้ทีละ 1 ชิ้นต่อออเดอร์ (ไม่มีพารามิเตอร์ quantity)
+ * API ชุดนี้ออกแบบมาดีกว่าตัวเก่ามาก และรองรับสิ่งที่ระบบเราต้องการครบ:
+ *  - ค้นออเดอร์ด้วย reference_id ของเราได้ → ถามปลายทางก่อนส่งซ้ำได้เสมอ
+ *  - reference_id ซ้ำจะถูกปฏิเสธ (DUPLICATE_REFERENCE_ID) → กันเติมซ้ำที่ฝั่งเขาอีกชั้น
+ *  - ส่งราคาไปด้วยได้ ถ้าไม่ตรงกับราคาปัจจุบันเขาจะปฏิเสธ (PRICE_NOT_MATCH)
+ *    → กันขายขาดทุนเงียบ ๆ ตอนปลายทางขึ้นราคาแล้วเราไม่รู้
+ *  - มี Sandbox ให้ทดสอบทั้งกระบวนการโดยไม่เสียเงินจริง
  */
 
-/** ยอดเงินตอบกลับมาเป็นข้อความมีคอมมา เช่น "1,345.00" ต้องตัดคอมมาก่อนแปลงเป็นตัวเลข */
-function toNumber(value: unknown) {
-  const n = Number.parseFloat(String(value ?? '').replace(/,/g, ''))
-  return Number.isFinite(n) ? n : 0
+/** สินค้าสามแบบของ OverTopup ส่งพารามิเตอร์คนละชุดและใช้ path คนละอัน */
+export type OverTopupKind = 'uid' | 'card' | 'idpass'
+
+function pathKind(productType: string | null | undefined): OverTopupKind {
+  if (productType === 'card') return 'card'
+  if (productType === 'idpass') return 'idpass'
+  return 'uid'
 }
 
-/** รหัสข้อผิดพลาดที่ลองใหม่แล้วมีโอกาสสำเร็จ (ที่เหลือลองกี่ครั้งก็เหมือนเดิม) */
-const RETRYABLE = new Set(['system_busy', 'try_again', 'timeout'])
+/** เลขออเดอร์ขึ้นต้นด้วยตัวอักษรบอกชนิด: G=uid, P=idpass, C=card */
+function kindFromOrderId(orderId: string): OverTopupKind | null {
+  const c = orderId.trim().charAt(0).toUpperCase()
+  return c === 'C' ? 'card' : c === 'P' ? 'idpass' : c === 'G' ? 'uid' : null
+}
 
-/** แปลรหัสข้อผิดพลาดที่เจอบ่อยเป็นคำอธิบายที่บอกได้ว่าต้องไปแก้ตรงไหน */
+/** รหัสข้อผิดพลาดที่ลองใหม่แล้วมีโอกาสสำเร็จ */
+const RETRYABLE = new Set(['RATE_LIMIT_EXCEEDED', 'INTERNAL_ERROR'])
+
 const ERROR_HINT: Record<string, string> = {
-  ip_not_authorized:
-    'OverTopup ไม่อนุญาต IP ที่ยิงเข้าไป — เว็บเราอยู่บน Vercel ซึ่ง IP เปลี่ยนตลอด ' +
-    'ต้องให้ OverTopup ปิดการล็อก IP ให้บัญชีเรา',
-  invalid_username:
-    'OverTopup หาบัญชีนี้ไม่เจอ — ID สำหรับ API เป็นคนละตัวกับอีเมลที่ล็อกอินหน้าเว็บ ' +
-    'และบัญชีต้องถูกเปิดสิทธิ์ใช้ API ก่อน ติดต่อ LINE @over_topup เพื่อขอเปิดและขอ ID',
-  account_not_authorized:
-    'บัญชีนี้ยังไม่ได้เปิดสิทธิ์ใช้ API — ติดต่อ LINE @over_topup เพื่อขอเปิดใช้งาน',
-  invalid_password: 'รหัสผ่านไม่ถูกต้อง — รหัสผ่าน API อาจเป็นคนละตัวกับรหัสผ่านหน้าเว็บ',
-  account_suspended: 'บัญชีของร้านที่ OverTopup ถูกระงับ — ติดต่อ OverTopup',
-  insufficient_coin: 'เหรียญของร้านที่ OverTopup ไม่พอ — เติมเงินเข้าบัญชี OverTopup ก่อน',
-  product_out_stock: 'สินค้าหมดที่ฝั่ง OverTopup',
-  invalid_reference_no:
-    'OverTopup ปฏิเสธเลขอ้างอิงนี้ อาจเพราะเคยใช้ส่งไปแล้ว — ' +
-    'อย่าเพิ่งส่งซ้ำ ให้เข้าไปเช็กในระบบ OverTopup ก่อนว่าออเดอร์เข้าไปแล้วหรือยัง',
+  UNAUTHORIZED:
+    'API Key ไม่ถูกต้องหรือยังไม่ได้เปิดสิทธิ์ — ดูคีย์ที่ OverTopup > User > Reseller API ' +
+    'และติดต่อเจ้าหน้าที่เพื่อขอเปิดใช้งาน API',
+  RATE_LIMIT_EXCEEDED: 'ยิงถี่เกินไป ระบบจะลองใหม่ให้เอง',
+  INSUFFICIENT_BALANCE: 'ยอดเงินของร้านที่ OverTopup ไม่พอ — เติมเงินเข้าบัญชี OverTopup ก่อน',
+  OUT_OF_STOCK: 'สินค้าหมดที่ฝั่ง OverTopup',
+  PRODUCT_NOT_FOUND: 'ไม่พบสินค้านี้ที่ OverTopup — กดดึงรายการใหม่แล้วนำเข้าอีกครั้ง',
+  PACKAGE_NOT_FOUND: 'ไม่พบแพ็กเกจนี้ที่ OverTopup — กดดึงรายการใหม่แล้วนำเข้าอีกครั้ง',
+  PRICE_NOT_MATCH:
+    'ราคาทุนในระบบเราไม่ตรงกับราคาปัจจุบันของ OverTopup — ' +
+    'ยังไม่ได้สั่งซื้อ ให้กดดึงรายการใหม่เพื่ออัปเดตราคาทุนก่อน (กันขายขาดทุน)',
+  DUPLICATE_REFERENCE_ID:
+    'เลขอ้างอิงนี้เคยส่งไปแล้ว = ออเดอร์เข้าระบบ OverTopup ไปก่อนหน้านี้ ' +
+    'ระบบจะไม่สั่งซ้ำ ให้กดตามสถานะแทน',
+  ORDER_NOT_FOUND: 'ไม่พบออเดอร์นี้ที่ OverTopup',
 }
 
-type ErrorBody = { error?: string; error_description?: string }
+type ApiError = { status?: string; code?: string; message?: string }
 
-async function call<T>(
+/** เรียก API — ใส่ Bearer token ให้ทุกครั้ง และแปลง error ของ OverTopup เป็นชนิดกลาง */
+async function api<T>(
   baseUrl: string | null | undefined,
+  key: string,
   path: string,
-  body: Record<string, string>
+  init?: { method?: 'GET' | 'POST'; body?: unknown }
 ): Promise<T> {
   const base = (baseUrl || OVERTOPUP_DEFAULT_BASE).replace(/\/+$/, '')
 
   let res: Response
   try {
     res = await fetch(`${base}/${path}`, {
-      method: 'POST',
+      method: init?.method ?? 'GET',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Bearer ${key}`,
         Accept: 'application/json',
+        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
       },
-      body: new URLSearchParams(body).toString(),
+      body: init?.body ? JSON.stringify(init.body) : undefined,
       cache: 'no-store',
       signal: AbortSignal.timeout(20_000),
     })
@@ -85,13 +96,10 @@ async function call<T>(
     )
   }
 
-  // ข้อผิดพลาดมาเป็นฟิลด์ในบอดี้ ไม่ใช่ HTTP status จึงต้องเช็กตรงนี้ ไม่ใช่ res.ok
-  const body_ = data as ErrorBody
-  if (body_?.error) {
-    const code = body_.error
-    // แสดงทั้งคำอธิบายของเราและข้อความที่ OverTopup ส่งมาเอง (เขาส่งเป็นภาษาไทยอยู่แล้ว)
-    // เมื่อก่อนทับข้อความเขาทิ้ง ทำให้เสียเบาะแสที่ช่วยหาสาเหตุได้
-    const parts = [ERROR_HINT[code], body_.error_description && `ปลายทางแจ้ง: ${body_.error_description}`]
+  const body = data as ApiError & { data?: unknown }
+  if (body?.status === 'error' || body?.code) {
+    const code = body.code ?? 'UNKNOWN'
+    const parts = [ERROR_HINT[code], body.message && `ปลายทางแจ้ง: ${body.message}`]
     const detail = parts.filter(Boolean).join(' · ')
     throw new ProviderError(
       detail ? `${detail} (${code})` : `OverTopup แจ้งข้อผิดพลาด: ${code}`,
@@ -99,197 +107,170 @@ async function call<T>(
     )
   }
 
-  return data as T
+  return body.data as T
+}
+
+type ProductList = Array<{
+  type?: string
+  id: number
+  name: string
+  packages?: Array<{ id: number; name: string; description?: string; price: number }>
+  fields?: Array<{ key: string; label: string }>
+}>
+
+type OrderData = {
+  order_id?: string
+  reference_id?: string
+  status?: string
+  message?: string
+  total?: number
 }
 
 export const overtopup: ProviderAdapter = {
   kind: 'overtopup',
 
   async getBalance(config) {
-    const data = await call<{ coin_balance?: string }>(config.baseUrl, 'coin-balance', {
-      username: config.username ?? '',
-      password: config.secret,
-    })
+    const data = await api<{ balance?: number }>(config.baseUrl, config.secret, 'balance')
     return {
-      balance: toNumber(data.coin_balance),
-      unit: 'เหรียญ',
-      account: config.username,
+      balance: Number(data?.balance ?? 0) || 0,
+      unit: 'บาท',
+      account: config.username || null,
     }
   },
 
   async placeOrder(config, input) {
-    const productType = input.productType || 'gtopup_uid'
-
-    // เติมแบบ UID ไม่มีพารามิเตอร์จำนวน สั่งได้ทีละชิ้นเท่านั้น
-    // ถ้าปล่อยผ่านไปทั้งที่ลูกค้าซื้อหลายชิ้น จะกลายเป็นเก็บเงินเต็มแต่เติมให้ชิ้นเดียว
-    if (productType === 'gtopup_uid' && input.quantity > 1) {
+    const kind = pathKind(input.productType)
+    if (kind === 'idpass') {
       throw new ProviderError(
-        `OverTopup สั่งเติมแบบ UID ได้ทีละ 1 ชิ้น แต่บิลนี้สั่ง ${input.quantity} ชิ้น — ` +
-          'ต้องแยกส่งเป็นหลายบิล หรือกดเติมเองที่ระบบ OverTopup'
+        'แพ็กเกจนี้เป็นแบบเติมด้วยไอดี+รหัสผ่าน ซึ่งต้องใช้ข้อมูลหลายช่อง ' +
+          'หน้าเว็บเรายังเก็บให้ไม่ครบ — กดเติมเองที่ระบบ OverTopup'
       )
     }
 
-    const body: Record<string, string> = {
-      username: config.username ?? '',
-      password: config.secret,
-      product_type: productType,
-      reference_no: input.ref,
-      // ฟิลด์บังคับของ OverTopup ต้องส่งเสมอแม้จะไม่ได้เปิดรับ callback ไว้
-      response_url: input.callbackUrl ?? '',
-      product_id: input.sku,
+    const productId = Number(input.gameId)
+    const packageId = Number(input.sku)
+    if (!Number.isFinite(productId) || !Number.isFinite(packageId)) {
+      throw new ProviderError('รหัสสินค้า/แพ็กเกจฝั่ง OverTopup ไม่ใช่ตัวเลข — กดดึงรายการใหม่')
     }
 
-    if (productType === 'card') {
-      body.quantity = String(input.quantity)
-    } else {
-      body.ref_uid = input.account
-      // เกมที่ไม่มีเซิร์ฟเวอร์จะเก็บเป็น '0' ในระบบเรา ไม่ต้องส่งไป
-      if (input.serverId && input.serverId !== '0') body.ref_server = input.serverId
+    const body: Record<string, unknown> = {
+      product_id: productId,
+      package_id: packageId,
+      quantity: input.quantity,
+      reference_id: input.ref,
     }
 
-    const data = await call<{ order_no?: string; order_status?: string }>(
-      config.baseUrl,
-      'pay-order',
-      body
-    )
+    // ส่งราคาไปให้ตรวจด้วย ถ้าปลายทางขึ้นราคาแล้วเราไม่รู้ เขาจะปฏิเสธแทนที่จะตัดเงินเพิ่มเงียบ ๆ
+    if (typeof input.unitPrice === 'number' && input.unitPrice > 0) {
+      body.package_price = input.unitPrice
+    }
 
-    if (!data.order_no) {
-      throw new ProviderError('OverTopup ไม่ได้ส่งเลขออเดอร์กลับมา — ตรวจสอบในระบบ OverTopup ก่อนส่งซ้ำ')
+    // สินค้าแบบ UID ต้องบอกว่าจะเติมเข้าไอดีไหน (บางเกมต้องระบุเซิร์ฟเวอร์ด้วย)
+    if (kind === 'uid') {
+      const fields: Record<string, string> = { uid: input.account }
+      if (input.serverId && input.serverId !== '0') fields.server = input.serverId
+      body.fields = fields
+    }
+
+    const data = await api<OrderData>(config.baseUrl, config.secret, `${kind}/orders`, {
+      method: 'POST',
+      body,
+    })
+
+    if (!data?.order_id) {
+      throw new ProviderError('OverTopup ไม่ได้ส่งเลขออเดอร์กลับมา — กดตามสถานะก่อนส่งซ้ำ')
     }
     return {
-      orderId: String(data.order_no),
-      message: `OverTopup รับออเดอร์แล้ว (${data.order_status ?? 'pending'})`,
+      orderId: String(data.order_id),
+      message: `OverTopup รับออเดอร์แล้ว (${data.status ?? 'pending'})`,
     }
   },
 
   async checkOrder(config, order) {
-    // OverTopup ค้นด้วยเลขอ้างอิงของเราไม่ได้ ถ้าไม่รู้เลขออเดอร์ก็ตรวจสอบไม่ได้เลย
-    // ต้องตอบ 'unknown' ไม่ใช่ 'missing' เพราะ 'missing' จะทำให้ระบบส่งซ้ำ = เสี่ยงเติมสองรอบ
-    if (!order.orderId) {
-      return {
-        state: 'unknown',
-        message:
-          'ยังไม่มีเลขออเดอร์ของ OverTopup จึงเช็กสถานะไม่ได้ — ' +
-          'เข้าไปดูในระบบ OverTopup ด้วยเลขอ้างอิง ' +
-          `${order.ref} ว่าออเดอร์เข้าไปแล้วหรือยัง`,
+    // รู้เลขออเดอร์ก็อ่านชนิดจากตัวอักษรแรกได้เลย ถ้าไม่รู้ก็ใช้ชนิดที่ผูกไว้กับแพ็กเกจ
+    const kind =
+      (order.orderId ? kindFromOrderId(order.orderId) : null) ?? pathKind(order.productType)
+
+    const query = order.orderId
+      ? `order_id=${encodeURIComponent(order.orderId)}`
+      : `reference_id=${encodeURIComponent(order.ref)}`
+
+    let data: OrderData | null
+    try {
+      data = await api<OrderData>(config.baseUrl, config.secret, `${kind}/orders?${query}`)
+    } catch (err) {
+      // ปลายทางไม่รู้จักออเดอร์นี้ = คำสั่งไม่เคยเข้าไป ส่งใหม่ได้อย่างปลอดภัย
+      if (err instanceof ProviderError && /ORDER_NOT_FOUND/.test(err.message)) {
+        return { state: 'missing', message: 'OverTopup ไม่พบออเดอร์นี้' }
       }
+      throw err
     }
 
-    const data = await call<{ order_status?: string; note?: string | null }>(
-      config.baseUrl,
-      'order-result',
-      {
-        username: config.username ?? '',
-        password: config.secret,
-        order_no: order.orderId,
-      }
-    )
-
-    return mapStatus(data.order_status, data.note, order.orderId)
+    if (!data) return { state: 'missing', message: 'OverTopup ไม่พบออเดอร์นี้' }
+    return mapStatus(data.status, data.message, data.order_id ?? order.orderId)
   },
 
   /**
-   * ดึงรายการสินค้าทั้งหมด
-   * ต่างจาก endpoint อื่นตรงที่เป็น GET และไม่ต้องยืนยันตัวตน
-   *
-   * customer_level เปลี่ยนราคาที่ได้ ('vip' ถูกกว่า 'general')
-   * ถ้าดึงผิดระดับ ราคาทุนในระบบจะไม่ตรงกับที่ถูกตัดจริง = กำไรที่คำนวณได้ผิดตาม
+   * ดึงรายการสินค้าทั้งแบบเติมด้วย UID และบัตรเงินสด
+   * ข้ามแบบ idpass เพราะหน้าเว็บลูกค้ายังเก็บข้อมูลล็อกอินให้ไม่ได้
    */
-  async fetchCatalog(config, opts) {
-    const base = (config.baseUrl || OVERTOPUP_DEFAULT_BASE).replace(/\/+$/, '')
-    const level = opts.vip ? 'vip' : 'general'
-
-    let res: Response
-    try {
-      res = await fetch(`${base}/product?customer_level=${level}`, {
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-        signal: AbortSignal.timeout(30_000),
-      })
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err)
-      throw new ProviderError(`ดึงรายการสินค้าจาก OverTopup ไม่ได้: ${reason}`, true)
-    }
-
-    const text = await res.text()
-    let data: unknown
-    try {
-      data = JSON.parse(text)
-    } catch {
-      throw new ProviderError(
-        `OverTopup ตอบกลับไม่ใช่ JSON (HTTP ${res.status}) — ${text.slice(0, 120)}`,
-        res.status >= 500
-      )
-    }
-
-    const err = data as ErrorBody
-    if (err?.error) {
-      throw new ProviderError(
-        ERROR_HINT[err.error] ?? err.error_description ?? `OverTopup แจ้ง: ${err.error}`
-      )
-    }
-    if (!Array.isArray(data)) {
-      throw new ProviderError('OverTopup ส่งรายการสินค้ามาในรูปแบบที่ไม่รู้จัก')
-    }
-
-    type Game = {
-      game_key?: string
-      game_name?: string
-      ref?: Record<string, unknown>
-      products?: Array<{
-        product_id?: string
-        product_name?: string
-        product_desc?: string
-        price?: string
-      }>
-    }
-
+  async fetchCatalog(config) {
     const out: CatalogEntry[] = []
-    for (const game of data as Game[]) {
-      const gameId = game.game_key
-      if (!gameId) continue
-      // ref บอกว่าเกมนี้ต้องถามอะไรจากลูกค้า — มีคีย์ uid = เติมด้วย UID
-      // เกมที่ต้องใช้ไอดี+รหัสผ่านล็อกอิน ตัวเชื่อมเรายังไม่รองรับ
-      const refKeys = Object.keys(game.ref ?? {})
-      const needsLogin = refKeys.some((k) => /login|password/i.test(k))
 
-      for (const pack of game.products ?? []) {
-        if (!pack.product_id) continue
-        out.push({
-          gameId,
-          gameName: game.game_name || gameId,
-          serverId: '0', // OverTopup ไม่ได้แยกเซิร์ฟเวอร์ในรายการสินค้า
-          serverName: null,
-          sku: pack.product_id,
-          packName: pack.product_name || pack.product_id,
-          packDesc: pack.product_desc ?? '',
-          price: toNumber(pack.price),
-          productType: needsLogin ? 'gtopup_idpass' : 'gtopup_uid',
-        })
+    for (const kind of ['uid', 'card'] as const) {
+      const list = await api<ProductList>(config.baseUrl, config.secret, `${kind}/products`)
+      for (const product of list ?? []) {
+        if (!product?.id) continue
+        // เกมที่ต้องกรอกมากกว่าไอดีกับเซิร์ฟเวอร์ ระบบเรายังส่งให้ไม่ครบ
+        const extra = (product.fields ?? [])
+          .map((f) => f.key)
+          .filter((k) => k !== 'uid' && k !== 'server')
+        const note = extra.length > 0 ? ` [ต้องกรอกเพิ่ม: ${extra.join(', ')}]` : ''
+
+        for (const pack of product.packages ?? []) {
+          if (!pack?.id) continue
+          out.push({
+            gameId: String(product.id),
+            gameName: product.name,
+            serverId: '0',
+            serverName: null,
+            sku: String(pack.id),
+            packName: pack.name,
+            packDesc: (pack.description ?? '') + note,
+            price: Number(pack.price) || 0,
+            productType: kind,
+          })
+        }
       }
     }
     return out
   },
 }
 
-/** แปลงสถานะของ OverTopup เป็นสถานะกลางที่เครื่องยนต์ส่งออเดอร์เข้าใจ */
+/**
+ * แปลงสถานะของ OverTopup เป็นสถานะกลาง
+ * ตามเอกสาร: pending = รอดำเนินการ, issue = ติดปัญหาต้องตรวจ,
+ *            completed = สำเร็จ, cancelled = ถูกยกเลิก
+ */
 export function mapStatus(
   status: string | undefined,
-  note: string | null | undefined,
+  message: string | null | undefined,
   orderId: string | null
 ) {
-  const detail = note ? ` — ${note}` : ''
-  switch (status) {
-    case 'success':
+  const detail = message ? ` — ${message}` : ''
+  switch ((status ?? '').toLowerCase()) {
+    case 'completed':
       return { state: 'success' as const, message: `OverTopup เติมสำเร็จ${detail}`, orderId }
-    case 'cancel':
+    case 'cancelled':
+    case 'canceled':
       // ยกเลิกแน่นอน = ไม่ได้เติมเข้าเกม คืนเครดิตลูกค้าได้อย่างปลอดภัย
       return { state: 'failed' as const, message: `OverTopup ยกเลิกออเดอร์${detail}`, orderId }
-    case 'problem':
-      // เอกสารไม่ได้บอกว่าจบแล้วหรือยัง จึงไม่คืนเงินอัตโนมัติ ให้คนเข้าไปตรวจก่อน
+    case 'issue':
+      // เอกสารระบุว่าอาจเป็นข้อมูลผิด ปัญหาฝั่งซัพพลายเออร์ หรือรอคนตรวจ
+      // ยังไม่จบ จึงไม่คืนเงินอัตโนมัติ ให้คนเข้าไปดูก่อน
       return {
         state: 'attention' as const,
-        message: `OverTopup แจ้งว่ามีปัญหา${detail} — ตรวจสอบก่อนคืนเครดิตให้ลูกค้า`,
+        message: `OverTopup แจ้งว่าติดปัญหา${detail} — ตรวจสอบก่อนคืนเครดิตให้ลูกค้า`,
         orderId,
       }
     case 'pending':

@@ -29,7 +29,11 @@ export async function testProviderAction(formData: FormData): Promise<ActionStat
     username: string | null
     api_key: string | null
     kind: string
-  }>('select id, name, base_url, username, api_key, kind from api_providers where id = $1', [id])
+    sandbox: boolean
+  }>(
+    'select id, name, base_url, username, api_key, kind, sandbox from api_providers where id = $1',
+    [id]
+  )
 
   if (!provider) return { error: 'ไม่พบผู้ให้บริการนี้' }
   if (!provider.api_key) {
@@ -88,6 +92,7 @@ export async function saveProviderAction(formData: FormData): Promise<ActionStat
   const note = optStr(formData, 'note')
   const priority = int(formData, 'priority', 100)
   const isActive = bool(formData, 'is_active')
+  const sandbox = bool(formData, 'sandbox')
 
   if (!name) return { error: 'กรุณากรอกชื่อผู้ให้บริการ' }
   if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
@@ -103,17 +108,20 @@ export async function saveProviderAction(formData: FormData): Promise<ActionStat
       await q(
         `update api_providers
             set name = $1, base_url = $2, auth_type = $3, note = $4,
-                priority = $5, is_active = $6, kind = $9, username = $10,
+                priority = $5, is_active = $6, kind = $9, username = $10, sandbox = $11,
                 api_key = case when $7 = '' then api_key else $7 end
           where id = $8`,
-        [name, baseUrl, authType, note, priority, isActive, apiKey, Number(id), kind, username]
+        [
+          name, baseUrl, authType, note, priority, isActive, apiKey, Number(id), kind,
+          username, sandbox,
+        ]
       )
     } else {
       await q(
         `insert into api_providers
-           (name, base_url, auth_type, api_key, note, priority, is_active, kind, username)
-         values ($1, $2, $3, nullif($4, ''), $5, $6, $7, $8, $9)`,
-        [name, baseUrl, authType, apiKey, note, priority, isActive, kind, username]
+           (name, base_url, auth_type, api_key, note, priority, is_active, kind, username, sandbox)
+         values ($1, $2, $3, nullif($4, ''), $5, $6, $7, $8, $9, $10)`,
+        [name, baseUrl, authType, apiKey, note, priority, isActive, kind, username, sandbox]
       )
     }
   } catch (err) {

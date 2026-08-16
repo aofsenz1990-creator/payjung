@@ -121,8 +121,9 @@ export async function refreshBalanceAction(formData: FormData): Promise<ActionSt
     api_key: string | null
     balance: number | null
     balance_at: string | null
+    sandbox: boolean
   }>(
-    `select id, name, kind, base_url, username, api_key,
+    `select id, name, kind, base_url, username, api_key, sandbox,
             balance::float8 as balance, balance_at
        from api_providers where id = $1`,
     [id]

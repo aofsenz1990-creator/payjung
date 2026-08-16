@@ -43,6 +43,7 @@ type Provider = {
   balance: number | null
   balance_at: string | Date | null
   low_balance: number
+  sandbox: boolean
 }
 
 type GameRow = {
@@ -110,7 +111,7 @@ export default async function StorefrontPage({
     await Promise.all([
     q<Provider>(
       `select p.id, p.name, p.kind, p.base_url, p.auth_type, (p.api_key is not null) as has_key,
-              p.username, p.note, p.priority, p.is_active,
+              p.username, p.note, p.priority, p.is_active, p.sandbox,
               p.balance::float8 as balance, p.balance_at, p.low_balance::float8 as low_balance,
               (select count(*) from products pr where pr.provider_id = p.id)::int as products
          from api_providers p order by p.priority, p.name`
@@ -134,7 +135,7 @@ export default async function StorefrontPage({
     editProvider
       ? q1<Provider>(
           `select id, name, kind, base_url, auth_type, (api_key is not null) as has_key,
-                  username, note, priority, is_active,
+                  username, note, priority, is_active, sandbox,
                   balance::float8 as balance, balance_at, low_balance::float8 as low_balance
              from api_providers where id = $1`,
           [Number(editProvider)]
@@ -359,6 +360,12 @@ export default async function StorefrontPage({
                         ) : (
                           <Badge tone="warn">ต้องเติมเอง</Badge>
                         )}
+                        {/* ต้องเห็นชัด ๆ ไม่งั้นจะสับสนว่าที่ทำอยู่เป็นของจริงหรือของทดสอบ */}
+                        {p.sandbox ? (
+                          <span className="mt-1 block">
+                            <Badge tone="warn">🧪 โหมดทดสอบ</Badge>
+                          </span>
+                        ) : null}
                         {p.username ? (
                           <span className="mt-1 block font-mono text-xs text-mute">
                             {p.username}

@@ -15,6 +15,7 @@ export type ProviderDraft = {
   note: string | null
   priority: number
   is_active: boolean
+  sandbox: boolean
 }
 
 const AUTH_LABELS: Record<string, string> = {
@@ -156,7 +157,7 @@ export function ProviderForm({
 
       <div>
         <label className="label" htmlFor="api_key">
-          {isBuym ? 'USER_KEY' : meta.needsUsername ? 'รหัสผ่าน' : 'คีย์ / โทเคน'}
+          {isBuym ? 'USER_KEY' : meta.needsUsername ? 'รหัสผ่าน' : 'API Key'}
         </label>
         <input
           id="api_key"
@@ -182,6 +183,26 @@ export function ProviderForm({
           ไม่ถูกส่งออกไปที่เบราว์เซอร์
         </p>
       </div>
+
+      {/* โหมดทดสอบ — ซ้อมทั้งกระบวนการได้โดยไม่เสียเงินจริง ควรใช้ตอนตั้งค่าครั้งแรกเสมอ */}
+      {meta.hasSandbox ? (
+        <div className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2.5">
+          <label className="flex items-center gap-2 text-sm font-medium text-warn">
+            <input
+              type="checkbox"
+              name="sandbox"
+              defaultChecked={editing?.sandbox ?? false}
+              className="size-4 rounded border-ink-600 bg-ink-850"
+            />
+            โหมดทดสอบ (Sandbox)
+          </label>
+          <p className="mt-1 text-xs leading-relaxed text-mute">
+            ยิงเข้าระบบทดสอบของผู้ให้บริการแทนของจริง —{' '}
+            <b className="text-slate-200">ไม่ตัดเงินและไม่เติมเข้าเกมจริง</b>{' '}
+            เหมาะกับตอนตั้งค่าครั้งแรก พอมั่นใจแล้วค่อยเอาติ๊กออกเพื่อใช้งานจริง
+          </p>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3">
         <div>

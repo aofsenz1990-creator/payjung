@@ -1,6 +1,6 @@
 import 'server-only'
 import { BuymError, addOrder, getAccount, getOrder, getProducts } from './24buym'
-import { providerMeta } from './constants'
+import { OVERTOPUP_SANDBOX_BASE, providerMeta } from './constants'
 import { overtopup } from './overtopup'
 import {
   ProviderError,
@@ -156,7 +156,10 @@ export function supportsAuto(kind: string) {
   return providerMeta(kind).autoSupported && kind in ADAPTERS
 }
 
-/** แปลงแถวจากตาราง api_providers เป็นค่าตั้งค่าที่ adapter ใช้ */
+/**
+ * แปลงแถวจากตาราง api_providers เป็นค่าตั้งค่าที่ adapter ใช้
+ * โหมดทดสอบจะสลับไปใช้ที่อยู่ sandbox ของเจ้านั้นให้เอง ไม่ต้องแก้ base_url เอง
+ */
 export function toConfig(row: {
   id: number
   name: string
@@ -164,16 +167,23 @@ export function toConfig(row: {
   base_url: string | null
   username: string | null
   api_key: string | null
+  sandbox?: boolean | null
 }): ProviderConfig {
   if (!row.api_key) {
     throw new ProviderError(`"${row.name}" ยังไม่ได้ตั้งคีย์ — ไปตั้งที่หน้าจัดการเว็บไซต์ก่อน`)
   }
+  const sandbox = Boolean(row.sandbox)
+  const meta = providerMeta(row.kind)
+  const baseUrl =
+    sandbox && row.kind === 'overtopup' ? OVERTOPUP_SANDBOX_BASE : (row.base_url ?? meta.fixedBaseUrl ?? null)
+
   return {
     id: row.id,
     name: row.name,
     kind: row.kind,
-    baseUrl: row.base_url,
+    baseUrl,
     username: row.username,
     secret: row.api_key,
+    sandbox,
   }
 }

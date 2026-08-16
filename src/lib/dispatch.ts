@@ -57,6 +57,7 @@ type ProviderRow = {
   api_key: string | null
   balance: number | null
   balance_at: string | Date | null
+  sandbox?: boolean | null
 }
 
 /**
@@ -126,6 +127,7 @@ type ClaimRow = {
   provider_server_id: string | null
   provider_sku: string | null
   provider_product_type: string | null
+  unit_cost: number
   p_id: number | null
   p_name: string | null
   p_kind: string | null
@@ -134,6 +136,7 @@ type ClaimRow = {
   p_api_key: string | null
   p_balance: number | null
   p_balance_at: string | Date | null
+  p_sandbox: boolean | null
 }
 
 /** บันทึกผลลงบิล — ใช้ตอนจบรอบไม่ว่าจะสำเร็จหรือไม่ */
@@ -297,14 +300,16 @@ export async function dispatchSale(saleId: number) {
           and status <> 'cancelled'
           and provider_attempts < $2
        returning id, code, status, qty, game_account, cost_total::float8 as cost_total,
+                 unit_cost::float8 as unit_cost,
                  provider_id, provider_ref, provider_order_id, provider_attempts, product_id
      )
-     select c.id as sale_id, c.code, c.qty, c.game_account, c.cost_total,
+     select c.id as sale_id, c.code, c.qty, c.game_account, c.cost_total, c.unit_cost,
             c.provider_ref, c.provider_order_id, c.provider_attempts,
             p.provider_game_id, p.provider_server_id, p.provider_sku, p.provider_product_type,
             ap.id as p_id, ap.name as p_name, ap.kind as p_kind,
             ap.base_url as p_base_url, ap.username as p_username, ap.api_key as p_api_key,
-            ap.balance::float8 as p_balance, ap.balance_at as p_balance_at
+            ap.balance::float8 as p_balance, ap.balance_at as p_balance_at,
+            ap.sandbox as p_sandbox
        from c
        left join products p on p.id = c.product_id
        left join api_providers ap on ap.id = c.provider_id`,
@@ -341,6 +346,7 @@ export async function dispatchSale(saleId: number) {
     api_key: sale.p_api_key,
     balance: sale.p_balance,
     balance_at: sale.p_balance_at,
+    sandbox: sale.p_sandbox,
   }
   const adapter = adapterFor(provider.kind)
   const ref = sale.provider_ref || sale.code
@@ -354,6 +360,7 @@ export async function dispatchSale(saleId: number) {
       const existing = await adapter.checkOrder(config, {
         ref,
         orderId: sale.provider_order_id ?? null,
+        productType: sale.provider_product_type,
       })
       if (existing.state !== 'missing') return applyCheck(saleId, existing)
     }
@@ -378,6 +385,9 @@ export async function dispatchSale(saleId: number) {
       account: sale.game_account,
       productType: sale.provider_product_type,
       callbackUrl: callbackUrl(),
+      // ส่งราคาทุนที่เราบันทึกไว้ไปให้ปลายทางตรวจ ถ้าเขาขึ้นราคาแล้วเราไม่รู้
+      // ออเดอร์จะถูกปฏิเสธแทนที่จะตัดเงินตามราคาใหม่เงียบ ๆ
+      unitPrice: sale.unit_cost,
     })
 
     await q(
@@ -430,8 +440,15 @@ export async function syncPendingSales({ budgetMs = 6000 } = {}) {
   )
 
   // ① ตามสถานะออเดอร์ที่ปลายทางรับไปแล้ว
-  const waiting = await q<{ id: number; provider_order_id: string | null; provider_ref: string }>(
-    `select s.id, s.provider_order_id, coalesce(s.provider_ref, s.code) as provider_ref
+  const waiting = await q<{
+    id: number
+    provider_order_id: string | null
+    provider_ref: string
+    provider_product_type: string | null
+  }>(
+    `select s.id, s.provider_order_id, coalesce(s.provider_ref, s.code) as provider_ref,
+            (select p.provider_product_type from products p where p.id = s.product_id)
+              as provider_product_type
        from sales s
       where s.provider_state = 'sent'
         and (s.provider_checked_at is null
@@ -445,7 +462,7 @@ export async function syncPendingSales({ budgetMs = 6000 } = {}) {
     if (outOfTime()) return changed
     const provider = await q1<ProviderRow>(
       `select ap.id, ap.name, ap.kind, ap.base_url, ap.username, ap.api_key,
-              ap.balance::float8 as balance, ap.balance_at
+              ap.balance::float8 as balance, ap.balance_at, ap.sandbox
          from sales s join api_providers ap on ap.id = s.provider_id
         where s.id = $1`,
       [row.id]
@@ -456,6 +473,7 @@ export async function syncPendingSales({ budgetMs = 6000 } = {}) {
       const result = await adapterFor(provider.kind).checkOrder(toConfig(provider), {
         ref: row.provider_ref,
         orderId: row.provider_order_id,
+        productType: row.provider_product_type,
       })
       // ปลายทางหาไม่เจอทั้งที่เราส่งไปแล้ว — อาจยังไม่ขึ้นระบบ อย่าเพิ่งด่วนสรุป
       // แค่เลื่อนเวลาเช็กออกไป รอบหน้าค่อยถามใหม่

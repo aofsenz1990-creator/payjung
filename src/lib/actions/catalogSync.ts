@@ -25,9 +25,11 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
     username: string | null
     api_key: string | null
     kind: string
-  }>('select id, name, base_url, username, api_key, kind from api_providers where id = $1', [
-    providerId,
-  ])
+    sandbox: boolean
+  }>(
+    'select id, name, base_url, username, api_key, kind, sandbox from api_providers where id = $1',
+    [providerId]
+  )
 
   if (!provider) return { error: 'ไม่พบผู้ให้บริการนี้' }
   if (!provider.api_key) return { error: `"${provider.name}" ยังไม่ได้ตั้งคีย์/รหัสผ่าน` }
