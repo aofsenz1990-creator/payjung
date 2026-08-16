@@ -165,67 +165,6 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
 }
 
 /**
- * ตั้งกำไรเป็นเปอร์เซ็นต์ให้ทุกแพ็กเกจในเกมเดียวทีเดียว
- * ใช้ตอนเพิ่งนำเข้าเกมมาแล้วราคาขายยังเท่าทุนอยู่ทั้งหมด
- *
- * ตั้ง % ไว้แล้วราคาขายจะคิดใหม่ให้เองทุกครั้งที่ต้นทุนเปลี่ยน
- * เช่นผู้ให้บริการขึ้นราคาแล้วเราดึงรายการใหม่ กำไรจะยังเท่าเดิมโดยไม่ต้องไล่แก้ทีละแพ็ก
- */
-export async function setGameMarkupAction(formData: FormData): Promise<ActionState> {
-  await requirePage('games')
-  const gameId = int(formData, 'game_id')
-  if (!gameId) return { error: 'ไม่พบเกมนี้' }
-
-  // กดปุ่มล้าง = เลิกคิดอัตโนมัติ แต่ราคาขายที่ตั้งไว้แล้วคงเดิม ไม่ตีกลับเป็นเท่าทุน
-  if (str(formData, 'clear') === '1') {
-    await q('update products set markup_percent = null where game_id = $1', [gameId])
-    revalidatePath(`/games/${gameId}`)
-    return { ok: 'เลิกคิดราคาขายอัตโนมัติแล้ว — ราคาที่ตั้งไว้ยังอยู่เหมือนเดิม' }
-  }
-
-  const raw = optStr(formData, 'markup_percent')
-  if (raw === null) return { error: 'กรุณากรอกเปอร์เซ็นต์กำไร' }
-  const percent = decimal(formData, 'markup_percent')
-  if (percent < 0) return { error: 'เปอร์เซ็นต์กำไรต้องไม่ติดลบ' }
-
-  // เติมเฉพาะแพ็กที่ยังไม่ได้ตั้ง % ไว้ ไม่ไปทับแพ็กที่ตั้งเปอร์เซ็นต์อื่นไว้แล้ว
-  // ใช้ตอนอยากให้ทุกแพ็กคิดราคาอัตโนมัติ แต่มีบางแพ็กที่ตั้งกำไรต่างจากตัวอื่นไว้ตั้งใจ
-  const onlyMissing = str(formData, 'only_missing') === '1'
-
-  try {
-    const rows = await q<{ id: number }>(
-      `update products
-          set markup_percent = $2,
-              sell_price = ceil(cost_price * (1 + $2::numeric / 100))
-        where game_id = $1
-          ${onlyMissing ? 'and markup_percent is null' : ''}
-       returning id`,
-      [gameId, percent]
-    )
-
-    revalidatePath(`/games/${gameId}`)
-    revalidatePath('/games')
-    revalidatePath('/storefront')
-    revalidatePath('/shop')
-    if (rows.length === 0) {
-      return {
-        ok: onlyMissing
-          ? 'ทุกแพ็กเกจตั้ง % ไว้ครบแล้ว ไม่มีอะไรต้องเติม'
-          : 'ไม่พบแพ็กเกจในเกมนี้',
-      }
-    }
-    return {
-      ok:
-        `ตั้งกำไร ${percent}% ให้ ${rows.length} แพ็กเกจแล้ว` +
-        (onlyMissing ? ' (เฉพาะที่ยังไม่ได้ตั้ง — ที่ตั้งไว้แล้วไม่ถูกแตะ)' : '') +
-        ' — ถ้าต้นทุนเปลี่ยนทีหลัง ราคาขายจะคิดใหม่ให้เองโดยกำไรเท่าเดิม',
-    }
-  } catch (err) {
-    return { error: friendlyError(err, 'ตั้งราคาขายไม่สำเร็จ') }
-  }
-}
-
-/**
  * เปิด/ปิดขายบนหน้าเว็บลูกค้าทั้งเกมทีเดียว (ทั้งตัวเกมและทุกแพ็กเกจ)
  *
  * ต้องเปิดทั้งสองอย่างถึงจะเห็นบนเว็บ เพราะหน้าเว็บกรองด้วย

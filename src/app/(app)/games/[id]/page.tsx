@@ -7,7 +7,6 @@ import {
   deleteProductAction,
   saveProductAction,
   mergeGamesAction,
-  setGameMarkupAction,
   saveMarkupsAction,
   setGamePublishedAction,
   splitVariantAction,
@@ -16,7 +15,7 @@ import { toggleProductPublishedAction } from '@/lib/actions/storefront'
 import { money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
-import { MarkupCells } from '@/components/MarkupCells'
+import { MarkupBulkBar, MarkupCells, MarkupProvider } from '@/components/MarkupEditor'
 
 export const dynamic = 'force-dynamic'
 
@@ -102,8 +101,6 @@ export default async function GameDetailPage({
   if (!game) notFound()
 
   const publishedCount = products.filter((p) => p.is_published).length
-  // แพ็กที่ตั้ง % ไว้ = ราคาขายจะคิดใหม่ให้เองทุกครั้งที่ต้นทุนเปลี่ยน
-  const autoCount = products.filter((p) => p.markup_percent != null).length
 
   // ช่องทางที่รวมอยู่ในเกมนี้ มีมากกว่าหนึ่งแปลว่าเคยรวมมา จึงแยกกลับได้
   const variantsInGame = [
@@ -423,59 +420,6 @@ export default async function GameDetailPage({
           >
             แพ็กเกจของ {game.name}
           </SectionTitle>
-          {/* ตั้งกำไรทีเดียวทั้งเกม — เกมที่เพิ่งนำเข้ามาราคาขายยังเท่าทุนทุกแพ็ก
-              ถ้าไม่มีปุ่มนี้ต้องมานั่งแก้ทีละแพ็กซึ่งเสียเวลามาก */}
-          {products.length > 0 && isAdmin ? (
-            <div className="mb-4 rounded-xl border border-brand-500/30 bg-brand-500/10 p-3">
-              <p className="mb-2 text-sm font-medium text-slate-100">
-                💰 ตั้งกำไรทุกแพ็กเกจในเกมนี้ทีเดียว
-              </p>
-              <ActionForm action={setGameMarkupAction}>
-                <input type="hidden" name="game_id" value={game.id} />
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    name="markup_percent"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    className="input w-32"
-                    placeholder="เช่น 15"
-                    defaultValue={products.find((p) => p.markup_percent != null)?.markup_percent ?? ''}
-                    aria-label="เปอร์เซ็นต์กำไร"
-                  />
-                  <span className="text-sm text-mute">%</span>
-                  <SubmitButton className="btn-primary" pendingLabel="กำลังตั้ง...">
-                    ตั้งราคาขายให้ทุกแพ็ก
-                  </SubmitButton>
-                  {/* ทับทุกแพ็กไม่ได้เสมอไป เพราะบางแพ็กอาจตั้งกำไรต่างจากตัวอื่นไว้ตั้งใจ */}
-                  <SubmitButton
-                    name="only_missing"
-                    value="1"
-                    className="btn-ghost"
-                    pendingLabel="กำลังเติม..."
-                    title="ไม่แตะแพ็กที่ตั้ง % ไว้แล้ว"
-                  >
-                    เติมเฉพาะแพ็กที่ยังตั้งเอง
-                  </SubmitButton>
-                </div>
-              </ActionForm>
-              <p className="mt-2 text-xs leading-relaxed text-mute">
-                ราคาขาย = ต้นทุน + กำไรที่ตั้งไว้ แล้ว<b className="text-slate-200">ปัดขึ้นเป็นจำนวนเต็มบาท</b>{' '}
-                เช่นต้นทุน 123 บวก 15% ได้ 141.45 → ขาย 142 บาท{' '}
-                <b className="text-slate-200">
-                  ตั้งครั้งเดียวแล้วราคาขายจะคิดใหม่ให้เองทุกครั้งที่ต้นทุนเปลี่ยน
-                </b>{' '}
-                กำไรจึงไม่หดเวลาผู้ให้บริการขึ้นราคา
-              </p>
-              <ActionForm action={setGameMarkupAction} className="mt-2">
-                <input type="hidden" name="game_id" value={game.id} />
-                <input type="hidden" name="clear" value="1" />
-                <SubmitButton className="btn-ghost btn-sm" pendingLabel="...">
-                  เลิกคิดอัตโนมัติ (คงราคาเดิมไว้)
-                </SubmitButton>
-              </ActionForm>
-            </div>
-          ) : null}
 
           {/* เปิดขายบนเว็บทั้งเกมทีเดียว — ต้องเปิดทั้งตัวเกมและแพ็กเกจถึงจะเห็น
               เปิดแค่อย่างใดอย่างหนึ่งแล้วลูกค้าไม่เห็น เป็นจุดที่หาสาเหตุยากมาก */}
@@ -599,43 +543,11 @@ export default async function GameDetailPage({
             </div>
           ) : null}
 
-          {/* ฟอร์มว่างตัวนี้เป็นปลายทางของช่องกรอกกำไรที่อยู่ในตาราง
-              ผูกกันด้วย id เพราะในตารางมีฟอร์มอื่นอยู่แล้ว วางฟอร์มซ้อนกันไม่ได้ */}
+          {/* ทั้งแถบตั้งกำไรและช่องในตารางใช้ค่าชุดเดียวกัน กดใส่ให้ทุกแพ็กแล้วช่องในตารางจึงขึ้นตาม */}
+          <MarkupProvider items={products.map((p) => ({ id: p.id, markup: p.markup_percent }))}>
+          {/* แก้กำไรทั้งเกมในที่เดียว: ใส่ % ให้ทุกแพ็กก่อน แล้วค่อยแก้ทีละช่อง แล้วบันทึกครั้งเดียว */}
           {products.length > 0 && isAdmin ? (
-            <ActionForm id="markup-form" action={saveMarkupsAction} className="mb-4">
-              <input type="hidden" name="game_id" value={game.id} />
-              <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs leading-relaxed text-mute">
-                    แก้ช่อง <b className="text-slate-200">ปรับกำไร %</b> ในตารางได้หลายแถว
-                    แล้วกดบันทึกทีเดียว · แถวที่ไม่ได้แตะจะไม่ถูกเปลี่ยน
-                  </p>
-                  <SubmitButton className="btn-primary" pendingLabel="กำลังบันทึก...">
-                    บันทึกกำไรที่แก้ไว้
-                  </SubmitButton>
-                </div>
-
-                {/* บอกให้เห็นว่ามีกี่แพ็กที่จะคิดราคาใหม่ให้เองตอนดึงข้อมูลรอบหน้า
-                    แพ็กที่ตั้งราคาเองจะไม่ขยับตาม พอปลายทางขึ้นราคาแล้วกำไรจะหดเงียบ ๆ */}
-                <div className="mt-2 border-t border-ink-700 pt-2 text-xs leading-relaxed">
-                  {autoCount === products.length ? (
-                    <span className="text-good">
-                      ✓ ทุกแพ็กเกจ ({num(products.length)}) คิดราคาอัตโนมัติอยู่ —
-                      ตอนดึงข้อมูลใหม่แล้วต้นทุนเปลี่ยน ราคาขายจะคิดใหม่ให้เองโดยกำไรเท่าเดิม
-                    </span>
-                  ) : (
-                    <span className="text-warn">
-                      ⚠ คิดราคาอัตโนมัติ {num(autoCount)} จาก {num(products.length)} แพ็กเกจ ·
-                      อีก {num(products.length - autoCount)} แพ็กตั้งราคาเองไว้{' '}
-                      <b className="text-slate-200">
-                        ซึ่งจะไม่ขยับตามตอนผู้ให้บริการขึ้นราคา ทำให้กำไรหดโดยไม่รู้ตัว
-                      </b>{' '}
-                      — ใส่ % ให้ครบ หรือใช้ปุ่ม “ตั้งกำไรทุกแพ็กเกจในเกมนี้ทีเดียว” ด้านบน
-                    </span>
-                  )}
-                </div>
-              </div>
-            </ActionForm>
+            <MarkupBulkBar gameId={game.id} action={saveMarkupsAction} />
           ) : null}
 
           {products.length === 0 ? (
@@ -690,7 +602,6 @@ export default async function GameDetailPage({
                             productName={p.name}
                             cost={p.cost_price}
                             sellPrice={p.sell_price}
-                            markup={p.markup_percent}
                             showMoney
                           />
                         ) : (
@@ -755,6 +666,7 @@ export default async function GameDetailPage({
               </table>
             </div>
           )}
+          </MarkupProvider>
         </div>
       </div>
     </>
