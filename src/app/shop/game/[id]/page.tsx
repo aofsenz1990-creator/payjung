@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { getShopCustomer } from '@/lib/shop'
 import { shopOrderAction } from '@/lib/actions/shop'
-import { BuyForm, type BuyPackage } from '@/components/BuyForm'
+import { BuyForm, type BuyField, type BuyPackage } from '@/components/BuyForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,8 +17,9 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
       'select id, name, image_url, description from games where id = $1 and is_published and is_active',
       [gameId]
     ),
-    q<BuyPackage>(
-      `select id, name, sell_price::float8 as sell_price, image_url, track_stock, stock_qty
+    q<BuyPackage & { provider_fields: BuyField[] | null }>(
+      `select id, name, sell_price::float8 as sell_price, image_url, track_stock, stock_qty,
+              provider_fields
          from products
         where game_id = $1 and is_published and is_active
         order by sort_order, sell_price`,
@@ -28,6 +29,9 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
   ])
 
   if (!game) notFound()
+
+  // ช่องที่ต้องกรอกเป็นของเกม ไม่ใช่ของแพ็กเกจ จึงหยิบจากแพ็กแรกที่มีข้อมูล
+  const buyFields = packages.find((p) => p.provider_fields?.length)?.provider_fields ?? null
 
   return (
     <>
@@ -64,6 +68,7 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
             credit={customer?.credit ?? 0}
             signedIn={Boolean(customer)}
             defaultGameUid={customer?.game_uid}
+            fields={buyFields}
           />
         )}
       </div>

@@ -12,6 +12,31 @@ export type BuyPackage = {
   stock_qty: number
 }
 
+/** ช่องที่เกมนี้บังคับให้กรอก ส่งมาจากผู้ให้บริการ */
+export type BuyField = {
+  key: string
+  label: string
+  options?: Array<{ value: string; label: string }>
+}
+
+/** ป้ายกำกับที่ผู้ให้บริการส่งมาเป็นภาษาอังกฤษ แปลตัวที่เจอบ่อยให้อ่านง่ายขึ้น */
+const FIELD_LABEL_TH: Record<string, string> = {
+  uid: 'ไอดีเกม / UID',
+  server: 'เซิร์ฟเวอร์ / ภูมิภาค',
+  player_name: 'ชื่อตัวละคร',
+  level: 'เลเวล',
+  id_login: 'ไอดีที่ใช้ล็อกอิน',
+  password: 'รหัสผ่าน',
+  login: 'ล็อกอินด้วยอะไร',
+  recovery_code: 'รหัสกู้คืน',
+  contact_phone: 'เบอร์โทรติดต่อ',
+  contact_fb: 'Facebook ติดต่อ',
+}
+
+function fieldLabel(f: BuyField) {
+  return FIELD_LABEL_TH[f.key] ?? f.label ?? f.key
+}
+
 const baht = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 /** เลือกแพ็กเกจ ใส่จำนวน แล้วกดสั่งซื้อโดยตัดจากเครดิต */
@@ -21,16 +46,20 @@ export function BuyForm({
   credit,
   signedIn,
   defaultGameUid,
+  fields,
 }: {
   action: (formData: FormData) => Promise<ActionState>
   packages: BuyPackage[]
   credit: number
   signedIn: boolean
   defaultGameUid?: string | null
+  /** ช่องที่เกมนี้บังคับกรอก ถ้าไม่มีจะใช้ช่องไอดีเกมช่องเดียวแบบเดิม */
+  fields?: BuyField[] | null
 }) {
   const [productId, setProductId] = useState<number | null>(packages[0]?.id ?? null)
   const [qty, setQty] = useState(1)
 
+  const hasFields = Boolean(fields && fields.length > 0)
   const selected = packages.find((p) => p.id === productId) ?? null
   const total = selected ? selected.sell_price * qty : 0
   const notEnough = signedIn && total > credit
@@ -91,19 +120,65 @@ export function BuyForm({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="label" htmlFor="game_account">
-            ไอดีเกม / UID ที่จะเติม
-          </label>
-          <input
-            id="game_account"
-            name="game_account"
-            className="input"
-            defaultValue={defaultGameUid ?? ''}
-            placeholder="เช่น 123456789"
-            required
-          />
-        </div>
+        {/* เกมที่ผู้ให้บริการบอกมาว่าต้องกรอกอะไรบ้าง จะสร้างช่องตามนั้น
+            บางเกมต้องเลือกเซิร์ฟเวอร์/ภูมิภาคด้วย ถ้าไม่ถามแล้วส่งไปมั่ว ๆ
+            ออเดอร์จะถูกปฏิเสธ หรือแย่กว่านั้นคือเติมเข้าผิดเซิร์ฟเวอร์ */}
+        {hasFields ? (
+          fields!.map((f) =>
+            f.options && f.options.length > 0 ? (
+              <div key={f.key}>
+                <label className="label" htmlFor={`field_${f.key}`}>
+                  {fieldLabel(f)}
+                </label>
+                <select
+                  id={`field_${f.key}`}
+                  name={`field_${f.key}`}
+                  className="input"
+                  defaultValue=""
+                  required
+                >
+                  <option value="" disabled>
+                    — กรุณาเลือก —
+                  </option>
+                  {f.options.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div key={f.key}>
+                <label className="label" htmlFor={`field_${f.key}`}>
+                  {fieldLabel(f)}
+                </label>
+                <input
+                  id={`field_${f.key}`}
+                  name={`field_${f.key}`}
+                  className="input"
+                  type={f.key === 'password' ? 'password' : 'text'}
+                  defaultValue={f.key === 'uid' ? (defaultGameUid ?? '') : ''}
+                  placeholder={f.key === 'uid' ? 'เช่น 123456789' : ''}
+                  required
+                />
+              </div>
+            )
+          )
+        ) : (
+          <div>
+            <label className="label" htmlFor="game_account">
+              ไอดีเกม / UID ที่จะเติม
+            </label>
+            <input
+              id="game_account"
+              name="game_account"
+              className="input"
+              defaultValue={defaultGameUid ?? ''}
+              placeholder="เช่น 123456789"
+              required
+            />
+          </div>
+        )}
         <div>
           <label className="label" htmlFor="qty">
             จำนวนแพ็ก

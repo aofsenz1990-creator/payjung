@@ -119,6 +119,7 @@ type ClaimRow = {
   code: string
   qty: number
   game_account: string | null
+  provider_fields: Record<string, string> | null
   cost_total: number
   provider_ref: string | null
   provider_order_id: string | null
@@ -299,11 +300,12 @@ export async function dispatchSale(saleId: number) {
           and provider_state in ('queued', 'error')
           and status <> 'cancelled'
           and provider_attempts < $2
-       returning id, code, status, qty, game_account, cost_total::float8 as cost_total,
-                 unit_cost::float8 as unit_cost,
+       returning id, code, status, qty, game_account, provider_fields,
+                 cost_total::float8 as cost_total, unit_cost::float8 as unit_cost,
                  provider_id, provider_ref, provider_order_id, provider_attempts, product_id
      )
-     select c.id as sale_id, c.code, c.qty, c.game_account, c.cost_total, c.unit_cost,
+     select c.id as sale_id, c.code, c.qty, c.game_account, c.provider_fields,
+            c.cost_total, c.unit_cost,
             c.provider_ref, c.provider_order_id, c.provider_attempts,
             p.provider_game_id, p.provider_server_id, p.provider_sku, p.provider_product_type,
             ap.id as p_id, ap.name as p_name, ap.kind as p_kind,
@@ -383,6 +385,8 @@ export async function dispatchSale(saleId: number) {
       sku: sale.provider_sku,
       quantity: sale.qty,
       account: sale.game_account,
+      // ค่าที่ลูกค้ากรอกตอนสั่ง (เช่นเซิร์ฟเวอร์ที่เลือก) ต้องส่งไปให้ครบ
+      fields: sale.provider_fields,
       productType: sale.provider_product_type,
       callbackUrl: callbackUrl(),
       // ส่งราคาทุนที่เราบันทึกไว้ไปให้ปลายทางตรวจ ถ้าเขาขึ้นราคาแล้วเราไม่รู้

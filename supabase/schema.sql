@@ -306,3 +306,9 @@ insert into games (name, publisher) values ('Genshin Impact', 'HoYoverse') on co
 insert into games (name, publisher) values ('Honkai: Star Rail', 'HoYoverse') on conflict do nothing;
 insert into games (name, publisher) values ('Mobile Legends', 'Moonton') on conflict do nothing;
 insert into games (name, publisher) values ('Valorant', 'Riot Games') on conflict do nothing;
+
+-- ช่องที่เกมบังคับให้กรอกตอนสั่งเติม เช่น uid, server (บางเกมต้องเลือกภูมิภาค)
+alter table provider_catalog add column if not exists fields jsonb;
+alter table products add column if not exists provider_fields jsonb;
+-- ค่าที่ลูกค้ากรอกจริง เก็บไว้กับบิลเพราะตอนส่งซ้ำต้องใช้ชุดเดิมเป๊ะ
+alter table sales add column if not exists provider_fields jsonb;

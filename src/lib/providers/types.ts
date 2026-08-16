@@ -31,8 +31,13 @@ export type OrderInput = {
   /** รหัสแพ็กเกจฝั่งปลายทาง */
   sku: string
   quantity: number
-  /** ไอดีเกมของลูกค้าที่จะเติมเข้าไป */
+  /** ไอดีเกมของลูกค้าที่จะเติมเข้าไป (ใช้เมื่อเกมนั้นต้องการค่าเดียว) */
   account: string
+  /**
+   * ค่าที่ลูกค้ากรอกตามช่องที่เกมนั้นบังคับ เช่น { uid: '123', server: '1' }
+   * ถ้ามีค่านี้ให้ใช้แทน account เพราะครบกว่า
+   */
+  fields?: Record<string, string> | null
   /**
    * ชนิดสินค้าฝั่งปลายทาง (เจ้าที่แยกประเภทอย่าง OverTopup ต้องใช้)
    * เช่น 'gtopup_uid' = เติมด้วย UID, 'card' = บัตรเงินสด
@@ -99,6 +104,18 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * ช่องที่เกมหนึ่งบังคับให้กรอกตอนสั่งเติม
+ * บางเกมต้องการแค่ UID บางเกมต้องเลือกเซิร์ฟเวอร์/ภูมิภาคด้วย
+ * ถ้าไม่ส่งให้ครบ ออเดอร์จะถูกปฏิเสธ หรือแย่กว่านั้นคือเติมผิดเซิร์ฟเวอร์
+ */
+export type ProviderField = {
+  key: string
+  label: string
+  /** มีตัวเลือกให้เลือก = ต้องแสดงเป็นดรอปดาวน์ ไม่ใช่ช่องพิมพ์อิสระ */
+  options?: Array<{ value: string; label: string }>
+}
+
 /** หนึ่งรายการสินค้าที่ดึงมาจากผู้ให้บริการ — แผ่เป็นแถวเดียวต่อสินค้าหนึ่งชิ้นแล้ว */
 export type CatalogEntry = {
   gameId: string
@@ -112,6 +129,8 @@ export type CatalogEntry = {
   price: number
   /** ชนิดสินค้าฝั่งปลายทาง ถ้าเจ้านั้นแยกประเภท */
   productType?: string | null
+  /** ช่องที่เกมนี้บังคับให้กรอก (เหมือนกันทุกแพ็กเกจของเกมเดียวกัน) */
+  fields?: ProviderField[] | null
 }
 
 export type ProviderAdapter = {

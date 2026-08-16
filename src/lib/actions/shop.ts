@@ -301,10 +301,8 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
 
   const productId = int(formData, 'product_id')
   const qty = Math.max(int(formData, 'qty', 1), 1)
-  const gameAccount = str(formData, 'game_account')
 
   if (!productId) return { error: 'ไม่พบแพ็กเกจที่เลือก' }
-  if (!gameAccount) return { error: 'กรุณากรอกไอดีเกมที่ต้องการเติม' }
 
   try {
     const product = await q1<{
@@ -315,13 +313,37 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
       cost_price: number
       track_stock: boolean
       stock_qty: number
+      provider_fields: Array<{ key: string; label: string }> | null
     }>(
       `select id, game_id, name, sell_price::float8 as sell_price, cost_price::float8 as cost_price,
-              track_stock, stock_qty
+              track_stock, stock_qty, provider_fields
          from products where id = $1 and is_active and is_published`,
       [productId]
     )
     if (!product) return { error: 'แพ็กเกจนี้ปิดขายอยู่' }
+
+    // เกมที่ผู้ให้บริการบอกว่าต้องกรอกหลายช่อง (เช่นต้องเลือกเซิร์ฟเวอร์) ต้องเก็บให้ครบ
+    // ตรวจที่ฝั่งเซิร์ฟเวอร์ด้วย เพราะ required ในฟอร์มเลี่ยงได้ง่าย
+    // และถ้าส่งไปไม่ครบ ปลายทางอาจเติมเข้าผิดเซิร์ฟเวอร์ซึ่งเอาเงินคืนไม่ได้
+    const spec = product.provider_fields ?? []
+    let fieldValues: Record<string, string> | null = null
+    let gameAccount = ''
+
+    if (spec.length > 0) {
+      const values: Record<string, string> = {}
+      for (const f of spec) {
+        const v = str(formData, `field_${f.key}`)
+        if (!v) return { error: `กรุณากรอก "${f.label || f.key}" ให้ครบ` }
+        values[f.key] = v
+      }
+      fieldValues = values
+      // เก็บค่าหลักไว้ในช่องเดิมด้วย เพื่อให้หลังร้านค้นหาและอ่านบิลได้เหมือนเดิม
+      gameAccount = values.uid ?? values.id_login ?? Object.values(values)[0] ?? ''
+    } else {
+      gameAccount = str(formData, 'game_account')
+    }
+
+    if (!gameAccount) return { error: 'กรุณากรอกไอดีเกมที่ต้องการเติม' }
     if (product.track_stock && product.stock_qty < qty) {
       return { error: `สินค้าเหลือไม่พอ (เหลือ ${product.stock_qty} ชิ้น)` }
     }
@@ -344,9 +366,9 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
        s as (
          insert into sales (code, sold_at, customer_id, game_id, product_id, item_name,
                             game_account, qty, unit_price, unit_cost, total, cost_total, profit,
-                            payment_method, status, channel, source, customer_name)
+                            payment_method, status, channel, source, customer_name, provider_fields)
          select $3, now(), cust.id, $4, $5, $6, $7, $8, $9, $10, $1, $11, $1 - $11,
-                'เครดิตร้าน', 'pending', 'web', 'เว็บไซต์', $12
+                'เครดิตร้าน', 'pending', 'web', 'เว็บไซต์', $12, $13::jsonb
            from cust
          returning id, code, product_id, qty, unit_cost
        ),
@@ -378,6 +400,7 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
         product.cost_price,
         costTotal,
         customer.name,
+        fieldValues ? JSON.stringify(fieldValues) : null,
       ]
     )
 

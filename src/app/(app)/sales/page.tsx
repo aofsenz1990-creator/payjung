@@ -52,11 +52,12 @@ export default async function SalesPage() {
       provider_state: string | null
       provider_message: string | null
       provider_name: string | null
+      provider_fields: Record<string, string> | null
     }>(
       `select s.id, s.code, s.sold_at, s.item_name, g.name as game, coalesce(c.name, s.customer_name) as customer, s.source,
               s.game_account, s.qty, s.total::float8 as total, s.profit::float8 as profit, s.slip_path,
               s.status, s.payment_method, s.channel, u.display_name as seller,
-              s.provider_state, s.provider_message, ap.name as provider_name
+              s.provider_state, s.provider_message, s.provider_fields, ap.name as provider_name
          from sales s
          left join api_providers ap on ap.id = s.provider_id
          left join games g on g.id = s.game_id
@@ -162,6 +163,17 @@ export default async function SalesPage() {
                       {s.game_account ? (
                         <span className="block text-xs text-mute">{s.game_account}</span>
                       ) : null}
+                      {/* เกมที่ต้องเลือกเซิร์ฟเวอร์/ภูมิภาค ต้องเห็นค่าที่ลูกค้าเลือก
+                          ไม่งั้นเวลาต้องเติมเองจะไม่รู้ว่าเติมเข้าที่ไหน */}
+                      {s.provider_fields
+                        ? Object.entries(s.provider_fields)
+                            .filter(([k]) => k !== 'uid')
+                            .map(([k, v]) => (
+                              <span key={k} className="block text-xs text-brand-400">
+                                {k}: {v}
+                              </span>
+                            ))
+                        : null}
                       {s.source ? (
                         <span className="mt-0.5 inline-block text-xs text-brand-400">
                           มาจาก {s.source}

@@ -90,6 +90,8 @@ export const SCHEMA_STATEMENTS: string[] = [
   // บวกกำไรเป็นเปอร์เซ็นต์จากต้นทุน — ตั้งไว้แล้วราคาขายจะคำนวณให้เองทุกครั้งที่ต้นทุนเปลี่ยน
   // null = ตั้งราคาขายเอง ระบบไม่ยุ่ง
   `alter table products add column if not exists markup_percent numeric(6,2)`,
+  // สำเนาของ provider_catalog.fields ตอนนำเข้า — หน้าเว็บลูกค้าใช้สร้างช่องกรอก
+  `alter table products add column if not exists provider_fields jsonb`,
 
   // รายการสินค้าที่ดึงมาจากผู้ให้บริการ เก็บไว้ให้เลือกจับคู่โดยไม่ต้องยิง API ซ้ำ
   `create table if not exists provider_catalog (
@@ -107,6 +109,9 @@ export const SCHEMA_STATEMENTS: string[] = [
   )`,
   `create unique index if not exists provider_catalog_uniq
      on provider_catalog (provider_id, game_id, server_id, pack_code)`,
+  // ช่องที่เกมนั้นบังคับให้กรอกตอนสั่งเติม เช่น uid, server (บางเกมต้องเลือกภูมิภาค)
+  // เก็บทั้งชื่อช่อง ป้ายกำกับ และตัวเลือกที่มีให้เลือก ตามที่ผู้ให้บริการส่งมา
+  `alter table provider_catalog add column if not exists fields jsonb`,
   `create index if not exists provider_catalog_game_idx on provider_catalog (provider_id, game_name)`,
 
   `create table if not exists customers (
@@ -173,6 +178,9 @@ export const SCHEMA_STATEMENTS: string[] = [
   // เลขอ้างอิงที่ส่งไปให้ปลายทาง (ใช้เลขบิลของเรา) — บังคับไม่ซ้ำระดับฐานข้อมูล
   // เป็นด่านสุดท้ายกันเติมสองรอบ ถ้าโค้ดพลาดขึ้นมาจริง ๆ
   `alter table sales add column if not exists provider_ref text`,
+  // ค่าที่ลูกค้ากรอกตามช่องที่เกมนั้นบังคับ เช่น {"uid":"123","server":"1"}
+  // ต้องเก็บไว้กับบิล เพราะตอนส่งซ้ำหรือตามสถานะทีหลังต้องใช้ค่าชุดเดิมเป๊ะ
+  `alter table sales add column if not exists provider_fields jsonb`,
   `create unique index if not exists sales_provider_ref_uniq
      on sales (provider_ref) where provider_ref is not null`,
   `create index if not exists sales_provider_state_idx

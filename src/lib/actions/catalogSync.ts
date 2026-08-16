@@ -47,7 +47,10 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
   try {
     const entries = await adapter.fetchCatalog(toConfig(provider), { vip })
 
-    type Row = [number, string, string, string, string | null, string, string, string, number]
+    type Row = [
+      number, string, string, string, string | null,
+      string, string, string, number, string | null,
+    ]
     const rows: Row[] = entries.map((e) => [
       providerId,
       e.gameId,
@@ -58,6 +61,8 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
       e.packName,
       e.packDesc,
       e.price,
+      // เก็บเป็นข้อความ JSON แล้วให้ Postgres แปลงเป็น jsonb ตอน insert
+      e.fields && e.fields.length > 0 ? JSON.stringify(e.fields) : null,
     ])
 
     if (rows.length === 0) return { error: 'ปลายทางไม่ได้ส่งรายการสินค้ามาเลย' }
@@ -70,13 +75,17 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
       const chunk = rows.slice(i, i + CHUNK)
       const values = chunk
         .map((_, n) => {
-          const b = n * 9
-          return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9})`
+          const b = n * 10
+          return (
+            `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},` +
+            `$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10}::jsonb)`
+          )
         })
         .join(',')
       await q(
         `insert into provider_catalog
-           (provider_id, game_id, game_name, server_id, server_name, pack_code, pack_name, pack_desc, pack_price)
+           (provider_id, game_id, game_name, server_id, server_name, pack_code, pack_name,
+            pack_desc, pack_price, fields)
          values ${values}
          on conflict (provider_id, game_id, server_id, pack_code) do nothing`,
         chunk.flat()
@@ -169,7 +178,7 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
       `insert into products
          (game_id, name, cost_price, sell_price, is_active, sort_order,
           provider_id, provider_game_id, provider_server_id, provider_sku,
-          provider_product_type, markup_percent, is_published)
+          provider_product_type, markup_percent, is_published, provider_fields)
        select g.id,
               case when c.server_name is not null and c.server_id <> '0'
                    then c.pack_name || ' (' || c.server_name || ')'
@@ -179,7 +188,7 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
               true,
               round(c.pack_price)::int,
               c.provider_id, c.game_id, c.server_id, c.pack_code,
-              ${tHole}, nullif(${mHole}::numeric, 0), ${pHole}
+              ${tHole}, nullif(${mHole}::numeric, 0), ${pHole}, c.fields
          from provider_catalog c
          join games g on lower(g.name) = lower(c.game_name)
         where c.provider_id = $1${gameFilter}

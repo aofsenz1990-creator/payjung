@@ -115,7 +115,8 @@ type ProductList = Array<{
   id: number
   name: string
   packages?: Array<{ id: number; name: string; description?: string; price: number }>
-  fields?: Array<{ key: string; label: string }>
+  // option = ตัวเลือกที่มีให้เลือก เช่นเซิร์ฟเวอร์ Asia / America / Europe
+  fields?: Array<{ key: string; label: string; option?: Array<{ value: string; label: string }> }>
 }>
 
 type OrderData = {
@@ -165,10 +166,16 @@ export const overtopup: ProviderAdapter = {
       body.package_price = input.unitPrice
     }
 
-    // สินค้าแบบ UID ต้องบอกว่าจะเติมเข้าไอดีไหน (บางเกมต้องระบุเซิร์ฟเวอร์ด้วย)
+    // สินค้าแบบ UID ต้องบอกว่าจะเติมเข้าไอดีไหน
+    // เกมที่ต้องเลือกเซิร์ฟเวอร์/ภูมิภาคจะมีค่าเพิ่มมาใน input.fields ซึ่งต้องส่งไปให้ครบ
+    // ส่งไม่ครบ = ออเดอร์ถูกปฏิเสธ หรือแย่กว่านั้นคือเติมเข้าผิดเซิร์ฟเวอร์
     if (kind === 'uid') {
-      const fields: Record<string, string> = { uid: input.account }
-      if (input.serverId && input.serverId !== '0') fields.server = input.serverId
+      const fields: Record<string, string> = { ...(input.fields ?? {}) }
+      if (!fields.uid) fields.uid = input.account
+      // เผื่อกรณีเก่าที่เก็บเซิร์ฟเวอร์ไว้ที่ตัวแพ็กเกจแทนที่จะถามลูกค้า
+      if (!fields.server && input.serverId && input.serverId !== '0') {
+        fields.server = input.serverId
+      }
       body.fields = fields
     }
 
@@ -228,10 +235,15 @@ export const overtopup: ProviderAdapter = {
       for (const product of list ?? []) {
         if (!product?.id) continue
         // เกมที่ต้องกรอกมากกว่าไอดีกับเซิร์ฟเวอร์ ระบบเรายังส่งให้ไม่ครบ
-        const extra = (product.fields ?? [])
-          .map((f) => f.key)
-          .filter((k) => k !== 'uid' && k !== 'server')
-        const note = extra.length > 0 ? ` [ต้องกรอกเพิ่ม: ${extra.join(', ')}]` : ''
+        // เก็บช่องที่เกมนี้บังคับกรอกไว้ทั้งชุด รวมตัวเลือกเซิร์ฟเวอร์/ภูมิภาค
+        // หน้าเว็บลูกค้าจะเอาไปสร้างช่องกรอกให้ตรงกับที่ปลายทางต้องการ
+        const fields = (product.fields ?? [])
+          .filter((f) => f?.key)
+          .map((f) => ({
+            key: f.key,
+            label: f.label || f.key,
+            options: Array.isArray(f.option) && f.option.length > 0 ? f.option : undefined,
+          }))
 
         for (const pack of product.packages ?? []) {
           if (!pack?.id) continue
@@ -242,9 +254,10 @@ export const overtopup: ProviderAdapter = {
             serverName: null,
             sku: String(pack.id),
             packName: pack.name,
-            packDesc: (pack.description ?? '') + note,
+            packDesc: pack.description ?? '',
             price: Number(pack.price) || 0,
             productType: kind,
+            fields: fields.length > 0 ? fields : null,
           })
         }
       }
