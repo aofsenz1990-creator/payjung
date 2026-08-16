@@ -18,12 +18,12 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
       'select id, name, image_url, description from games where id = $1 and is_published and is_active',
       [gameId]
     ),
-    q<BuyPackage & { provider_fields: unknown }>(
+    q<Omit<BuyPackage, 'fields'> & { provider_fields: unknown; provider_variant: string | null }>(
       `select id, name, sell_price::float8 as sell_price, image_url, track_stock, stock_qty,
-              provider_fields
+              provider_fields, provider_variant
          from products
         where game_id = $1 and is_published and is_active
-        order by sort_order, sell_price`,
+        order by provider_variant nulls first, sort_order, sell_price`,
       [gameId]
     ),
     getShopCustomer(),
@@ -31,15 +31,18 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
 
   if (!game) notFound()
 
-  // ช่องที่ต้องกรอกเป็นของเกม ไม่ใช่ของแพ็กเกจ จึงหยิบจากแพ็กแรกที่มีข้อมูล
-  let buyFields: BuyField[] | null = null
-  for (const p of packages) {
-    const parsed = jsonArray<BuyField>(p.provider_fields)
-    if (parsed) {
-      buyFields = parsed
-      break
-    }
-  }
+  // ช่องที่ต้องกรอกติดมากับแพ็กเกจ เพราะเกมเดียวกันคนละประเภท (THB / MYR / GOC)
+  // ใช้ข้อมูลคนละชุด บางอันขอ UID บางอันขอลิงก์ บางอันขอ AID
+  const buyPackages: BuyPackage[] = packages.map((p) => ({
+    id: p.id,
+    name: p.name,
+    sell_price: p.sell_price,
+    image_url: p.image_url,
+    track_stock: p.track_stock,
+    stock_qty: p.stock_qty,
+    variant: p.provider_variant,
+    fields: jsonArray<BuyField>(p.provider_fields),
+  }))
 
   return (
     <>
@@ -72,11 +75,10 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
         ) : (
           <BuyForm
             action={shopOrderAction}
-            packages={packages}
+            packages={buyPackages}
             credit={customer?.credit ?? 0}
             signedIn={Boolean(customer)}
             defaultGameUid={customer?.game_uid}
-            fields={buyFields}
           />
         )}
       </div>

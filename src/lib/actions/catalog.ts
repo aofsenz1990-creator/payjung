@@ -254,6 +254,47 @@ export async function setGamePublishedAction(formData: FormData): Promise<Action
   }
 }
 
+/**
+ * ย้ายแพ็กเกจทั้งหมดของเกมนี้ไปรวมกับอีกเกมหนึ่ง แล้วลบเกมที่ว่างทิ้ง
+ *
+ * ผู้ให้บริการแยกเกมเดียวกันออกเป็นหลายสินค้าตามประเทศ/ค่าเงิน
+ * (เช่น OneOne THB / OneOne MYR / GOC) พอนำเข้ามาจึงกลายเป็นคนละเกมบนหน้าเว็บ
+ * ลูกค้าเห็นชื่อเกมเดียวกันซ้ำ ๆ หลายใบแล้วงงว่าต้องกดอันไหน
+ *
+ * รวมแล้วหน้าเว็บจะขึ้นปุ่มให้เลือกประเภทเอง เพราะแต่ละแพ็กจำชื่อสินค้าต้นทาง
+ * ไว้ที่ provider_variant และช่องที่ต้องกรอกก็ติดมากับแพ็กอยู่แล้ว
+ */
+export async function mergeGameAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const fromId = int(formData, 'game_id')
+  const intoId = int(formData, 'into_game_id')
+
+  if (!fromId || !intoId) return { error: 'กรุณาเลือกเกมปลายทาง' }
+  if (fromId === intoId) return { error: 'เลือกเกมปลายทางเป็นตัวมันเองไม่ได้' }
+
+  try {
+    const target = await q1<{ name: string }>('select name from games where id = $1', [intoId])
+    if (!target) return { error: 'ไม่พบเกมปลายทาง' }
+
+    const moved = await q<{ id: number }>(
+      `update products set game_id = $2 where game_id = $1 returning id`,
+      [fromId, intoId]
+    )
+    // บิลเก่ายังต้องชี้ไปที่เกมที่ยังอยู่ ไม่งั้นประวัติการขายจะไม่มีชื่อเกม
+    await q('update sales set game_id = $2 where game_id = $1', [fromId, intoId])
+    await q('delete from games where id = $1', [fromId])
+
+    refreshProductViews(intoId)
+    return {
+      ok:
+        `ย้าย ${moved.length} แพ็กเกจไปรวมกับ "${target.name}" แล้ว — ` +
+        'หน้าเว็บลูกค้าจะขึ้นปุ่มให้เลือกประเภทเองเมื่อมีมากกว่าหนึ่งแบบ',
+    }
+  } catch (err) {
+    return { error: friendlyError(err, 'รวมเกมไม่สำเร็จ') }
+  }
+}
+
 export async function deleteProductAction(formData: FormData) {
   await requireAdmin()
   const id = int(formData, 'id')

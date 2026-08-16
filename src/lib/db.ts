@@ -97,7 +97,7 @@ function withTimeout<T>(promise: Promise<T>, ms = 12_000): Promise<T> {
  * เวอร์ชันของโครงสร้างฐานข้อมูล
  * แก้ schema.ts เมื่อไหร่ให้เปลี่ยนเลขนี้ด้วย ระบบจะรัน DDL ชุดใหม่ให้อัตโนมัติครั้งเดียว
  */
-const SCHEMA_VERSION = '2026-08-16.6'
+const SCHEMA_VERSION = '2026-08-16.7'
 
 // สร้างตารางครั้งแรกที่ instance ถูกเรียก แล้วแคชไว้ (CREATE ... IF NOT EXISTS จึงรันซ้ำได้)
 let schemaReady: Promise<void> | null = null

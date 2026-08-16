@@ -314,3 +314,5 @@ alter table products add column if not exists provider_fields jsonb;
 alter table sales add column if not exists provider_fields jsonb;
 -- ชนิดสินค้ารายแพ็ก (uid / card / idpass) ใช้ path คนละอันตอนสั่ง
 alter table provider_catalog add column if not exists product_type text;
+-- ชื่อสินค้าฝั่งผู้ให้บริการ ใช้แยก "ประเภท" ของเกมเดียวกัน (THB / MYR / GOC ฯลฯ)
+alter table products add column if not exists provider_variant text;

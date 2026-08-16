@@ -6,6 +6,7 @@ import { requirePage } from '@/lib/auth'
 import {
   deleteProductAction,
   saveProductAction,
+  mergeGameAction,
   setGameMarkupAction,
   setGamePublishedAction,
 } from '@/lib/actions/catalog'
@@ -39,6 +40,7 @@ type ProductRow = {
   provider_sku: string | null
   provider_product_type: string | null
   markup_percent: number | null
+  provider_variant: string | null
 }
 
 export default async function GameDetailPage({
@@ -55,7 +57,7 @@ export default async function GameDetailPage({
   const gameId = Number(id)
   if (!Number.isFinite(gameId)) notFound()
 
-  const [game, products, editing, providers] = await Promise.all([
+  const [game, products, editing, providers, otherGames] = await Promise.all([
     q1<{
       id: number
       name: string
@@ -67,10 +69,11 @@ export default async function GameDetailPage({
       `select p.id, p.game_id, p.name, p.sku, p.cost_price::float8 as cost_price,
               p.sell_price::float8 as sell_price, p.track_stock, p.stock_qty, p.low_stock,
               p.is_active, p.is_published, p.markup_percent::float8 as markup_percent,
+              p.provider_variant,
               coalesce((select sum(s.qty) from sales s
                          where s.product_id = p.id and s.status = 'paid'), 0)::int as sold
          from products p where p.game_id = $1
-        order by p.is_active desc, p.sell_price`,
+        order by p.provider_variant nulls first, p.is_active desc, p.sell_price`,
       [gameId]
     ),
     edit
@@ -85,6 +88,11 @@ export default async function GameDetailPage({
       : Promise.resolve(null),
     q<{ id: number; name: string }>(
       'select id, name from api_providers where is_active order by priority, name'
+    ),
+    // เกมอื่นที่รวมเข้าด้วยกันได้ — เรียงชื่อคล้ายกันขึ้นก่อนจะได้หาง่าย
+    q<{ id: number; name: string }>(
+      'select id, name from games where id <> $1 order by name',
+      [gameId]
     ),
   ])
 
@@ -493,6 +501,47 @@ export default async function GameDetailPage({
             </div>
           ) : null}
 
+          {/* ผู้ให้บริการแยกเกมเดียวกันเป็นหลายสินค้าตามประเทศ/ค่าเงิน
+              พอนำเข้ามาจึงกลายเป็นคนละเกม รวมเข้าด้วยกันแล้วหน้าเว็บจะขึ้นปุ่มให้ลูกค้าเลือกเอง */}
+          {isAdmin && otherGames.length > 0 ? (
+            <div className="mb-4 rounded-xl border border-ink-700 bg-ink-850 p-3">
+              <p className="mb-1 text-sm font-medium text-slate-100">
+                🔗 รวมเกมนี้เข้ากับเกมอื่น
+              </p>
+              <p className="mb-2 text-xs leading-relaxed text-mute">
+                ใช้ตอนที่ผู้ให้บริการแยกเกมเดียวกันเป็นหลายแบบตามประเทศหรือค่าเงิน
+                (เช่น OneOne THB / OneOne MYR / GOC) รวมแล้ว{' '}
+                <b className="text-slate-200">
+                  หน้าเว็บลูกค้าจะขึ้นปุ่มให้เลือกประเภทเองในหน้าเดียว
+                </b>{' '}
+                · แพ็กเกจทั้งหมดของเกมนี้จะย้ายไป แล้วเกมนี้จะถูกลบทิ้ง
+              </p>
+              <ActionForm action={mergeGameAction}>
+                <input type="hidden" name="game_id" value={game.id} />
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    name="into_game_id"
+                    className="input w-auto flex-1"
+                    required
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      — เลือกเกมปลายทาง —
+                    </option>
+                    {otherGames.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                  <SubmitButton className="btn-ghost" pendingLabel="กำลังรวม...">
+                    ย้ายไปรวม
+                  </SubmitButton>
+                </div>
+              </ActionForm>
+            </div>
+          ) : null}
+
           {products.length === 0 ? (
             <Empty>ยังไม่มีแพ็กเกจ เพิ่มจากฟอร์มด้านซ้าย</Empty>
           ) : (
@@ -525,6 +574,12 @@ export default async function GameDetailPage({
                           {p.markup_percent != null ? (
                             <span className="block text-xs text-brand-400">
                               คิดราคาอัตโนมัติ +{p.markup_percent}%
+                            </span>
+                          ) : null}
+                          {/* หลังรวมเกม แพ็กจากคนละประเภทจะปนกันในตารางเดียว ต้องแยกให้เห็น */}
+                          {p.provider_variant ? (
+                            <span className="mt-0.5 inline-block rounded bg-ink-800 px-1.5 py-0.5 text-xs text-slate-300">
+                              {p.provider_variant}
                             </span>
                           ) : null}
                         </td>

@@ -173,7 +173,7 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
       `insert into products
          (game_id, name, cost_price, sell_price, is_active, sort_order,
           provider_id, provider_game_id, provider_server_id, provider_sku,
-          provider_product_type, markup_percent, is_published, provider_fields)
+          provider_product_type, markup_percent, is_published, provider_fields, provider_variant)
        select g.id,
               case when c.server_name is not null and c.server_id <> '0'
                    then c.pack_name || ' (' || c.server_name || ')'
@@ -183,7 +183,7 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
               true,
               round(c.pack_price)::int,
               c.provider_id, c.game_id, c.server_id, c.pack_code,
-              c.product_type, nullif(${mHole}::numeric, 0), ${pHole}, c.fields
+              c.product_type, nullif(${mHole}::numeric, 0), ${pHole}, c.fields, c.game_name
          from provider_catalog c
          join games g on lower(g.name) = lower(c.game_name)
         where c.provider_id = $1${gameFilter}
@@ -271,6 +271,7 @@ export async function refreshImportedAction(formData: FormData): Promise<ActionS
       `update products p
           set cost_price = c.pack_price,
               provider_fields = c.fields,
+              provider_variant = c.game_name,
               provider_product_type = coalesce(c.product_type, p.provider_product_type),
               -- ตั้ง % ไว้ = คิดราคาขายใหม่ให้กำไรเท่าเดิม
               -- ตั้งราคาเอง = ไม่แตะราคาขายเด็ดขาด

@@ -92,6 +92,10 @@ export const SCHEMA_STATEMENTS: string[] = [
   `alter table products add column if not exists markup_percent numeric(6,2)`,
   // สำเนาของ provider_catalog.fields ตอนนำเข้า — หน้าเว็บลูกค้าใช้สร้างช่องกรอก
   `alter table products add column if not exists provider_fields jsonb`,
+  // ชื่อสินค้าฝั่งผู้ให้บริการ ใช้แยก "ประเภท" ของเกมเดียวกัน
+  // เช่นเกมเดียวแต่มีทั้ง OneOne THB / OneOne MYR / GOC ซึ่งเติมคนละแบบและใช้ช่องกรอกคนละชุด
+  // เอาไว้ให้ลูกค้าเลือกในหน้าเดียว แทนที่จะแยกเป็นคนละเกม
+  `alter table products add column if not exists provider_variant text`,
 
   // รายการสินค้าที่ดึงมาจากผู้ให้บริการ เก็บไว้ให้เลือกจับคู่โดยไม่ต้องยิง API ซ้ำ
   `create table if not exists provider_catalog (

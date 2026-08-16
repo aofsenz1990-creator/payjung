@@ -10,6 +10,10 @@ export type BuyPackage = {
   image_url: string | null
   track_stock: boolean
   stock_qty: number
+  /** ชื่อสินค้าฝั่งผู้ให้บริการ ใช้แยกประเภทของเกมเดียวกัน เช่น OneOne THB / GOC */
+  variant?: string | null
+  /** ช่องที่ต้องกรอกของแพ็กนี้ ต่างประเภทกันใช้คนละชุด (UID / Link / AID) */
+  fields?: BuyField[] | null
 }
 
 /** ช่องที่เกมนี้บังคับให้กรอก ส่งมาจากผู้ให้บริการ */
@@ -22,6 +26,8 @@ export type BuyField = {
 /** ป้ายกำกับที่ผู้ให้บริการส่งมาเป็นภาษาอังกฤษ แปลตัวที่เจอบ่อยให้อ่านง่ายขึ้น */
 const FIELD_LABEL_TH: Record<string, string> = {
   uid: 'ไอดีเกม / UID',
+  link: 'ลิงก์เติมเกม (URL)',
+  aid: 'AID',
   server: 'เซิร์ฟเวอร์ / ภูมิภาค',
   player_name: 'ชื่อตัวละคร',
   level: 'เลเวล',
@@ -31,6 +37,13 @@ const FIELD_LABEL_TH: Record<string, string> = {
   recovery_code: 'รหัสกู้คืน',
   contact_phone: 'เบอร์โทรติดต่อ',
   contact_fb: 'Facebook ติดต่อ',
+}
+
+/** คำใบ้เพิ่มเติมสำหรับช่องที่ลูกค้ามักงงว่าต้องเอามาจากไหน */
+const FIELD_HINT_TH: Record<string, string> = {
+  link: 'คัดลอกลิงก์เติมเงินจากในเกมมาวาง',
+  aid: 'ดูได้ในหน้าโปรไฟล์ของเกม',
+  uid: 'เลขประจำตัวผู้เล่น ดูได้ในหน้าโปรไฟล์',
 }
 
 function fieldLabel(f: BuyField) {
@@ -59,21 +72,60 @@ export function BuyForm({
   const [productId, setProductId] = useState<number | null>(packages[0]?.id ?? null)
   const [qty, setQty] = useState(1)
 
-  const hasFields = Boolean(fields && fields.length > 0)
-  const selected = packages.find((p) => p.id === productId) ?? null
+  // เกมเดียวกันอาจมีหลายประเภทตามประเทศ/ค่าเงิน ให้ลูกค้าเลือกก่อนแล้วค่อยโชว์แพ็กเกจของประเภทนั้น
+  const variants = [...new Set(packages.map((p) => p.variant).filter(Boolean))] as string[]
+  const hasVariants = variants.length > 1
+  const [variant, setVariant] = useState<string | null>(variants[0] ?? null)
+
+  const shown = hasVariants ? packages.filter((p) => p.variant === variant) : packages
+  const selected = shown.find((p) => p.id === productId) ?? shown[0] ?? null
+
+  // ช่องที่ต้องกรอกยึดตามแพ็กที่เลือก เพราะคนละประเภทใช้คนละชุด (UID / Link / AID)
+  const activeFields = selected?.fields?.length ? selected.fields : (fields ?? null)
+  const hasFields = Boolean(activeFields && activeFields.length > 0)
   const total = selected ? selected.sell_price * qty : 0
   const notEnough = signedIn && total > credit
   const outOfStock = Boolean(selected?.track_stock && selected.stock_qty < qty)
 
   return (
     <ActionForm action={action} className="space-y-5">
-      <input type="hidden" name="product_id" value={productId ?? ''} />
+      <input type="hidden" name="product_id" value={selected?.id ?? ''} />
+
+      {/* เกมเดียวกันแต่คนละประเทศ/ค่าเงิน — ให้เลือกก่อนว่าจะเติมแบบไหน */}
+      {hasVariants ? (
+        <div>
+          <p className="label">เลือกประเภท</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {variants.map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => {
+                  setVariant(v)
+                  // แพ็กที่เลือกไว้เป็นของประเภทเดิม ต้องล้างก่อนไม่งั้นสั่งข้ามประเภท
+                  setProductId(null)
+                }}
+                className={`rounded-xl border px-3 py-3 text-center text-sm transition ${
+                  v === variant
+                    ? 'border-brand-500 bg-brand-600/15 font-medium text-white'
+                    : 'border-ink-700 bg-ink-850 text-slate-300 hover:border-ink-600'
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-mute">
+            แต่ละประเภทเติมคนละแบบและใช้ข้อมูลคนละชุด เลือกให้ตรงกับบัญชีเกมของคุณ
+          </p>
+        </div>
+      ) : null}
       <input type="hidden" name="qty" value={qty} />
 
       <div>
         <p className="label">เลือกแพ็กเกจ</p>
         <div className="grid gap-2 sm:grid-cols-2">
-          {packages.map((p) => {
+          {shown.map((p) => {
             const active = p.id === productId
             const soldOut = p.track_stock && p.stock_qty <= 0
             return (
@@ -124,7 +176,7 @@ export function BuyForm({
             บางเกมต้องเลือกเซิร์ฟเวอร์/ภูมิภาคด้วย ถ้าไม่ถามแล้วส่งไปมั่ว ๆ
             ออเดอร์จะถูกปฏิเสธ หรือแย่กว่านั้นคือเติมเข้าผิดเซิร์ฟเวอร์ */}
         {hasFields ? (
-          fields!.map((f) =>
+          activeFields!.map((f) =>
             f.options && f.options.length > 0 ? (
               <div key={f.key}>
                 <label className="label" htmlFor={`field_${f.key}`}>
@@ -156,11 +208,16 @@ export function BuyForm({
                   id={`field_${f.key}`}
                   name={`field_${f.key}`}
                   className="input"
-                  type={f.key === 'password' ? 'password' : 'text'}
+                  type={f.key === 'password' ? 'password' : f.key === 'link' ? 'url' : 'text'}
                   defaultValue={f.key === 'uid' ? (defaultGameUid ?? '') : ''}
-                  placeholder={f.key === 'uid' ? 'เช่น 123456789' : ''}
+                  placeholder={
+                    f.key === 'uid' ? 'เช่น 123456789' : f.key === 'link' ? 'https://...' : ''
+                  }
                   required
                 />
+                {FIELD_HINT_TH[f.key] ? (
+                  <p className="mt-1 text-xs text-mute">{FIELD_HINT_TH[f.key]}</p>
+                ) : null}
               </div>
             )
           )
