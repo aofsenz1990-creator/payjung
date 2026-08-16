@@ -21,7 +21,7 @@ import { providerMeta } from '@/lib/providers/constants'
 import { DEFAULT_SHOP_BG, DEFAULT_SHOP_COVER, getSiteSettings, SITE_KEYS } from '@/lib/shop'
 import { ImageInput } from '@/components/ImageInput'
 import { ProviderForm } from '@/components/ProviderForm'
-import { importGameAction, syncCatalogAction } from '@/lib/actions/catalogSync'
+import { importGamesAction, syncCatalogAction } from '@/lib/actions/catalogSync'
 import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
@@ -540,64 +540,104 @@ export default async function StorefrontPage({
                 : 'ยังไม่ได้ดึงรายการ — กดปุ่มด้านบนเพื่อดึงจากผู้ให้บริการ'}
             </Empty>
           ) : (
-            <div className="table-wrap">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>เกมฝั่งผู้ให้บริการ</th>
-                    <th className="text-right">แพ็กเกจ</th>
-                    <th className="text-right">ช่วงราคาทุน</th>
-                    <th>สถานะในระบบเรา</th>
-                    <th className="text-right">นำเข้า</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {catalog.map((g) => (
-                    <tr key={`${g.provider_id}-${g.game_id}`}>
-                      <td>
-                        <span className="block font-medium text-white">{g.game_name}</span>
-                        <span className="block font-mono text-xs text-mute">
-                          game_id {g.game_id}
-                          {g.servers > 1 ? ` · ${num(g.servers)} เซิร์ฟเวอร์` : ''}
-                        </span>
-                      </td>
-                      <td className="text-right">{num(g.packs)}</td>
-                      <td className="text-right text-mute">
-                        {money(g.min_price)} – {money(g.max_price)}
-                      </td>
-                      <td>
-                        {g.imported > 0 ? (
-                          <Badge tone="good">นำเข้าแล้ว {num(g.imported)}</Badge>
-                        ) : (
-                          <Badge tone="warn">ยังไม่นำเข้า</Badge>
-                        )}
-                      </td>
-                      <td>
-                        <ActionForm action={importGameAction}>
-                          <div className="flex items-center justify-end gap-1.5">
-                            <input type="hidden" name="provider_id" value={g.provider_id} />
-                            <input type="hidden" name="game_id" value={g.game_id} />
-                            <input
-                              name="markup"
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              className="input w-24 py-1 text-xs"
-                              placeholder="กำไร %"
-                              defaultValue={0}
-                              title="บวกกำไรเป็นเปอร์เซ็นต์จากต้นทุน — ปล่อย 0 = ขายเท่าทุน แล้วไปตั้งทีหลังที่หน้าเกม"
-                            />
-                            <SubmitButton className="btn-ghost btn-sm" pendingLabel="...">
-                              นำเข้า
-                            </SubmitButton>
-                          </div>
-                        </ActionForm>
-                      </td>
+            /* ฟอร์มเดียวครอบทั้งตาราง — ติ๊กเลือกหลายเกมแล้วกดนำเข้าทีเดียว
+               ผู้ให้บริการมีเป็นร้อยเกม กดนำเข้าทีละเกมไม่ไหว */
+            <ActionForm action={importGamesAction}>
+              <input type="hidden" name="provider_id" value={catalog[0].provider_id} />
+
+              <div className="mb-3 rounded-xl border border-brand-500/30 bg-brand-500/10 p-3">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <label className="label" htmlFor="import_markup">
+                      บวกกำไรจากต้นทุน (%)
+                    </label>
+                    <input
+                      id="import_markup"
+                      name="markup"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="input w-32"
+                      placeholder="เช่น 15"
+                      defaultValue={0}
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 pb-2.5 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      name="publish"
+                      className="size-4 rounded border-ink-600 bg-ink-850"
+                    />
+                    เปิดขายบนเว็บทันที
+                  </label>
+                  <div className="flex flex-wrap gap-2 pb-1">
+                    <SubmitButton className="btn-primary" pendingLabel="กำลังนำเข้า...">
+                      นำเข้าเกมที่เลือก
+                    </SubmitButton>
+                    <SubmitButton
+                      name="all"
+                      value="1"
+                      className="btn-ghost"
+                      pendingLabel="กำลังนำเข้า..."
+                    >
+                      นำเข้าทั้งหมด ({num(catalog.length)} เกม)
+                    </SubmitButton>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-mute">
+                  ราคาขาย = ต้นทุน + กำไร แล้วปัดขึ้นเป็นจำนวนเต็มบาท ·
+                  แพ็กเกจที่เคยนำเข้าแล้วจะถูกข้ามให้เอง กดซ้ำได้ปลอดภัย ·
+                  ไม่ติ๊กเปิดขาย = นำเข้าไปเงียบ ๆ ก่อน แล้วค่อยไปเปิดทีหลังที่หน้าเกม
+                </p>
+              </div>
+
+              <div className="table-wrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th className="w-10">เลือก</th>
+                      <th>เกมฝั่งผู้ให้บริการ</th>
+                      <th className="text-right">แพ็กเกจ</th>
+                      <th className="text-right">ช่วงราคาทุน</th>
+                      <th>สถานะในระบบเรา</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {catalog.map((g) => (
+                      <tr key={`${g.provider_id}-${g.game_id}`}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            name="game_ids"
+                            value={g.game_id}
+                            className="size-4 rounded border-ink-600 bg-ink-850"
+                            aria-label={`เลือก ${g.game_name}`}
+                          />
+                        </td>
+                        <td>
+                          <span className="block font-medium text-white">{g.game_name}</span>
+                          <span className="block font-mono text-xs text-mute">
+                            game_id {g.game_id}
+                            {g.servers > 1 ? ` · ${num(g.servers)} เซิร์ฟเวอร์` : ''}
+                          </span>
+                        </td>
+                        <td className="text-right">{num(g.packs)}</td>
+                        <td className="text-right text-mute">
+                          {money(g.min_price)} – {money(g.max_price)}
+                        </td>
+                        <td>
+                          {g.imported > 0 ? (
+                            <Badge tone="good">นำเข้าแล้ว {num(g.imported)}</Badge>
+                          ) : (
+                            <Badge tone="warn">ยังไม่นำเข้า</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ActionForm>
           )}
         </div>
       ) : null}

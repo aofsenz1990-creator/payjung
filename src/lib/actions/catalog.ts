@@ -193,6 +193,48 @@ export async function setGameMarkupAction(formData: FormData): Promise<ActionSta
   }
 }
 
+/**
+ * เปิด/ปิดขายบนหน้าเว็บลูกค้าทั้งเกมทีเดียว (ทั้งตัวเกมและทุกแพ็กเกจ)
+ *
+ * ต้องเปิดทั้งสองอย่างถึงจะเห็นบนเว็บ เพราะหน้าเว็บกรองด้วย
+ * games.is_published และ products.is_published พร้อมกัน
+ * เปิดแค่แพ็กเกจแต่ลืมเปิดเกม = ลูกค้ายังไม่เห็นอะไรเลย ซึ่งหาสาเหตุยากมาก
+ */
+export async function setGamePublishedAction(formData: FormData): Promise<ActionState> {
+  await requirePage('games')
+  const gameId = int(formData, 'game_id')
+  const published = str(formData, 'published') === '1'
+  if (!gameId) return { error: 'ไม่พบเกมนี้' }
+
+  try {
+    const rows = await q<{ n: number }>(
+      `with g as (
+         update games set is_published = $2 where id = $1 returning id
+       ),
+       p as (
+         update products set is_published = $2
+           from g where products.game_id = g.id and products.is_active
+         returning products.id
+       )
+       select count(*)::int as n from p`,
+      [gameId, published]
+    )
+    const n = rows[0]?.n ?? 0
+
+    revalidatePath(`/games/${gameId}`)
+    revalidatePath('/games')
+    revalidatePath('/storefront')
+    revalidatePath('/shop')
+    return {
+      ok: published
+        ? `เปิดขายบนหน้าเว็บแล้ว — ลูกค้าเห็นเกมนี้พร้อม ${n} แพ็กเกจ`
+        : `ซ่อนจากหน้าเว็บแล้ว — ลูกค้าจะไม่เห็นเกมนี้และ ${n} แพ็กเกจของมัน`,
+    }
+  } catch (err) {
+    return { error: friendlyError(err, 'เปลี่ยนสถานะบนเว็บไม่สำเร็จ') }
+  }
+}
+
 export async function deleteProductAction(formData: FormData) {
   await requireAdmin()
   const id = int(formData, 'id')

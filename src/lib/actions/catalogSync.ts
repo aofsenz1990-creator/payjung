@@ -100,111 +100,132 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
 }
 
 /**
- * นำเข้าเกมหนึ่งเกมจากรายการที่ดึงมา สร้างเกมและแพ็กเกจในระบบให้อัตโนมัติ
- * บวกกำไรเป็นเปอร์เซ็นต์จากต้นทุน ไม่ใส่ก็ตั้งราคาขายเท่าทุนไว้ก่อนแล้วไปตั้งทีหลังได้
+ * นำเข้าเกมจากรายการที่ดึงมา — ทีละหลายเกม หรือทั้งหมดในครั้งเดียว
+ *
+ * เขียนเป็นคำสั่งชุดเดียวโดยตั้งใจ ไม่วนลูปทีละแพ็กเกจ
+ * ผู้ให้บริการรายหนึ่งมีได้ร้อยกว่าเกม รวมพันกว่าแพ็กเกจ ถ้ายิงฐานข้อมูล
+ * ทีละแพ็ก (เช็กซ้ำ 1 + เพิ่ม 1) จะกลายเป็นสองพันกว่าคำสั่ง ซึ่งไม่มีทางเสร็จทัน
+ * แบบนี้ใช้แค่ 3 คำสั่งไม่ว่าจะนำเข้ากี่เกม
  */
-export async function importGameAction(formData: FormData): Promise<ActionState> {
+export async function importGamesAction(formData: FormData): Promise<ActionState> {
   await requireAdmin()
   const providerId = int(formData, 'provider_id')
-  const providerGameId = str(formData, 'game_id')
   const markup = decimal(formData, 'markup', 0)
+  // เปิดขายบนเว็บทันทีตอนนำเข้า — ปิดไว้เป็นค่าเริ่มต้นเพราะถ้าไม่ได้ใส่กำไร
+  // ราคาขายจะเท่าทุน เผลอเปิดไปคือขายไม่ได้กำไรเลย
+  const publish = bool(formData, 'publish')
+  const all = str(formData, 'all') === '1'
+  const gameIds = formData.getAll('game_ids').filter((v): v is string => typeof v === 'string')
 
-  if (!providerId || !providerGameId) return { error: 'ข้อมูลไม่ครบ' }
+  if (!providerId) return { error: 'กรุณาเลือกผู้ให้บริการ' }
+  if (markup < 0) return { error: 'เปอร์เซ็นต์กำไรต้องไม่ติดลบ' }
+  if (!all && gameIds.length === 0) {
+    return { error: 'ยังไม่ได้เลือกเกม — ติ๊กเกมที่ต้องการ แล้วกด "นำเข้าเกมที่เลือก"' }
+  }
 
   try {
-    const packs = await q<{
-      game_name: string
-      server_id: string
-      server_name: string | null
-      pack_code: string
-      pack_name: string
-      pack_price: number
-    }>(
-      `select game_name, server_id, server_name, pack_code, pack_name,
-              pack_price::float8 as pack_price
-         from provider_catalog
-        where provider_id = $1 and game_id = $2
-        order by server_id, pack_price`,
-      [providerId, providerGameId]
+    const provider = await q1<{ name: string; kind: string }>(
+      'select name, kind from api_providers where id = $1',
+      [providerId]
     )
-    if (packs.length === 0) return { error: 'ไม่พบรายการของเกมนี้ ลองกดดึงรายการใหม่' }
+    if (!provider) return { error: 'ไม่พบผู้ให้บริการนี้' }
 
-    const gameName = packs[0].game_name
+    // OverTopup ต้องระบุชนิดสินค้าตอนสั่ง — ตั้งเป็นเติมด้วย UID ไว้ก่อนซึ่งใช้บ่อยสุด
+    // แพ็กที่เป็นบัตรเงินสด ไปเปลี่ยนได้ที่หน้าแก้ไขแพ็กเกจ
+    const productType = provider.kind === 'overtopup' ? 'uid' : null
 
-    // OverTopup ต้องระบุชนิดสินค้าตอนสั่ง — ตั้งเป็นเติมด้วย UID ไว้ก่อนซึ่งเป็นแบบที่ใช้บ่อยสุด
-    // ถ้าแพ็กเกจไหนเป็นบัตรเงินสด ไปเปลี่ยนได้ที่หน้าแก้ไขแพ็กเกจ
-    const kind = await q1<{ kind: string }>('select kind from api_providers where id = $1', [
-      providerId,
-    ])
-    const productType = kind?.kind === 'overtopup' ? 'gtopup_uid' : null
-
-    // มีเกมชื่อนี้อยู่แล้วก็ใช้ตัวเดิม ไม่สร้างซ้ำ
-    const existing = await q1<{ id: number }>(
-      'select id from games where lower(name) = lower($1) limit 1',
-      [gameName]
-    )
-    let gameId = existing?.id
-    if (!gameId) {
-      const created = await q<{ id: number }>(
-        'insert into games (name, publisher) values ($1, $2) returning id',
-        [gameName, '24BUYM']
-      )
-      gameId = created[0].id
+    // เงื่อนไขเลือกเกม — นำเข้าทั้งหมดก็ไม่ต้องกรอง
+    const filterParams: unknown[] = [providerId]
+    let gameFilter = ''
+    if (!all) {
+      const holes = gameIds.map((_, i) => `$${i + 2}`).join(',')
+      gameFilter = ` and c.game_id in (${holes})`
+      filterParams.push(...gameIds)
     }
+    const next = () => `$${filterParams.length + 1}`
 
-    let added = 0
-    let skipped = 0
-    for (const p of packs) {
-      const label =
-        p.server_name && p.server_id !== '0' ? `${p.pack_name} (${p.server_name})` : p.pack_name
+    // ① สร้างเกมที่ยังไม่มีในระบบ (ชื่อซ้ำถือว่าเป็นเกมเดิม ไม่สร้างซ้ำ)
+    const pubHole = next()
+    await q(
+      `insert into games (name, publisher)
+       select distinct c.game_name, ${pubHole}
+         from provider_catalog c
+        where c.provider_id = $1${gameFilter}
+          and not exists (select 1 from games g where lower(g.name) = lower(c.game_name))
+       on conflict do nothing`,
+      [...filterParams, provider.name]
+    )
 
-      // ข้ามถ้าเคยนำเข้าแพ็กเกจนี้ไปแล้ว ดูจากรหัสฝั่งผู้ให้บริการ
-      const dup = await q1<{ id: number }>(
-        `select id from products
-          where provider_id = $1 and provider_game_id = $2
-            and provider_server_id = $3 and provider_sku = $4 limit 1`,
-        [providerId, providerGameId, p.server_id, p.pack_code]
+    // ② เพิ่มเฉพาะแพ็กเกจที่ยังไม่เคยนำเข้า ดูจากรหัสฝั่งผู้ให้บริการ
+    const insertParams = [...filterParams]
+    const mHole = `$${insertParams.length + 1}`
+    insertParams.push(markup)
+    const tHole = `$${insertParams.length + 1}`
+    insertParams.push(productType)
+    const pHole = `$${insertParams.length + 1}`
+    insertParams.push(publish)
+
+    const added = await q<{ id: number }>(
+      `insert into products
+         (game_id, name, cost_price, sell_price, is_active, sort_order,
+          provider_id, provider_game_id, provider_server_id, provider_sku,
+          provider_product_type, markup_percent, is_published)
+       select g.id,
+              case when c.server_name is not null and c.server_id <> '0'
+                   then c.pack_name || ' (' || c.server_name || ')'
+                   else c.pack_name end,
+              c.pack_price,
+              ceil(c.pack_price * (1 + ${mHole}::numeric / 100)),
+              true,
+              round(c.pack_price)::int,
+              c.provider_id, c.game_id, c.server_id, c.pack_code,
+              ${tHole}, nullif(${mHole}::numeric, 0), ${pHole}
+         from provider_catalog c
+         join games g on lower(g.name) = lower(c.game_name)
+        where c.provider_id = $1${gameFilter}
+          and not exists (
+            select 1 from products p
+             where p.provider_id = c.provider_id
+               and p.provider_game_id = c.game_id
+               and p.provider_server_id = c.server_id
+               and p.provider_sku = c.pack_code)
+       returning id`,
+      insertParams
+    )
+
+    // ③ เปิดขายบนเว็บ — ต้องเปิดตัวเกมด้วย ไม่ใช่แค่แพ็กเกจ ไม่งั้นลูกค้าไม่เห็นอะไรเลย
+    let publishedGames = 0
+    if (publish) {
+      const rows = await q<{ id: number }>(
+        `update games set is_published = true
+          where id in (select g.id
+                         from provider_catalog c
+                         join games g on lower(g.name) = lower(c.game_name)
+                        where c.provider_id = $1${gameFilter})
+            and not is_published
+         returning id`,
+        filterParams
       )
-      if (dup) {
-        skipped++
-        continue
-      }
-
-      await q(
-        `insert into products
-           (game_id, name, cost_price, sell_price, is_active, sort_order,
-            provider_id, provider_game_id, provider_server_id, provider_sku,
-            provider_product_type, markup_percent)
-         values ($1, $2, $3, $4, true, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          gameId,
-          label,
-          p.pack_price,
-          // บวกกำไรเป็นเปอร์เซ็นต์ ใช้ได้ดีกว่าบวกเป็นบาทเพราะแพ็กเกจราคาต่างกันมาก
-          // (แพ็ก 10 บาทกับแพ็ก 2,000 บาท ไม่ควรบวกกำไรเท่ากัน)
-          // ปัดขึ้นเป็นจำนวนเต็มบาท ให้ตรงกับที่คำนวณในฐานข้อมูลตอนแก้ราคาทีหลัง
-          Math.ceil(p.pack_price * (1 + markup / 100)),
-          Math.round(p.pack_price),
-          providerId,
-          providerGameId,
-          p.server_id,
-          p.pack_code,
-          productType,
-          markup > 0 ? markup : null,
-        ]
-      )
-      added++
+      publishedGames = rows.length
     }
 
     revalidatePath('/storefront')
     revalidatePath('/games')
+    revalidatePath('/shop')
+
+    const scope = all ? 'ทุกเกม' : `${gameIds.length} เกมที่เลือก`
+    if (added.length === 0) {
+      return { ok: `${scope} นำเข้าไปหมดแล้วก่อนหน้านี้ — ไม่มีแพ็กเกจใหม่ให้เพิ่ม` }
+    }
     return {
       ok:
-        `นำเข้า "${gameName}" แล้ว — เพิ่มใหม่ ${added} แพ็กเกจ` +
-        (skipped > 0 ? ` (ข้ามที่มีอยู่แล้ว ${skipped})` : '') +
+        `นำเข้า ${scope} แล้ว — เพิ่มใหม่ ${added.length} แพ็กเกจ` +
         (markup > 0
-          ? ` · บวกกำไร ${markup}% จากต้นทุน`
-          : ' · ราคาขายเท่าทุน ไปตั้งกำไรทีเดียวทั้งเกมได้ที่หน้าเกม'),
+          ? ` · บวกกำไร ${markup}% จากต้นทุน (ปัดขึ้นเป็นจำนวนเต็ม)`
+          : ' · ราคาขายเท่าทุน ไปตั้งกำไรได้ที่หน้าเกม') +
+        (publish
+          ? ` · เปิดขายบนเว็บแล้ว ${publishedGames} เกม`
+          : ' · ยังไม่เปิดขายบนเว็บ'),
     }
   } catch (err) {
     return { error: friendlyError(err, 'นำเข้าไม่สำเร็จ') }

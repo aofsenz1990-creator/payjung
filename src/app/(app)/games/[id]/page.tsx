@@ -3,7 +3,13 @@ import { notFound } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { OVERTOPUP_PRODUCT_TYPES } from '@/lib/providers/constants'
 import { requirePage } from '@/lib/auth'
-import { deleteProductAction, saveProductAction, setGameMarkupAction } from '@/lib/actions/catalog'
+import {
+  deleteProductAction,
+  saveProductAction,
+  setGameMarkupAction,
+  setGamePublishedAction,
+} from '@/lib/actions/catalog'
+import { toggleProductPublishedAction } from '@/lib/actions/storefront'
 import { money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
@@ -46,14 +52,17 @@ export default async function GameDetailPage({
   if (!Number.isFinite(gameId)) notFound()
 
   const [game, products, editing, providers] = await Promise.all([
-    q1<{ id: number; name: string; publisher: string | null; note: string | null }>(
-      'select id, name, publisher, note from games where id = $1',
-      [gameId]
-    ),
+    q1<{
+      id: number
+      name: string
+      publisher: string | null
+      note: string | null
+      is_published: boolean
+    }>('select id, name, publisher, note, is_published from games where id = $1', [gameId]),
     q<ProductRow>(
       `select p.id, p.game_id, p.name, p.sku, p.cost_price::float8 as cost_price,
               p.sell_price::float8 as sell_price, p.track_stock, p.stock_qty, p.low_stock,
-              p.is_active, p.markup_percent::float8 as markup_percent,
+              p.is_active, p.is_published, p.markup_percent::float8 as markup_percent,
               coalesce((select sum(s.qty) from sales s
                          where s.product_id = p.id and s.status = 'paid'), 0)::int as sold
          from products p where p.game_id = $1
@@ -76,6 +85,8 @@ export default async function GameDetailPage({
   ])
 
   if (!game) notFound()
+
+  const publishedCount = products.filter((p) => p.is_published).length
 
   return (
     <>
@@ -429,6 +440,55 @@ export default async function GameDetailPage({
             </div>
           ) : null}
 
+          {/* เปิดขายบนเว็บทั้งเกมทีเดียว — ต้องเปิดทั้งตัวเกมและแพ็กเกจถึงจะเห็น
+              เปิดแค่อย่างใดอย่างหนึ่งแล้วลูกค้าไม่เห็น เป็นจุดที่หาสาเหตุยากมาก */}
+          {products.length > 0 && isAdmin ? (
+            <div
+              className={`mb-4 rounded-xl border p-3 ${
+                game.is_published && publishedCount > 0
+                  ? 'border-good/30 bg-good/10'
+                  : 'border-warn/40 bg-warn/10'
+              }`}
+            >
+              <p className="mb-1 text-sm font-medium text-slate-100">
+                🛒 แสดงบนหน้าเว็บลูกค้า
+              </p>
+              <p className="mb-2 text-xs leading-relaxed text-mute">
+                {game.is_published && publishedCount > 0 ? (
+                  <>
+                    ลูกค้าเห็นเกมนี้อยู่ — เปิดขาย {publishedCount} จาก {products.length} แพ็กเกจ
+                  </>
+                ) : !game.is_published && publishedCount > 0 ? (
+                  <b className="text-warn">
+                    ⚠ เปิดแพ็กเกจไว้ {publishedCount} รายการ แต่ตัวเกมยังปิดอยู่ —
+                    ลูกค้าจึงยังไม่เห็นอะไรเลย กดปุ่มด้านล่างเพื่อเปิดให้ครบ
+                  </b>
+                ) : (
+                  <>
+                    ยังไม่ได้เปิดขายบนเว็บ — เกมที่นำเข้าจาก API จะปิดไว้ก่อนเสมอ
+                    ให้ตั้งราคาขายให้เรียบร้อยแล้วค่อยกดเปิด จะได้ไม่เผลอขายเท่าทุน
+                  </>
+                )}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <ActionForm action={setGamePublishedAction}>
+                  <input type="hidden" name="game_id" value={game.id} />
+                  <input type="hidden" name="published" value="1" />
+                  <SubmitButton className="btn-primary" pendingLabel="กำลังเปิด...">
+                    เปิดขายทั้งเกมบนหน้าเว็บ
+                  </SubmitButton>
+                </ActionForm>
+                <ActionForm action={setGamePublishedAction}>
+                  <input type="hidden" name="game_id" value={game.id} />
+                  <input type="hidden" name="published" value="0" />
+                  <SubmitButton className="btn-ghost" pendingLabel="...">
+                    ซ่อนทั้งเกม
+                  </SubmitButton>
+                </ActionForm>
+              </div>
+            </div>
+          ) : null}
+
           {products.length === 0 ? (
             <Empty>ยังไม่มีแพ็กเกจ เพิ่มจากฟอร์มด้านซ้าย</Empty>
           ) : (
@@ -443,6 +503,7 @@ export default async function GameDetailPage({
                     <th className="text-right">สต๊อก</th>
                     <th className="text-right">ขายไปแล้ว</th>
                     <th>สถานะ</th>
+                    <th>บนหน้าเว็บ</th>
                     <th className="text-right">จัดการ</th>
                   </tr>
                 </thead>
@@ -490,6 +551,23 @@ export default async function GameDetailPage({
                         <td className="text-right text-slate-300">{num(p.sold)}</td>
                         <td>
                           {p.is_active ? <Badge tone="good">เปิดขาย</Badge> : <Badge>ปิดขาย</Badge>}
+                        </td>
+                        {/* กดทีละแพ็กได้จากตรงนี้เลย ไม่ต้องเข้าไปแก้ไขทีละอัน */}
+                        <td>
+                          <form action={toggleProductPublishedAction}>
+                            <input type="hidden" name="id" value={p.id} />
+                            <button
+                              type="submit"
+                              className={p.is_published ? 'btn-ghost btn-sm' : 'btn-ghost btn-sm'}
+                              title={
+                                p.is_published
+                                  ? 'กดเพื่อซ่อนจากหน้าเว็บลูกค้า'
+                                  : 'กดเพื่อเปิดขายบนหน้าเว็บลูกค้า'
+                              }
+                            >
+                              {p.is_published ? '✅ ขายอยู่' : '⬜ ยังไม่ขาย'}
+                            </button>
+                          </form>
                         </td>
                         <td>
                           <div className="flex justify-end gap-1.5">

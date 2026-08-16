@@ -54,22 +54,40 @@ export function ActionForm({
   )
 }
 
+/**
+ * ปุ่มส่งฟอร์มที่รู้สถานะกำลังส่งอยู่
+ *
+ * รับ name/value ได้ด้วย เพื่อให้ฟอร์มเดียวมีหลายปุ่มที่สั่งงานต่างกันได้
+ * (เช่น "นำเข้าเกมที่เลือก" กับ "นำเข้าทั้งหมด" ใช้ฟอร์มเดียวกันแต่ส่งค่าต่างกัน)
+ * เบราว์เซอร์จะส่ง name=value ของปุ่มที่ถูกกดไปด้วยเท่านั้น
+ */
 export function SubmitButton({
   children,
   className = 'btn-primary',
   pendingLabel = 'กำลังบันทึก...',
   disabled = false,
   title,
+  name,
+  value,
 }: {
   children: React.ReactNode
   className?: string
   pendingLabel?: string
   disabled?: boolean
   title?: string
+  name?: string
+  value?: string
 }) {
   const { pending } = useFormStatus()
   return (
-    <button type="submit" className={className} disabled={pending || disabled} title={title}>
+    <button
+      type="submit"
+      className={className}
+      disabled={pending || disabled}
+      title={title}
+      name={name}
+      value={value}
+    >
       {pending ? pendingLabel : children}
     </button>
   )
