@@ -83,6 +83,8 @@ export const SCHEMA_STATEMENTS: string[] = [
   // รหัสเกมและเซิร์ฟเวอร์ฝั่งผู้ให้บริการ (24BUYM ต้องใช้ครบทั้งสามค่าตอนสั่งเติม)
   `alter table products add column if not exists provider_game_id text`,
   `alter table products add column if not exists provider_server_id text not null default '0'`,
+  // ชนิดสินค้าฝั่งผู้ให้บริการ — OverTopup แยก gtopup_uid / card ซึ่งส่งพารามิเตอร์คนละชุด
+  `alter table products add column if not exists provider_product_type text`,
 
   // รายการสินค้าที่ดึงมาจากผู้ให้บริการ เก็บไว้ให้เลือกจับคู่โดยไม่ต้องยิง API ซ้ำ
   `create table if not exists provider_catalog (

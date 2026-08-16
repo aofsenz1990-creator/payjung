@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
+import { OVERTOPUP_PRODUCT_TYPES } from '@/lib/providers/constants'
 import { requirePage } from '@/lib/auth'
 import { deleteProductAction, saveProductAction } from '@/lib/actions/catalog'
 import { money, num } from '@/lib/format'
@@ -26,6 +27,7 @@ type ProductRow = {
   sort_order: number
   provider_id: number | null
   provider_sku: string | null
+  provider_product_type: string | null
 }
 
 export default async function GameDetailPage({
@@ -61,7 +63,8 @@ export default async function GameDetailPage({
       ? q1<ProductRow>(
           `select id, game_id, name, sku, cost_price::float8 as cost_price,
                   sell_price::float8 as sell_price, track_stock, stock_qty, low_stock, is_active,
-                  image_url, is_published, sort_order, provider_id, provider_sku
+                  image_url, is_published, sort_order, provider_id, provider_sku,
+                  provider_product_type
              from products where id = $1`,
           [Number(edit)]
         )
@@ -290,6 +293,26 @@ export default async function GameDetailPage({
                       placeholder="เช่น ff_100_diamond"
                     />
                   </div>
+                </div>
+                {/* OverTopup แยกชนิดสินค้า ส่งพารามิเตอร์คนละชุด จึงต้องเลือกให้ถูกรายแพ็กเกจ
+                    เจ้าอื่นไม่ใช้ค่านี้ เว้นไว้ได้ */}
+                <div>
+                  <label className="label" htmlFor="provider_product_type">
+                    ชนิดสินค้าฝั่งผู้ให้บริการ (เฉพาะ OverTopup)
+                  </label>
+                  <select
+                    id="provider_product_type"
+                    name="provider_product_type"
+                    className="input"
+                    defaultValue={editing?.provider_product_type ?? ''}
+                  >
+                    <option value="">— ไม่ระบุ (ใช้เติมด้วย UID) —</option>
+                    {OVERTOPUP_PRODUCT_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>

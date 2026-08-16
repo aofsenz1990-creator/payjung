@@ -153,6 +153,9 @@ alter table sales add column if not exists source text;
 
 create index if not exists sales_source_idx on sales (source);
 
+-- ชนิดสินค้าฝั่งผู้ให้บริการ (OverTopup แยก gtopup_uid / card)
+alter table products add column if not exists provider_product_type text;
+
 alter table sales add column if not exists channel text not null default 'shop';
 
 -- การส่งออเดอร์ต่อไปยังผู้ให้บริการ API

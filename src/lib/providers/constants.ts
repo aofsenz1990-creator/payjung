@@ -3,6 +3,16 @@
  * แยกออกมาจาก 24buym.ts เพราะไฟล์นั้นเป็น server-only
  */
 export const BUYM_DEFAULT_BASE = 'https://new-api.24buymseller.com'
+export const OVERTOPUP_DEFAULT_BASE = 'https://www.overtopup.com/api'
+
+/**
+ * ชนิดสินค้าของ OverTopup — ส่งพารามิเตอร์คนละชุดกัน จึงต้องเลือกให้ถูกรายแพ็กเกจ
+ * เก็บไว้ที่ products.provider_product_type
+ */
+export const OVERTOPUP_PRODUCT_TYPES = [
+  { value: 'gtopup_uid', label: 'เติมด้วย UID (สั่งได้ทีละ 1 ชิ้น)' },
+  { value: 'card', label: 'บัตรเงินสด (ระบุจำนวนได้)' },
+] as const
 
 /**
  * ทะเบียนชนิดผู้ให้บริการที่ระบบรู้จัก
@@ -33,6 +43,14 @@ export const PROVIDER_KIND_META: ProviderKindMeta[] = [
     unit: 'พอยต์',
   },
   {
+    kind: 'overtopup',
+    label: 'OverTopup (ต่ออัตโนมัติได้)',
+    needsUsername: true,
+    fixedBaseUrl: OVERTOPUP_DEFAULT_BASE,
+    autoSupported: true,
+    unit: 'เหรียญ',
+  },
+  {
     kind: 'userpass',
     label: 'เจ้าอื่นที่ใช้ ID + รหัสผ่าน (เก็บข้อมูลไว้ก่อน)',
     needsUsername: true,
@@ -50,6 +68,9 @@ export const PROVIDER_KIND_META: ProviderKindMeta[] = [
 
 export const PROVIDER_KINDS = PROVIDER_KIND_META.map((m) => m.kind)
 
+/** ชนิดที่ไม่รู้จัก ให้ถือเป็น 'custom' (เก็บข้อมูลได้ แต่สั่งอัตโนมัติไม่ได้) */
 export function providerMeta(kind: string): ProviderKindMeta {
-  return PROVIDER_KIND_META.find((m) => m.kind === kind) ?? PROVIDER_KIND_META[2]
+  const found = PROVIDER_KIND_META.find((m) => m.kind === kind)
+  if (found) return found
+  return PROVIDER_KIND_META.find((m) => m.kind === 'custom') as ProviderKindMeta
 }

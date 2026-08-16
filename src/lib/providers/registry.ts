@@ -1,6 +1,7 @@
 import 'server-only'
 import { BuymError, addOrder, getAccount, getOrder } from './24buym'
 import { providerMeta } from './constants'
+import { overtopup } from './overtopup'
 import {
   ProviderError,
   type ProviderAdapter,
@@ -108,6 +109,7 @@ function notReady(kind: string): ProviderAdapter {
 
 const ADAPTERS: Record<string, ProviderAdapter> = {
   '24buym': buym,
+  overtopup,
   userpass: notReady('userpass'),
   custom: notReady('custom'),
 }

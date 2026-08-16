@@ -4,8 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { BuymError, getAccount, getProducts } from '@/lib/providers/24buym'
+import { BuymError, getProducts } from '@/lib/providers/24buym'
 import { PROVIDER_KINDS, providerMeta } from '@/lib/providers/constants'
+import { adapterFor, supportsAuto, toConfig } from '@/lib/providers/registry'
+import { ProviderError } from '@/lib/providers/types'
 import { bool, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
 
@@ -21,37 +23,50 @@ export async function testProviderAction(formData: FormData): Promise<ActionStat
   if (!id) return { error: 'กรุณาเลือกผู้ให้บริการ' }
 
   const provider = await q1<{
+    id: number
     name: string
     base_url: string | null
+    username: string | null
     api_key: string | null
     kind: string
-  }>('select name, base_url, api_key, kind from api_providers where id = $1', [id])
+  }>('select id, name, base_url, username, api_key, kind from api_providers where id = $1', [id])
 
   if (!provider) return { error: 'ไม่พบผู้ให้บริการนี้' }
-  if (!provider.api_key) return { error: `"${provider.name}" ยังไม่ได้ตั้งคีย์ — กดแก้ไขแล้ววางคีย์ก่อน` }
-  if (provider.kind !== '24buym') {
-    return {
-      error: `ยังไม่รองรับการทดสอบอัตโนมัติของชนิด "${provider.kind}" — ตอนนี้รองรับเฉพาะ 24BUYM`,
-    }
+  if (!provider.api_key) {
+    return { error: `"${provider.name}" ยังไม่ได้ตั้งคีย์/รหัสผ่าน — กดแก้ไขแล้วกรอกก่อน` }
+  }
+  if (!supportsAuto(provider.kind)) {
+    return { error: `ยังไม่ได้เขียนตัวเชื่อมของชนิด "${provider.kind}" จึงทดสอบอัตโนมัติไม่ได้` }
   }
 
   try {
-    const account = await getAccount(provider.base_url, provider.api_key)
-    if (!account.success) {
-      return { error: `ปลายทางตอบกลับว่าไม่สำเร็จ — ${account.message ?? 'ไม่ระบุสาเหตุ'}` }
+    // เช็กยอดคงเหลือเป็นตัวทดสอบมาตรฐาน — ผ่านแปลว่า ID/คีย์ถูกและ IP ไม่ถูกบล็อก
+    const config = toConfig(provider)
+    const wallet = await adapterFor(provider.kind).getBalance(config)
+    // จำยอดที่เพิ่งได้ไว้ จะได้ไม่ต้องยิงถามซ้ำตอนลูกค้ากดซื้อ
+    await q('update api_providers set balance = $2, balance_at = now() where id = $1', [
+      provider.id,
+      wallet.balance,
+    ])
+
+    let extra = ''
+    // 24BUYM ทดสอบดึงรายการสินค้าได้ด้วย จะได้รู้ว่าคีย์ใช้ได้ครบทุกสิทธิ์
+    if (provider.kind === '24buym') {
+      const products = await getProducts(provider.base_url, provider.api_key)
+      const games = products.products?.length ?? 0
+      const packs = (products.products ?? []).reduce((a, g) => a + (g.packages?.length ?? 0), 0)
+      extra = ` — ดึงรายการสินค้าได้ ${games} เกม ${packs} แพ็กเกจ`
     }
 
-    const products = await getProducts(provider.base_url, provider.api_key)
-    const games = products.products?.length ?? 0
-    const packs = (products.products ?? []).reduce((a, g) => a + (g.packages?.length ?? 0), 0)
-
+    revalidatePath('/storefront')
     return {
       ok:
-        `เชื่อมต่อสำเร็จ ✓ บัญชี "${account.username ?? '-'}" (uid ${account.uid ?? '-'}) ` +
-        `เครดิตคงเหลือฝั่งผู้ให้บริการ ${Number(account.points ?? 0).toLocaleString('th-TH')} — ` +
-        `ดึงรายการสินค้าได้ ${games} เกม ${packs} แพ็กเกจ`,
+        `เชื่อมต่อสำเร็จ ✓ ${provider.name}` +
+        (wallet.account ? ` บัญชี "${wallet.account}"` : '') +
+        ` เหลือ ${wallet.balance.toLocaleString('th-TH')} ${wallet.unit}${extra}`,
     }
   } catch (err) {
+    if (err instanceof ProviderError) return { error: err.message }
     if (err instanceof BuymError) return { error: err.message }
     return { error: friendlyError(err, 'ทดสอบการเชื่อมต่อไม่สำเร็จ') }
   }

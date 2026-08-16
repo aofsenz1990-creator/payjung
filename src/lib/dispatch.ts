@@ -90,9 +90,11 @@ export async function providerBalance(row: ProviderRow, opts: { force?: boolean 
  */
 export async function markForDispatch(saleId: number) {
   const rows = await q<{ id: number }>(
+    // เลขอ้างอิงตัดเหลือแต่ตัวอักษรกับตัวเลข 15 ตัว เพราะ OverTopup รับได้เท่านี้
+    // (เลขบิลเรา PJ-250816-001 -> PJ250816001 ยังไม่ซ้ำกัน และ unique index คุมอีกชั้น)
     `update sales s
         set provider_id = p.provider_id,
-            provider_ref = s.code,
+            provider_ref = left(regexp_replace(s.code, '[^A-Za-z0-9]', '', 'g'), 15),
             provider_state = 'queued'
        from products p
       where s.id = $1
@@ -123,6 +125,7 @@ type ClaimRow = {
   provider_game_id: string | null
   provider_server_id: string | null
   provider_sku: string | null
+  provider_product_type: string | null
   p_id: number | null
   p_name: string | null
   p_kind: string | null
@@ -205,6 +208,22 @@ async function refundFailed(saleId: number, reason: string) {
   return { state: 'failed' as const, message: reason }
 }
 
+/**
+ * URL ที่ให้ผู้ให้บริการยิงผลกลับมา
+ * ต้องมีกุญแจลับอยู่ใน path ไม่งั้นใครก็ยิงมาปลอมสถานะ "เติมสำเร็จ" ได้
+ * ยังไม่ตั้งกุญแจ = ส่ง path ที่ไม่ทำอะไร (บางเจ้าบังคับให้ส่งฟิลด์นี้) แล้วใช้การตามสถานะแทน
+ */
+export function callbackUrl() {
+  const base =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : null)
+  if (!base) return null
+  const secret = process.env.PROVIDER_CALLBACK_SECRET
+  return `${base.replace(/\/+$/, '')}/api/provider-callback/${secret || 'disabled'}`
+}
+
 /** เอาผลที่ได้จากปลายทางมาลงบิล */
 async function applyCheck(saleId: number, result: CheckResult) {
   if (result.state === 'success') {
@@ -221,7 +240,44 @@ async function applyCheck(saleId: number, result: CheckResult) {
     return { state: 'success' as const, message: result.message }
   }
   if (result.state === 'failed') return refundFailed(saleId, result.message)
+  // จบแล้วแต่สรุปไม่ได้ว่าเติมเข้าหรือไม่ / ตรวจสอบไม่ได้ — พักไว้ให้คนตัดสิน ห้ามคืนเงินเอง
+  if (result.state === 'attention' || result.state === 'unknown') {
+    return setState(saleId, 'error', result.message, result.orderId)
+  }
   return setState(saleId, 'sent', result.message, result.orderId)
+}
+
+/**
+ * รับผลที่ผู้ให้บริการยิงกลับมาเอง (callback)
+ * จับคู่กลับเข้าบิลด้วยเลขอ้างอิงที่เราส่งไป จึงใช้ได้แม้ตอนยิงออเดอร์ไปแล้วไม่ได้ผลกลับ
+ * ซึ่งเป็นทางเดียวที่จะรู้เลขออเดอร์ของ OverTopup ในกรณีนั้น
+ */
+export async function applyCallback(input: {
+  ref: string
+  orderId: string | null
+  result: CheckResult
+}) {
+  const sale = await q1<{ id: number; provider_state: string | null }>(
+    'select id, provider_state from sales where provider_ref = $1',
+    [input.ref]
+  )
+  if (!sale) return { matched: false as const }
+
+  // บิลที่จบไปแล้วไม่ต้องแตะซ้ำ กัน callback ที่ยิงมาซ้ำหรือมาช้าย้อนสถานะ
+  if (sale.provider_state === 'success' || sale.provider_state === 'failed') {
+    return { matched: true as const, skipped: true as const }
+  }
+
+  // เก็บเลขออเดอร์ที่เพิ่งรู้ไว้ก่อน จะได้ตามสถานะเองได้ในรอบถัดไป
+  if (input.orderId) {
+    await q(
+      'update sales set provider_order_id = coalesce(provider_order_id, $2) where id = $1',
+      [sale.id, input.orderId]
+    )
+  }
+
+  await applyCheck(sale.id, input.result)
+  return { matched: true as const, skipped: false as const }
 }
 
 /**
@@ -245,7 +301,7 @@ export async function dispatchSale(saleId: number) {
      )
      select c.id as sale_id, c.code, c.qty, c.game_account, c.cost_total,
             c.provider_ref, c.provider_order_id, c.provider_attempts,
-            p.provider_game_id, p.provider_server_id, p.provider_sku,
+            p.provider_game_id, p.provider_server_id, p.provider_sku, p.provider_product_type,
             ap.id as p_id, ap.name as p_name, ap.kind as p_kind,
             ap.base_url as p_base_url, ap.username as p_username, ap.api_key as p_api_key,
             ap.balance::float8 as p_balance, ap.balance_at as p_balance_at
@@ -320,6 +376,8 @@ export async function dispatchSale(saleId: number) {
       sku: sale.provider_sku,
       quantity: sale.qty,
       account: sale.game_account,
+      productType: sale.provider_product_type,
+      callbackUrl: callbackUrl(),
     })
 
     await q(
@@ -401,7 +459,9 @@ export async function syncPendingSales({ budgetMs = 6000 } = {}) {
       })
       // ปลายทางหาไม่เจอทั้งที่เราส่งไปแล้ว — อาจยังไม่ขึ้นระบบ อย่าเพิ่งด่วนสรุป
       // แค่เลื่อนเวลาเช็กออกไป รอบหน้าค่อยถามใหม่
-      if (result.state === 'missing') {
+      // ปลายทางหาไม่เจอ / ตรวจสอบไม่ได้ — อาจยังไม่ขึ้นระบบ อย่าเพิ่งด่วนสรุป
+      // แค่เลื่อนเวลาเช็กออกไป รอบหน้าค่อยถามใหม่
+      if (result.state === 'missing' || result.state === 'unknown') {
         await q('update sales set provider_checked_at = now() where id = $1', [row.id])
         continue
       }
