@@ -102,6 +102,8 @@ export default async function GameDetailPage({
   if (!game) notFound()
 
   const publishedCount = products.filter((p) => p.is_published).length
+  // แพ็กที่ตั้ง % ไว้ = ราคาขายจะคิดใหม่ให้เองทุกครั้งที่ต้นทุนเปลี่ยน
+  const autoCount = products.filter((p) => p.markup_percent != null).length
 
   // ช่องทางที่รวมอยู่ในเกมนี้ มีมากกว่าหนึ่งแปลว่าเคยรวมมา จึงแยกกลับได้
   const variantsInGame = [
@@ -592,14 +594,36 @@ export default async function GameDetailPage({
           {products.length > 0 && isAdmin ? (
             <ActionForm id="markup-form" action={saveMarkupsAction} className="mb-4">
               <input type="hidden" name="game_id" value={game.id} />
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-700 bg-ink-850 p-3">
-                <p className="text-xs leading-relaxed text-mute">
-                  แก้ช่อง <b className="text-slate-200">ปรับกำไร %</b> ในตารางได้หลายแถว
-                  แล้วกดบันทึกทีเดียว · เว้นว่าง = กลับไปตั้งราคาขายเอง (ราคาเดิมไม่หาย)
-                </p>
-                <SubmitButton className="btn-primary" pendingLabel="กำลังบันทึก...">
-                  บันทึกกำไรที่แก้ไว้
-                </SubmitButton>
+              <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs leading-relaxed text-mute">
+                    แก้ช่อง <b className="text-slate-200">ปรับกำไร %</b> ในตารางได้หลายแถว
+                    แล้วกดบันทึกทีเดียว · แถวที่ไม่ได้แตะจะไม่ถูกเปลี่ยน
+                  </p>
+                  <SubmitButton className="btn-primary" pendingLabel="กำลังบันทึก...">
+                    บันทึกกำไรที่แก้ไว้
+                  </SubmitButton>
+                </div>
+
+                {/* บอกให้เห็นว่ามีกี่แพ็กที่จะคิดราคาใหม่ให้เองตอนดึงข้อมูลรอบหน้า
+                    แพ็กที่ตั้งราคาเองจะไม่ขยับตาม พอปลายทางขึ้นราคาแล้วกำไรจะหดเงียบ ๆ */}
+                <div className="mt-2 border-t border-ink-700 pt-2 text-xs leading-relaxed">
+                  {autoCount === products.length ? (
+                    <span className="text-good">
+                      ✓ ทุกแพ็กเกจ ({num(products.length)}) คิดราคาอัตโนมัติอยู่ —
+                      ตอนดึงข้อมูลใหม่แล้วต้นทุนเปลี่ยน ราคาขายจะคิดใหม่ให้เองโดยกำไรเท่าเดิม
+                    </span>
+                  ) : (
+                    <span className="text-warn">
+                      ⚠ คิดราคาอัตโนมัติ {num(autoCount)} จาก {num(products.length)} แพ็กเกจ ·
+                      อีก {num(products.length - autoCount)} แพ็กตั้งราคาเองไว้{' '}
+                      <b className="text-slate-200">
+                        ซึ่งจะไม่ขยับตามตอนผู้ให้บริการขึ้นราคา ทำให้กำไรหดโดยไม่รู้ตัว
+                      </b>{' '}
+                      — ใส่ % ให้ครบ หรือใช้ปุ่ม “ตั้งกำไรทุกแพ็กเกจในเกมนี้ทีเดียว” ด้านบน
+                    </span>
+                  )}
+                </div>
               </div>
             </ActionForm>
           ) : null}

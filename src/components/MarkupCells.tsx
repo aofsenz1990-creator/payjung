@@ -58,6 +58,15 @@ export function MarkupCells({
         </td>
       ) : null}
       <td className="text-right">
+        {/* ส่งค่าเดิมไปด้วย ฝั่งเซิร์ฟเวอร์จะได้รู้ว่าแถวไหน "ถูกแก้จริง"
+            ไม่งั้นแถวที่เว้นว่างไว้เฉย ๆ จะถูกตีความว่าสั่งให้เลิกคิดอัตโนมัติ
+            แล้วโดนล้างค่าทิ้งทั้งที่เจ้าของร้านไม่ได้ตั้งใจ */}
+        <input
+          type="hidden"
+          form="markup-form"
+          name={`markup_was_${productId}`}
+          value={savedText}
+        />
         <input
           form="markup-form"
           name={`markup_${productId}`}

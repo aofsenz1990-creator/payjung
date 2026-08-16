@@ -502,13 +502,21 @@ export async function saveMarkupsAction(formData: FormData): Promise<ActionState
   if (!gameId) return { error: 'ไม่พบเกมนี้' }
 
   // อ่านทุกช่องที่ชื่อขึ้นต้นด้วย markup_ แล้วตามด้วยรหัสแพ็กเกจ
+  //
+  // เอาเฉพาะแถวที่ "ค่าต่างจากเดิม" เท่านั้น
+  // ฟอร์มส่งทุกแถวมาเสมอ ถ้าเหมาเอาว่าช่องว่าง = สั่งให้เลิกคิดอัตโนมัติ
+  // การพิมพ์แค่แถวเดียวแล้วกดบันทึก จะไปล้างค่าของแถวอื่นที่ไม่ได้แตะทิ้งหมด
   const rows: Array<[number, number | null]> = []
   for (const [key, raw] of formData.entries()) {
-    if (!key.startsWith('markup_') || typeof raw !== 'string') continue
+    if (!key.startsWith('markup_') || key.startsWith('markup_was_')) continue
+    if (typeof raw !== 'string') continue
     const productId = Number(key.slice('markup_'.length))
     if (!Number.isFinite(productId) || productId <= 0) continue
 
     const text = raw.trim()
+    const before = formData.get(`markup_was_${productId}`)
+    if (typeof before === 'string' && before.trim() === text) continue // ไม่ได้แก้แถวนี้
+
     if (text === '') {
       rows.push([productId, null])
       continue
@@ -520,7 +528,9 @@ export async function saveMarkupsAction(formData: FormData): Promise<ActionState
     rows.push([productId, pct])
   }
 
-  if (rows.length === 0) return { error: 'ไม่มีอะไรให้บันทึก' }
+  if (rows.length === 0) {
+    return { ok: 'ไม่มีแถวไหนถูกแก้ — ไม่ได้เปลี่ยนอะไร' }
+  }
 
   try {
     // สร้างตารางชั่วคราวจากค่าที่กรอกมา แล้วอัปเดตทีเดียวทั้งชุด
