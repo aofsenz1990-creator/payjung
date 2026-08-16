@@ -3,6 +3,7 @@ import { q } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
 import { createSaleAction, cancelSaleAction, markPaidAction, refundSaleAction } from '@/lib/actions/sales'
 import { sendToProviderAction, stopDispatchAction } from '@/lib/actions/dispatch'
+import { jsonRecord } from '@/lib/json'
 import { dateTime, money, nowLocalInput, num, todayISO } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { AutoRefresh } from '@/components/AutoRefresh'
@@ -52,7 +53,7 @@ export default async function SalesPage() {
       provider_state: string | null
       provider_message: string | null
       provider_name: string | null
-      provider_fields: Record<string, string> | null
+      provider_fields: unknown
     }>(
       `select s.id, s.code, s.sold_at, s.item_name, g.name as game, coalesce(c.name, s.customer_name) as customer, s.source,
               s.game_account, s.qty, s.total::float8 as total, s.profit::float8 as profit, s.slip_path,
@@ -165,15 +166,13 @@ export default async function SalesPage() {
                       ) : null}
                       {/* เกมที่ต้องเลือกเซิร์ฟเวอร์/ภูมิภาค ต้องเห็นค่าที่ลูกค้าเลือก
                           ไม่งั้นเวลาต้องเติมเองจะไม่รู้ว่าเติมเข้าที่ไหน */}
-                      {s.provider_fields
-                        ? Object.entries(s.provider_fields)
-                            .filter(([k]) => k !== 'uid')
-                            .map(([k, v]) => (
-                              <span key={k} className="block text-xs text-brand-400">
-                                {k}: {v}
-                              </span>
-                            ))
-                        : null}
+                      {Object.entries(jsonRecord(s.provider_fields) ?? {})
+                        .filter(([k]) => k !== 'uid')
+                        .map(([k, v]) => (
+                          <span key={k} className="block text-xs text-brand-400">
+                            {k}: {v}
+                          </span>
+                        ))}
                       {s.source ? (
                         <span className="mt-0.5 inline-block text-xs text-brand-400">
                           มาจาก {s.source}

@@ -7,6 +7,7 @@ import { requireAdmin, requirePage } from '@/lib/auth'
 import { getShopCustomer, getSiteSettings, registrationOpen, SITE_KEYS } from '@/lib/shop'
 import { SlipError, uploadImage } from '@/lib/storage'
 import { autoDispatchOn, dispatchSale, markForDispatch } from '@/lib/dispatch'
+import { jsonArray } from '@/lib/json'
 import { supabaseAdmin, supabaseServer } from '@/lib/supabase'
 import { bool, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
@@ -313,7 +314,7 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
       cost_price: number
       track_stock: boolean
       stock_qty: number
-      provider_fields: Array<{ key: string; label: string }> | null
+      provider_fields: unknown
     }>(
       `select id, game_id, name, sell_price::float8 as sell_price, cost_price::float8 as cost_price,
               track_stock, stock_qty, provider_fields
@@ -325,7 +326,7 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
     // เกมที่ผู้ให้บริการบอกว่าต้องกรอกหลายช่อง (เช่นต้องเลือกเซิร์ฟเวอร์) ต้องเก็บให้ครบ
     // ตรวจที่ฝั่งเซิร์ฟเวอร์ด้วย เพราะ required ในฟอร์มเลี่ยงได้ง่าย
     // และถ้าส่งไปไม่ครบ ปลายทางอาจเติมเข้าผิดเซิร์ฟเวอร์ซึ่งเอาเงินคืนไม่ได้
-    const spec = product.provider_fields ?? []
+    const spec = jsonArray<{ key: string; label: string }>(product.provider_fields) ?? []
     let fieldValues: Record<string, string> | null = null
     let gameAccount = ''
 

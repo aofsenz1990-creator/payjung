@@ -1,5 +1,6 @@
 import 'server-only'
 import { q, q1 } from './db'
+import { jsonRecord } from './json'
 import { adapterFor, supportsAuto, toConfig } from './providers/registry'
 import { ProviderError, type CheckResult } from './providers/types'
 import { providerMeta } from './providers/constants'
@@ -119,7 +120,7 @@ type ClaimRow = {
   code: string
   qty: number
   game_account: string | null
-  provider_fields: Record<string, string> | null
+  provider_fields: unknown
   cost_total: number
   provider_ref: string | null
   provider_order_id: string | null
@@ -386,7 +387,7 @@ export async function dispatchSale(saleId: number) {
       quantity: sale.qty,
       account: sale.game_account,
       // ค่าที่ลูกค้ากรอกตอนสั่ง (เช่นเซิร์ฟเวอร์ที่เลือก) ต้องส่งไปให้ครบ
-      fields: sale.provider_fields,
+      fields: jsonRecord(sale.provider_fields),
       productType: sale.provider_product_type,
       callbackUrl: callbackUrl(),
       // ส่งราคาทุนที่เราบันทึกไว้ไปให้ปลายทางตรวจ ถ้าเขาขึ้นราคาแล้วเราไม่รู้

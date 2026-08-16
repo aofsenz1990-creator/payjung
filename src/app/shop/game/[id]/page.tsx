@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { getShopCustomer } from '@/lib/shop'
+import { jsonArray } from '@/lib/json'
 import { shopOrderAction } from '@/lib/actions/shop'
 import { BuyForm, type BuyField, type BuyPackage } from '@/components/BuyForm'
 
@@ -17,7 +18,7 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
       'select id, name, image_url, description from games where id = $1 and is_published and is_active',
       [gameId]
     ),
-    q<BuyPackage & { provider_fields: BuyField[] | null }>(
+    q<BuyPackage & { provider_fields: unknown }>(
       `select id, name, sell_price::float8 as sell_price, image_url, track_stock, stock_qty,
               provider_fields
          from products
@@ -31,7 +32,14 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
   if (!game) notFound()
 
   // ช่องที่ต้องกรอกเป็นของเกม ไม่ใช่ของแพ็กเกจ จึงหยิบจากแพ็กแรกที่มีข้อมูล
-  const buyFields = packages.find((p) => p.provider_fields?.length)?.provider_fields ?? null
+  let buyFields: BuyField[] | null = null
+  for (const p of packages) {
+    const parsed = jsonArray<BuyField>(p.provider_fields)
+    if (parsed) {
+      buyFields = parsed
+      break
+    }
+  }
 
   return (
     <>
