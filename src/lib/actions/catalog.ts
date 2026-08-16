@@ -188,12 +188,17 @@ export async function setGameMarkupAction(formData: FormData): Promise<ActionSta
   const percent = decimal(formData, 'markup_percent')
   if (percent < 0) return { error: 'เปอร์เซ็นต์กำไรต้องไม่ติดลบ' }
 
+  // เติมเฉพาะแพ็กที่ยังไม่ได้ตั้ง % ไว้ ไม่ไปทับแพ็กที่ตั้งเปอร์เซ็นต์อื่นไว้แล้ว
+  // ใช้ตอนอยากให้ทุกแพ็กคิดราคาอัตโนมัติ แต่มีบางแพ็กที่ตั้งกำไรต่างจากตัวอื่นไว้ตั้งใจ
+  const onlyMissing = str(formData, 'only_missing') === '1'
+
   try {
     const rows = await q<{ id: number }>(
       `update products
           set markup_percent = $2,
               sell_price = ceil(cost_price * (1 + $2::numeric / 100))
         where game_id = $1
+          ${onlyMissing ? 'and markup_percent is null' : ''}
        returning id`,
       [gameId, percent]
     )
@@ -202,10 +207,18 @@ export async function setGameMarkupAction(formData: FormData): Promise<ActionSta
     revalidatePath('/games')
     revalidatePath('/storefront')
     revalidatePath('/shop')
+    if (rows.length === 0) {
+      return {
+        ok: onlyMissing
+          ? 'ทุกแพ็กเกจตั้ง % ไว้ครบแล้ว ไม่มีอะไรต้องเติม'
+          : 'ไม่พบแพ็กเกจในเกมนี้',
+      }
+    }
     return {
       ok:
-        `ตั้งกำไร ${percent}% ให้ ${rows.length} แพ็กเกจแล้ว — ` +
-        'ถ้าต้นทุนเปลี่ยนทีหลัง ราคาขายจะคิดใหม่ให้เองโดยกำไรเท่าเดิม',
+        `ตั้งกำไร ${percent}% ให้ ${rows.length} แพ็กเกจแล้ว` +
+        (onlyMissing ? ' (เฉพาะที่ยังไม่ได้ตั้ง — ที่ตั้งไว้แล้วไม่ถูกแตะ)' : '') +
+        ' — ถ้าต้นทุนเปลี่ยนทีหลัง ราคาขายจะคิดใหม่ให้เองโดยกำไรเท่าเดิม',
     }
   } catch (err) {
     return { error: friendlyError(err, 'ตั้งราคาขายไม่สำเร็จ') }

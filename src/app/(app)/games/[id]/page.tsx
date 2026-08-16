@@ -447,6 +447,16 @@ export default async function GameDetailPage({
                   <SubmitButton className="btn-primary" pendingLabel="กำลังตั้ง...">
                     ตั้งราคาขายให้ทุกแพ็ก
                   </SubmitButton>
+                  {/* ทับทุกแพ็กไม่ได้เสมอไป เพราะบางแพ็กอาจตั้งกำไรต่างจากตัวอื่นไว้ตั้งใจ */}
+                  <SubmitButton
+                    name="only_missing"
+                    value="1"
+                    className="btn-ghost"
+                    pendingLabel="กำลังเติม..."
+                    title="ไม่แตะแพ็กที่ตั้ง % ไว้แล้ว"
+                  >
+                    เติมเฉพาะแพ็กที่ยังตั้งเอง
+                  </SubmitButton>
                 </div>
               </ActionForm>
               <p className="mt-2 text-xs leading-relaxed text-mute">
