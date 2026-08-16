@@ -50,6 +50,36 @@ function fieldLabel(f: BuyField) {
   return FIELD_LABEL_TH[f.key] ?? f.label ?? f.key
 }
 
+/** ส่วนขึ้นต้นที่ทุกชื่อเหมือนกัน */
+function commonPrefix(items: string[]) {
+  if (items.length < 2) return ''
+  let prefix = items[0]
+  for (const s of items.slice(1)) {
+    let i = 0
+    while (i < prefix.length && i < s.length && prefix[i] === s[i]) i++
+    prefix = prefix.slice(0, i)
+    if (!prefix) break
+  }
+  return prefix
+}
+
+/**
+ * ย่อชื่อประเภทให้เหลือเฉพาะส่วนที่ต่างกัน
+ * ผู้ให้บริการตั้งชื่อสินค้าเป็น "Ragnarok : zero global (GOC)" ทุกตัว
+ * ถ้าเอามาโชว์ทั้งชื่อ ปุ่มจะยาวและอ่านไม่ออกว่าต่างกันตรงไหน
+ * ตัดส่วนที่ซ้ำกันทิ้งแล้วเหลือแค่ GOC / OneOne / Razer gold
+ */
+function variantLabel(all: string[], one: string) {
+  const prefix = commonPrefix(all)
+  const rest = one.slice(prefix.length)
+  // ตัดวงเล็บและอักขระคั่นที่ค้างอยู่หัวท้ายหลังตัดส่วนซ้ำออก
+  const cleaned = rest
+    .replace(/^[\s(–—\-:|/]+/, '')
+    .replace(/[\s)–—\-:|/]+$/, '')
+    .trim()
+  return cleaned || one
+}
+
 const baht = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 /** เลือกแพ็กเกจ ใส่จำนวน แล้วกดสั่งซื้อโดยตัดจากเครดิต */
@@ -94,7 +124,7 @@ export function BuyForm({
       {/* เกมเดียวกันแต่คนละประเทศ/ค่าเงิน — ให้เลือกก่อนว่าจะเติมแบบไหน */}
       {hasVariants ? (
         <div>
-          <p className="label">เลือกประเภท</p>
+          <p className="label">เลือกช่องทางเติม</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {variants.map((v) => (
               <button
@@ -111,12 +141,12 @@ export function BuyForm({
                     : 'border-ink-700 bg-ink-850 text-slate-300 hover:border-ink-600'
                 }`}
               >
-                {v}
+                {variantLabel(variants, v)}
               </button>
             ))}
           </div>
           <p className="mt-1 text-xs leading-relaxed text-mute">
-            แต่ละประเภทเติมคนละแบบและใช้ข้อมูลคนละชุด เลือกให้ตรงกับบัญชีเกมของคุณ
+            แต่ละช่องทางเติมคนละแบบและใช้ข้อมูลคนละชุด เลือกให้ตรงกับบัญชีเกมของคุณ
           </p>
         </div>
       ) : null}

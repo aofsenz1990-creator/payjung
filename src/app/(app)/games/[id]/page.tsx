@@ -100,6 +100,11 @@ export default async function GameDetailPage({
 
   const publishedCount = products.filter((p) => p.is_published).length
 
+  // ชื่อเกมที่ตัดวงเล็บท้ายออกแล้ว ใช้เป็นค่าตั้งต้นตอนรวมเกม
+  // ผู้ให้บริการตั้งชื่อสินค้าเป็น "Ragnarok : zero global (GOC)" ทุกตัว
+  // พอรวมกันแล้วควรเหลือชื่อเกมสะอาด ๆ ส่วนช่องทางไปอยู่ในปุ่มเลือกของหน้าสั่งซื้อ
+  const baseGameName = game.name.replace(/\s*[([][^)\]]*[)\]]\s*$/, '').trim() || game.name
+
   return (
     <>
       <PageHeader
@@ -516,28 +521,34 @@ export default async function GameDetailPage({
                 </b>{' '}
                 · แพ็กเกจทั้งหมดของเกมนี้จะย้ายไป แล้วเกมนี้จะถูกลบทิ้ง
               </p>
-              <ActionForm action={mergeGameAction}>
+              <ActionForm action={mergeGameAction} className="space-y-2">
                 <input type="hidden" name="game_id" value={game.id} />
-                <div className="flex flex-wrap gap-2">
-                  <select
-                    name="into_game_id"
-                    className="input w-auto flex-1"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      — เลือกเกมปลายทาง —
+                <select name="into_game_id" className="input" required defaultValue="">
+                  <option value="" disabled>
+                    — เลือกเกมปลายทาง —
+                  </option>
+                  {otherGames.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
                     </option>
-                    {otherGames.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </select>
+                  ))}
+                </select>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    name="new_name"
+                    className="input flex-1"
+                    defaultValue={baseGameName}
+                    placeholder="ชื่อที่จะแสดงบนหน้าเว็บ"
+                    aria-label="ชื่อเกมที่จะแสดงบนหน้าเว็บ"
+                  />
                   <SubmitButton className="btn-ghost" pendingLabel="กำลังรวม...">
                     ย้ายไปรวม
                   </SubmitButton>
                 </div>
+                <p className="text-xs leading-relaxed text-mute">
+                  ชื่อนี้จะไปเปลี่ยนชื่อ<b className="text-slate-200">เกมปลายทาง</b>{' '}
+                  ให้เป็นชื่อสะอาด ๆ ไม่ติดชื่อช่องทาง เว้นว่างไว้ = ใช้ชื่อเดิมของปลายทาง
+                </p>
               </ActionForm>
             </div>
           ) : null}

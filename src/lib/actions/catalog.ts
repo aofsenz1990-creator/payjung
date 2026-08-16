@@ -276,6 +276,19 @@ export async function mergeGameAction(formData: FormData): Promise<ActionState> 
     const target = await q1<{ name: string }>('select name from games where id = $1', [intoId])
     if (!target) return { error: 'ไม่พบเกมปลายทาง' }
 
+    // ชื่อที่จะโชว์บนหน้าเว็บ ควรเป็นชื่อเกมสะอาด ๆ ไม่ติดชื่อช่องทางมาด้วย
+    // ("Ragnarok : zero global" ไม่ใช่ "Ragnarok : zero global (GOC)")
+    // เพราะช่องทางย้ายไปอยู่ในปุ่มเลือกของหน้าสั่งซื้อแล้ว
+    const newName = optStr(formData, 'new_name')
+    if (newName && newName !== target.name) {
+      const dup = await q1<{ id: number }>(
+        'select id from games where lower(name) = lower($1) and id <> $2',
+        [newName, intoId]
+      )
+      if (dup) return { error: `มีเกมชื่อ "${newName}" อยู่แล้ว ใช้ชื่ออื่นหรือรวมเข้ากับเกมนั้นแทน` }
+      await q('update games set name = $2 where id = $1', [intoId, newName])
+    }
+
     const moved = await q<{ id: number }>(
       `update products set game_id = $2 where game_id = $1 returning id`,
       [fromId, intoId]
@@ -285,10 +298,11 @@ export async function mergeGameAction(formData: FormData): Promise<ActionState> 
     await q('delete from games where id = $1', [fromId])
 
     refreshProductViews(intoId)
+    const shownName = newName || target.name
     return {
       ok:
-        `ย้าย ${moved.length} แพ็กเกจไปรวมกับ "${target.name}" แล้ว — ` +
-        'หน้าเว็บลูกค้าจะขึ้นปุ่มให้เลือกประเภทเองเมื่อมีมากกว่าหนึ่งแบบ',
+        `ย้าย ${moved.length} แพ็กเกจไปรวมกับ "${shownName}" แล้ว — ` +
+        'หน้าเว็บลูกค้าจะเห็นเป็นเกมเดียว แล้วเลือกช่องทางเติมในหน้าสั่งซื้อ',
     }
   } catch (err) {
     return { error: friendlyError(err, 'รวมเกมไม่สำเร็จ') }
