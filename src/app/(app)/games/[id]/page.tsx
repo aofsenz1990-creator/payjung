@@ -6,7 +6,7 @@ import { requirePage } from '@/lib/auth'
 import {
   deleteProductAction,
   saveProductAction,
-  mergeGameAction,
+  mergeGamesAction,
   setGameMarkupAction,
   setGamePublishedAction,
 } from '@/lib/actions/catalog'
@@ -521,9 +521,9 @@ export default async function GameDetailPage({
                 </b>{' '}
                 · แพ็กเกจทั้งหมดของเกมนี้จะย้ายไป แล้วเกมนี้จะถูกลบทิ้ง
               </p>
-              <ActionForm action={mergeGameAction} className="space-y-2">
-                <input type="hidden" name="game_id" value={game.id} />
-                <select name="into_game_id" className="input" required defaultValue="">
+              <ActionForm action={mergeGamesAction} className="space-y-2">
+                <input type="hidden" name="game_ids" value={game.id} />
+                <select name="game_ids" className="input" required defaultValue="">
                   <option value="" disabled>
                     — เลือกเกมปลายทาง —
                   </option>

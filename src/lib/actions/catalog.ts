@@ -264,45 +264,103 @@ export async function setGamePublishedAction(formData: FormData): Promise<Action
  * รวมแล้วหน้าเว็บจะขึ้นปุ่มให้เลือกประเภทเอง เพราะแต่ละแพ็กจำชื่อสินค้าต้นทาง
  * ไว้ที่ provider_variant และช่องที่ต้องกรอกก็ติดมากับแพ็กอยู่แล้ว
  */
-export async function mergeGameAction(formData: FormData): Promise<ActionState> {
-  await requireAdmin()
-  const fromId = int(formData, 'game_id')
-  const intoId = int(formData, 'into_game_id')
+/** ส่วนขึ้นต้นที่ทุกชื่อเหมือนกัน ใช้เดาชื่อเกมสะอาด ๆ ตอนรวม */
+function commonPrefix(items: string[]) {
+  if (items.length === 0) return ''
+  if (items.length === 1) return items[0]
+  let prefix = items[0]
+  for (const s of items.slice(1)) {
+    let i = 0
+    while (i < prefix.length && i < s.length && prefix[i] === s[i]) i++
+    prefix = prefix.slice(0, i)
+    if (!prefix) break
+  }
+  return prefix
+}
 
-  if (!fromId || !intoId) return { error: 'กรุณาเลือกเกมปลายทาง' }
-  if (fromId === intoId) return { error: 'เลือกเกมปลายทางเป็นตัวมันเองไม่ได้' }
+/** ตัดวงเล็บและอักขระคั่นที่ค้างอยู่ท้ายชื่อออก */
+function cleanGameName(name: string) {
+  return (
+    name
+      .replace(/\s*[([][^)\]]*[)\]]\s*$/, '')
+      .replace(/[\s([–—\-:|/]+$/, '')
+      .trim() || name.trim()
+  )
+}
+
+export async function mergeGamesAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const ids = [
+    ...new Set(
+      formData
+        .getAll('game_ids')
+        .filter((v): v is string => typeof v === 'string')
+        .map((v) => Number(v))
+        .filter((n) => Number.isFinite(n) && n > 0)
+    ),
+  ]
+
+  if (ids.length < 2) return { error: 'ติ๊กเลือกอย่างน้อย 2 เกมที่จะรวมเข้าด้วยกัน' }
 
   try {
-    const target = await q1<{ name: string }>('select name from games where id = $1', [intoId])
-    if (!target) return { error: 'ไม่พบเกมปลายทาง' }
+    const holes = ids.map((_, i) => `$${i + 1}`).join(',')
+    const games = await q<{ id: number; name: string; image_url: string | null }>(
+      `select id, name, image_url from games where id in (${holes}) order by id`,
+      ids
+    )
+    if (games.length < 2) return { error: 'ไม่พบเกมที่เลือก อาจถูกลบไปแล้ว' }
 
-    // ชื่อที่จะโชว์บนหน้าเว็บ ควรเป็นชื่อเกมสะอาด ๆ ไม่ติดชื่อช่องทางมาด้วย
+    // เก็บเกมที่มีรูปไว้เป็นตัวหลัก จะได้ไม่เสียรูปที่ตั้งไว้แล้ว
+    // ถ้าไม่มีอันไหนมีรูปก็ใช้ตัวแรกสุด
+    const target = games.find((g) => g.image_url) ?? games[0]
+    const others = games.filter((g) => g.id !== target.id)
+
+    // ชื่อที่จะโชว์บนหน้าเว็บควรเป็นชื่อเกมสะอาด ๆ ไม่ติดชื่อช่องทาง
     // ("Ragnarok : zero global" ไม่ใช่ "Ragnarok : zero global (GOC)")
-    // เพราะช่องทางย้ายไปอยู่ในปุ่มเลือกของหน้าสั่งซื้อแล้ว
-    const newName = optStr(formData, 'new_name')
+    // ไม่ได้กรอกมาก็เดาจากส่วนที่ทุกชื่อเหมือนกัน
+    const typed = optStr(formData, 'new_name')
+    const guessed = cleanGameName(commonPrefix(games.map((g) => g.name)))
+    // เดาได้สั้นเกินไป = ชื่อสองเกมไม่ได้เหมือนกันจริง (เช่น "Free Fire" กับ "Fortnite"
+    // เหมือนกันแค่ตัว F) ถ้าเอามาใช้จะเปลี่ยนชื่อเกมเป็น "F" ซึ่งพังกว่าเดิม
+    // กรณีแบบนี้ใช้ชื่อเดิมของตัวหลักไปก่อน แล้วให้คนพิมพ์เองถ้าอยากเปลี่ยน
+    const usable = guessed.length >= 3 ? guessed : ''
+    const newName = typed || usable
+
     if (newName && newName !== target.name) {
+      // เช็กชนกับเกมอื่นที่ไม่ได้อยู่ในชุดที่กำลังรวม ($1 คือชื่อ ที่เหลือคือ id ที่เลือกไว้)
+      const exclude = ids.map((_, i) => `$${i + 2}`).join(',')
       const dup = await q1<{ id: number }>(
-        'select id from games where lower(name) = lower($1) and id <> $2',
-        [newName, intoId]
+        `select id from games where lower(name) = lower($1) and id not in (${exclude})`,
+        [newName, ...ids]
       )
-      if (dup) return { error: `มีเกมชื่อ "${newName}" อยู่แล้ว ใช้ชื่ออื่นหรือรวมเข้ากับเกมนั้นแทน` }
-      await q('update games set name = $2 where id = $1', [intoId, newName])
+      if (dup) return { error: `มีเกมชื่อ "${newName}" อยู่แล้ว ใช้ชื่ออื่นหรือติ๊กเกมนั้นมารวมด้วย` }
+      await q('update games set name = $2 where id = $1', [target.id, newName])
     }
 
+    const fromIds = others.map((g) => g.id)
+    const fromHoles = fromIds.map((_, i) => `$${i + 2}`).join(',')
+
     const moved = await q<{ id: number }>(
-      `update products set game_id = $2 where game_id = $1 returning id`,
-      [fromId, intoId]
+      `update products set game_id = $1 where game_id in (${fromHoles}) returning id`,
+      [target.id, ...fromIds]
     )
     // บิลเก่ายังต้องชี้ไปที่เกมที่ยังอยู่ ไม่งั้นประวัติการขายจะไม่มีชื่อเกม
-    await q('update sales set game_id = $2 where game_id = $1', [fromId, intoId])
-    await q('delete from games where id = $1', [fromId])
+    await q(`update sales set game_id = $1 where game_id in (${fromHoles})`, [
+      target.id,
+      ...fromIds,
+    ])
+    await q(`delete from games where id in (${fromIds.map((_, i) => `$${i + 1}`).join(',')})`, fromIds)
 
-    refreshProductViews(intoId)
+    refreshProductViews(target.id)
     const shownName = newName || target.name
     return {
       ok:
-        `ย้าย ${moved.length} แพ็กเกจไปรวมกับ "${shownName}" แล้ว — ` +
-        'หน้าเว็บลูกค้าจะเห็นเป็นเกมเดียว แล้วเลือกช่องทางเติมในหน้าสั่งซื้อ',
+        `รวม ${games.length} เกมเป็น "${shownName}" แล้ว — ` +
+        `ย้ายมา ${moved.length} แพ็กเกจ · ` +
+        'หน้าเว็บลูกค้าจะเห็นเป็นเกมเดียว แล้วเลือกช่องทางเติมในหน้าสั่งซื้อ' +
+        (!typed && !usable
+          ? ' · เดาชื่อกลางไม่ได้เพราะชื่อเกมต่างกันมาก จึงใช้ชื่อเดิม แก้ได้ที่ปุ่มแก้ไขเกม'
+          : ''),
     }
   } catch (err) {
     return { error: friendlyError(err, 'รวมเกมไม่สำเร็จ') }

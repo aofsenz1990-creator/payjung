@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
-import { deleteGameAction, saveGameAction } from '@/lib/actions/catalog'
+import { deleteGameAction, mergeGamesAction, saveGameAction } from '@/lib/actions/catalog'
 import { money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { ImageInput } from '@/components/ImageInput'
@@ -179,12 +179,42 @@ export default async function GamesPage({
               )}
             </Empty>
           ) : (
-            <div className="table-wrap">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>รูป</th>
-                    <th>เกม</th>
+            /* ฟอร์มเดียวครอบตาราง — ติ๊กเลือกหลายเกมแล้วรวมเป็นเกมเดียวทีเดียว
+               ใช้ตอนผู้ให้บริการแยกเกมเดียวกันเป็นหลายช่องทาง (GOC / OneOne / Razer gold) */
+            <ActionForm action={mergeGamesAction}>
+              {isAdmin ? (
+                <div className="mb-3 rounded-xl border border-brand-500/30 bg-brand-500/10 p-3">
+                  <p className="mb-1 text-sm font-medium text-slate-100">
+                    🔗 รวมเกมที่ติ๊กไว้เป็นเกมเดียว
+                  </p>
+                  <p className="mb-2 text-xs leading-relaxed text-mute">
+                    ติ๊กเกมที่เป็นเกมเดียวกันแต่คนละช่องทาง แล้วกดรวม ·{' '}
+                    <b className="text-slate-200">
+                      หน้าเว็บลูกค้าจะเห็นเป็นเกมเดียว แล้วเลือกช่องทางเติมในหน้าสั่งซื้อ
+                    </b>{' '}
+                    · แพ็กเกจและบิลเก่าย้ายตามไปครบ ไม่มีอะไรหาย
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      name="new_name"
+                      className="input flex-1"
+                      placeholder="ชื่อที่จะแสดงบนเว็บ (เว้นว่าง = ตัดวงเล็บให้อัตโนมัติ)"
+                      aria-label="ชื่อเกมที่จะแสดงบนหน้าเว็บ"
+                    />
+                    <SubmitButton className="btn-primary" pendingLabel="กำลังรวม...">
+                      รวมเกมที่เลือก
+                    </SubmitButton>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="table-wrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      {isAdmin ? <th className="w-10">รวม</th> : null}
+                      <th>รูป</th>
+                      <th>เกม</th>
                     <th>ผู้ให้บริการ</th>
                     <th className="text-right">แพ็กเกจ</th>
                     <th className="text-right">สต๊อกรวม</th>
@@ -196,6 +226,17 @@ export default async function GamesPage({
                 <tbody>
                   {games.map((g) => (
                     <tr key={g.id}>
+                      {isAdmin ? (
+                        <td>
+                          <input
+                            type="checkbox"
+                            name="game_ids"
+                            value={g.id}
+                            className="size-4 rounded border-ink-600 bg-ink-850"
+                            aria-label={`เลือก ${g.name} เพื่อรวม`}
+                          />
+                        </td>
+                      ) : null}
                       <td>
                         {g.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -256,9 +297,10 @@ export default async function GamesPage({
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                  </tbody>
+                </table>
+              </div>
+            </ActionForm>
           )}
         </div>
       </div>
