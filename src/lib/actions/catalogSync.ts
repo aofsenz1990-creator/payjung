@@ -49,7 +49,7 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
 
     type Row = [
       number, string, string, string, string | null,
-      string, string, string, number, string | null,
+      string, string, string, number, string | null, string | null,
     ]
     const rows: Row[] = entries.map((e) => [
       providerId,
@@ -63,6 +63,7 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
       e.price,
       // เก็บเป็นข้อความ JSON แล้วให้ Postgres แปลงเป็น jsonb ตอน insert
       e.fields && e.fields.length > 0 ? JSON.stringify(e.fields) : null,
+      e.productType ?? null,
     ])
 
     if (rows.length === 0) return { error: 'ปลายทางไม่ได้ส่งรายการสินค้ามาเลย' }
@@ -75,17 +76,17 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
       const chunk = rows.slice(i, i + CHUNK)
       const values = chunk
         .map((_, n) => {
-          const b = n * 10
+          const b = n * 11
           return (
             `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},` +
-            `$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10}::jsonb)`
+            `$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10}::jsonb,$${b + 11})`
           )
         })
         .join(',')
       await q(
         `insert into provider_catalog
            (provider_id, game_id, game_name, server_id, server_name, pack_code, pack_name,
-            pack_desc, pack_price, fields)
+            pack_desc, pack_price, fields, product_type)
          values ${values}
          on conflict (provider_id, game_id, server_id, pack_code) do nothing`,
         chunk.flat()
@@ -139,10 +140,6 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
     )
     if (!provider) return { error: 'ไม่พบผู้ให้บริการนี้' }
 
-    // OverTopup ต้องระบุชนิดสินค้าตอนสั่ง — ตั้งเป็นเติมด้วย UID ไว้ก่อนซึ่งใช้บ่อยสุด
-    // แพ็กที่เป็นบัตรเงินสด ไปเปลี่ยนได้ที่หน้าแก้ไขแพ็กเกจ
-    const productType = provider.kind === 'overtopup' ? 'uid' : null
-
     // เงื่อนไขเลือกเกม — นำเข้าทั้งหมดก็ไม่ต้องกรอง
     const filterParams: unknown[] = [providerId]
     let gameFilter = ''
@@ -169,8 +166,6 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
     const insertParams = [...filterParams]
     const mHole = `$${insertParams.length + 1}`
     insertParams.push(markup)
-    const tHole = `$${insertParams.length + 1}`
-    insertParams.push(productType)
     const pHole = `$${insertParams.length + 1}`
     insertParams.push(publish)
 
@@ -188,7 +183,7 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
               true,
               round(c.pack_price)::int,
               c.provider_id, c.game_id, c.server_id, c.pack_code,
-              ${tHole}, nullif(${mHole}::numeric, 0), ${pHole}, c.fields
+              c.product_type, nullif(${mHole}::numeric, 0), ${pHole}, c.fields
          from provider_catalog c
          join games g on lower(g.name) = lower(c.game_name)
         where c.provider_id = $1${gameFilter}
@@ -238,5 +233,100 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
     }
   } catch (err) {
     return { error: friendlyError(err, 'นำเข้าไม่สำเร็จ') }
+  }
+}
+
+/**
+ * อัปเดตแพ็กเกจที่นำเข้าไปแล้วให้ตรงกับข้อมูลล่าสุดของผู้ให้บริการ
+ *
+ * กฎสำคัญ: **ห้ามทับราคาขายที่ตั้งไว้เอง**
+ *  - แพ็กที่ตั้งกำไรเป็น % ไว้ → คิดราคาขายใหม่จากต้นทุนใหม่ กำไรคงเดิม
+ *  - แพ็กที่พิมพ์ราคาขายเอง   → ราคาขายไม่ขยับเลย อัปเดตแค่ต้นทุน
+ *    (ต้นทุนที่ถูกต้องทำให้กำไรที่แสดงตรงความจริง และกันขายต่ำกว่าทุนโดยไม่รู้ตัว)
+ *
+ * ไม่แตะ ชื่อ รูป สถานะเปิดขาย สต๊อก หรือลำดับการแสดง — ของพวกนี้ร้านตั้งเอง
+ */
+export async function refreshImportedAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const providerId = int(formData, 'provider_id')
+  if (!providerId) return { error: 'กรุณาเลือกผู้ให้บริการ' }
+
+  try {
+    // ดูก่อนว่าต้นทุนของแพ็กไหนเปลี่ยนบ้าง จะได้รายงานให้เห็นว่ากระทบอะไร
+    const changes = await q<{ name: string; old_cost: number; new_cost: number }>(
+      `select p.name, p.cost_price::float8 as old_cost, c.pack_price::float8 as new_cost
+         from products p
+         join provider_catalog c
+           on c.provider_id = p.provider_id
+          and c.game_id = p.provider_game_id
+          and c.server_id = p.provider_server_id
+          and c.pack_code = p.provider_sku
+        where p.provider_id = $1 and p.cost_price is distinct from c.pack_price
+        order by abs(c.pack_price - p.cost_price) desc
+        limit 5`,
+      [providerId]
+    )
+
+    const updated = await q<{ id: number }>(
+      `update products p
+          set cost_price = c.pack_price,
+              provider_fields = c.fields,
+              provider_product_type = coalesce(c.product_type, p.provider_product_type),
+              -- ตั้ง % ไว้ = คิดราคาขายใหม่ให้กำไรเท่าเดิม
+              -- ตั้งราคาเอง = ไม่แตะราคาขายเด็ดขาด
+              sell_price = case when p.markup_percent is not null
+                                then ceil(c.pack_price * (1 + p.markup_percent / 100))
+                                else p.sell_price end
+         from provider_catalog c
+        where c.provider_id = p.provider_id
+          and c.game_id = p.provider_game_id
+          and c.server_id = p.provider_server_id
+          and c.pack_code = p.provider_sku
+          and p.provider_id = $1
+          and (p.cost_price is distinct from c.pack_price
+               or p.provider_fields is distinct from c.fields
+               or p.provider_product_type is distinct from c.product_type)
+       returning p.id`,
+      [providerId]
+    )
+
+    // เตือนแพ็กที่ตอนนี้ขายต่ำกว่าทุน — เกิดได้กับแพ็กที่ตั้งราคาเองแล้วปลายทางขึ้นราคา
+    const losing = await q<{ name: string; cost_price: number; sell_price: number }>(
+      `select name, cost_price::float8 as cost_price, sell_price::float8 as sell_price
+         from products
+        where provider_id = $1 and is_active and sell_price < cost_price
+        order by (cost_price - sell_price) desc
+        limit 5`,
+      [providerId]
+    )
+
+    revalidatePath('/storefront')
+    revalidatePath('/games')
+    revalidatePath('/shop')
+
+    if (updated.length === 0) {
+      return { ok: 'ข้อมูลตรงกับผู้ให้บริการอยู่แล้ว — ไม่มีอะไรต้องอัปเดต' }
+    }
+
+    const detail = changes
+      .map((c) => `${c.name} ${c.old_cost.toLocaleString('th-TH')}→${c.new_cost.toLocaleString('th-TH')}`)
+      .join(' · ')
+
+    const warn =
+      losing.length > 0
+        ? ` ⚠ ขายต่ำกว่าทุน ${losing.length} แพ็ก: ` +
+          losing.map((l) => `${l.name} (ทุน ${l.cost_price} ขาย ${l.sell_price})`).join(' · ') +
+          ' — ไปแก้ราคาขายด่วน'
+        : ''
+
+    return {
+      ok:
+        `อัปเดต ${updated.length} แพ็กเกจแล้ว — ราคาขายที่ตั้งเองไม่ถูกแตะ ` +
+        `ส่วนแพ็กที่ตั้งกำไรเป็น % ไว้คิดราคาใหม่ให้แล้ว` +
+        (detail ? ` · ต้นทุนที่เปลี่ยน: ${detail}` : '') +
+        warn,
+    }
+  } catch (err) {
+    return { error: friendlyError(err, 'อัปเดตข้อมูลไม่สำเร็จ') }
   }
 }

@@ -21,7 +21,11 @@ import { providerMeta } from '@/lib/providers/constants'
 import { DEFAULT_SHOP_BG, DEFAULT_SHOP_COVER, getSiteSettings, SITE_KEYS } from '@/lib/shop'
 import { ImageInput } from '@/components/ImageInput'
 import { ProviderForm } from '@/components/ProviderForm'
-import { importGamesAction, syncCatalogAction } from '@/lib/actions/catalogSync'
+import {
+  importGamesAction,
+  refreshImportedAction,
+  syncCatalogAction,
+} from '@/lib/actions/catalogSync'
 import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
@@ -509,6 +513,40 @@ export default async function StorefrontPage({
                 ร้านเราเป็นลูกค้าระดับ VIP (เฉพาะ OverTopup — ราคาทุนจะต่างจากระดับทั่วไป)
               </label>
             </ActionForm>
+
+            {/* อัปเดตของที่นำเข้าไปแล้ว โดยไม่แตะราคาขายที่ร้านตั้งเอง */}
+            <div className="mt-3 border-t border-ink-700 pt-3">
+              <ActionForm action={refreshImportedAction}>
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    name="provider_id"
+                    className="input w-auto flex-1"
+                    required
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      — เลือกผู้ให้บริการ —
+                    </option>
+                    {providers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <SubmitButton className="btn-ghost" pendingLabel="กำลังอัปเดต...">
+                    🔄 อัปเดตแพ็กเกจที่นำเข้าแล้ว
+                  </SubmitButton>
+                </div>
+              </ActionForm>
+              <p className="mt-2 text-xs leading-relaxed text-mute">
+                ซิงก์ <b className="text-slate-200">ต้นทุน</b> และ{' '}
+                <b className="text-slate-200">ช่องกรอกของลูกค้า</b> (เช่นตัวเลือกเซิร์ฟเวอร์)
+                ให้แพ็กเกจที่นำเข้าไปแล้ว ·{' '}
+                <b className="text-good">ราคาขายที่ตั้งเองไว้จะไม่ถูกแตะ</b>{' '}
+                ส่วนแพ็กที่ตั้งกำไรเป็น % ไว้จะคิดราคาใหม่ให้กำไรเท่าเดิม ·
+                กดหลังดึงรายการใหม่ทุกครั้ง
+              </p>
+            </div>
             <p className="mt-2 text-xs leading-relaxed text-mute">
               ดึงเกม เซิร์ฟเวอร์ และแพ็กเกจทั้งหมดที่ผู้ให้บริการเปิดขายอยู่มาเก็บไว้
               แล้วกดนำเข้าทีละเกมได้เลย ไม่ต้องพิมพ์รหัสเกม/รหัสแพ็กเกจเอง

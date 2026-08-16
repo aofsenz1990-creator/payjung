@@ -112,6 +112,9 @@ export const SCHEMA_STATEMENTS: string[] = [
   // ช่องที่เกมนั้นบังคับให้กรอกตอนสั่งเติม เช่น uid, server (บางเกมต้องเลือกภูมิภาค)
   // เก็บทั้งชื่อช่อง ป้ายกำกับ และตัวเลือกที่มีให้เลือก ตามที่ผู้ให้บริการส่งมา
   `alter table provider_catalog add column if not exists fields jsonb`,
+  // ชนิดสินค้ารายแพ็ก (uid / card / idpass) — ต่างกันได้ในผู้ให้บริการเดียวกัน
+  // และใช้ path คนละอันตอนสั่ง ถ้าตั้งเหมือนกันหมดบัตรเงินสดจะถูกส่งผิดที่
+  `alter table provider_catalog add column if not exists product_type text`,
   `create index if not exists provider_catalog_game_idx on provider_catalog (provider_id, game_name)`,
 
   `create table if not exists customers (

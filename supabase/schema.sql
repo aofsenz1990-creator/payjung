@@ -312,3 +312,5 @@ alter table provider_catalog add column if not exists fields jsonb;
 alter table products add column if not exists provider_fields jsonb;
 -- ค่าที่ลูกค้ากรอกจริง เก็บไว้กับบิลเพราะตอนส่งซ้ำต้องใช้ชุดเดิมเป๊ะ
 alter table sales add column if not exists provider_fields jsonb;
+-- ชนิดสินค้ารายแพ็ก (uid / card / idpass) ใช้ path คนละอันตอนสั่ง
+alter table provider_catalog add column if not exists product_type text;
