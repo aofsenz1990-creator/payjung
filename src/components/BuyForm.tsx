@@ -102,12 +102,19 @@ export function BuyForm({
   const [productId, setProductId] = useState<number | null>(packages[0]?.id ?? null)
   const [qty, setQty] = useState(1)
 
-  // เกมเดียวกันอาจมีหลายประเภทตามประเทศ/ค่าเงิน ให้ลูกค้าเลือกก่อนแล้วค่อยโชว์แพ็กเกจของประเภทนั้น
-  const variants = [...new Set(packages.map((p) => p.variant).filter(Boolean))] as string[]
-  const hasVariants = variants.length > 1
-  const [variant, setVariant] = useState<string | null>(variants[0] ?? null)
+  // เกมเดียวกันอาจมีหลายช่องทางตามประเทศ/ค่าเงิน ให้ลูกค้าเลือกก่อนแล้วค่อยโชว์แพ็กของช่องทางนั้น
+  //
+  // แพ็กที่ยังไม่มีชื่อช่องทาง (นำเข้ามาก่อนจะมีระบบนี้) ต้องมีที่อยู่เสมอ
+  // ถ้าปล่อยเป็นค่าว่างแล้วกรองด้วยชื่อช่องทาง แพ็กพวกนั้นจะหายไปจากหน้าเว็บทั้งหมด
+  // ลูกค้าจะซื้อไม่ได้ทั้งที่เปิดขายอยู่ — จึงจับใส่กลุ่ม "อื่น ๆ" ไว้แทน
+  const OTHER = 'อื่น ๆ'
+  const variantOf = (p: BuyPackage) => p.variant?.trim() || OTHER
 
-  const shown = hasVariants ? packages.filter((p) => p.variant === variant) : packages
+  const variants = [...new Set(packages.map(variantOf))]
+  const hasVariants = variants.length > 1
+  const [variant, setVariant] = useState<string>(variants[0] ?? OTHER)
+
+  const shown = hasVariants ? packages.filter((p) => variantOf(p) === variant) : packages
   const selected = shown.find((p) => p.id === productId) ?? shown[0] ?? null
 
   // ช่องที่ต้องกรอกยึดตามแพ็กที่เลือก เพราะคนละประเภทใช้คนละชุด (UID / Link / AID)

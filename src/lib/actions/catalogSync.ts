@@ -284,8 +284,11 @@ export async function refreshImportedAction(formData: FormData): Promise<ActionS
           and c.server_id = p.provider_server_id
           and c.pack_code = p.provider_sku
           and p.provider_id = $1
+          -- ต้องเช็กทุกคอลัมน์ที่คำสั่งนี้เขียน ไม่งั้นแถวที่ต่างกันเฉพาะคอลัมน์
+          -- ที่ไม่ได้เช็กจะถูกข้ามไป แล้วกู้ข้อมูลที่หายไม่ได้
           and (p.cost_price is distinct from c.pack_price
                or p.provider_fields is distinct from c.fields
+               or p.provider_variant is distinct from c.game_name
                or p.provider_product_type is distinct from c.product_type)
        returning p.id`,
       [providerId]

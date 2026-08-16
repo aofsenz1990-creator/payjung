@@ -318,6 +318,21 @@ export async function mergeGamesAction(formData: FormData): Promise<ActionState>
     // ชื่อที่จะโชว์บนหน้าเว็บควรเป็นชื่อเกมสะอาด ๆ ไม่ติดชื่อช่องทาง
     // ("Ragnarok : zero global" ไม่ใช่ "Ragnarok : zero global (GOC)")
     // ไม่ได้กรอกมาก็เดาจากส่วนที่ทุกชื่อเหมือนกัน
+    // จำชื่อเกมเดิมไว้เป็นชื่อช่องทางก่อนทำอย่างอื่น
+    //
+    // ต้องทำตรงนี้เพราะแพ็กที่นำเข้ามาก่อนจะมีระบบช่องทางยังไม่มีค่านี้
+    // ถ้าไม่เติมให้ พอรวมเสร็จหน้าเว็บจะไม่ขึ้นปุ่มเลือกช่องทาง แล้วแสดงทุกแพ็กปนกัน
+    // และต้องทำ "ก่อนเปลี่ยนชื่อเกมหลัก" ไม่งั้นแพ็กของตัวหลักจะได้ชื่อใหม่ที่ไม่มีช่องทาง
+    await q(
+      `update products p
+          set provider_variant = g.name
+         from games g
+        where g.id = p.game_id
+          and p.game_id in (${holes})
+          and p.provider_variant is null`,
+      ids
+    )
+
     const typed = optStr(formData, 'new_name')
     const guessed = cleanGameName(commonPrefix(games.map((g) => g.name)))
     // เดาได้สั้นเกินไป = ชื่อสองเกมไม่ได้เหมือนกันจริง (เช่น "Free Fire" กับ "Fortnite"
