@@ -179,11 +179,18 @@ export default async function GamesPage({
               )}
             </Empty>
           ) : (
-            /* ฟอร์มเดียวครอบตาราง — ติ๊กเลือกหลายเกมแล้วรวมเป็นเกมเดียวทีเดียว
-               ใช้ตอนผู้ให้บริการแยกเกมเดียวกันเป็นหลายช่องทาง (GOC / OneOne / Razer gold) */
-            <ActionForm action={mergeGamesAction}>
+            /* ฟอร์มรวมเกมต้องอยู่ "นอกตาราง" เท่านั้น
+               เพราะในตารางมีฟอร์มปุ่มลบอยู่แล้ว และ HTML ห้ามวางฟอร์มซ้อนกัน
+               ถ้าครอบทั้งตาราง เบราว์เซอร์จะทิ้งฟอร์มปุ่มลบไปเงียบ ๆ แล้วปุ่มลบจะกลายเป็น
+               ปุ่มส่งฟอร์มรวมเกมแทน = กดลบแล้วไม่มีอะไรถูกลบ
+               ช่องติ๊กในตารางผูกกลับมาด้วย form="merge-form" */
+            <>
               {isAdmin ? (
-                <div className="mb-3 rounded-xl border border-brand-500/30 bg-brand-500/10 p-3">
+                <ActionForm
+                  id="merge-form"
+                  action={mergeGamesAction}
+                  className="mb-3 rounded-xl border border-brand-500/30 bg-brand-500/10 p-3"
+                >
                   <p className="mb-1 text-sm font-medium text-slate-100">
                     🔗 รวมเกมที่ติ๊กไว้เป็นเกมเดียว
                   </p>
@@ -205,7 +212,7 @@ export default async function GamesPage({
                       รวมเกมที่เลือก
                     </SubmitButton>
                   </div>
-                </div>
+                </ActionForm>
               ) : null}
 
               <div className="table-wrap">
@@ -229,6 +236,7 @@ export default async function GamesPage({
                       {isAdmin ? (
                         <td>
                           <input
+                            form="merge-form"
                             type="checkbox"
                             name="game_ids"
                             value={g.id}
@@ -300,7 +308,7 @@ export default async function GamesPage({
                   </tbody>
                 </table>
               </div>
-            </ActionForm>
+            </>
           )}
         </div>
       </div>
