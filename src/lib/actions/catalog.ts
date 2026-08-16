@@ -304,8 +304,16 @@ export async function mergeGamesAction(formData: FormData): Promise<ActionState>
 
   try {
     const holes = ids.map((_, i) => `$${i + 1}`).join(',')
-    const games = await q<{ id: number; name: string; image_url: string | null }>(
-      `select id, name, image_url from games where id in (${holes}) order by id`,
+    const games = await q<{
+      id: number
+      name: string
+      image_url: string | null
+      description: string | null
+      publisher: string | null
+      is_published: boolean
+    }>(
+      `select id, name, image_url, description, publisher, is_published
+         from games where id in (${holes}) order by id`,
       ids
     )
     if (games.length < 2) return { error: 'ไม่พบเกมที่เลือก อาจถูกลบไปแล้ว' }
@@ -341,15 +349,14 @@ export async function mergeGamesAction(formData: FormData): Promise<ActionState>
     const usable = guessed.length >= 3 ? guessed : ''
     const newName = typed || usable
 
+    // เช็กชนกับเกมอื่นที่ "ไม่ได้อยู่ในชุดที่กำลังรวม" ตัวที่อยู่ในชุดเดี๋ยวก็ถูกลบไป
     if (newName && newName !== target.name) {
-      // เช็กชนกับเกมอื่นที่ไม่ได้อยู่ในชุดที่กำลังรวม ($1 คือชื่อ ที่เหลือคือ id ที่เลือกไว้)
       const exclude = ids.map((_, i) => `$${i + 2}`).join(',')
       const dup = await q1<{ id: number }>(
         `select id from games where lower(name) = lower($1) and id not in (${exclude})`,
         [newName, ...ids]
       )
       if (dup) return { error: `มีเกมชื่อ "${newName}" อยู่แล้ว ใช้ชื่ออื่นหรือติ๊กเกมนั้นมารวมด้วย` }
-      await q('update games set name = $2 where id = $1', [target.id, newName])
     }
 
     const fromIds = others.map((g) => g.id)
@@ -365,6 +372,32 @@ export async function mergeGamesAction(formData: FormData): Promise<ActionState>
       ...fromIds,
     ])
     await q(`delete from games where id in (${fromIds.map((_, i) => `$${i + 1}`).join(',')})`, fromIds)
+
+    // เก็บของดีจากทุกเกมที่รวมมาไว้ที่ตัวหลัก
+    // ถ้าตัวหลักบังเอิญเป็นตัวที่ยังไม่ได้เปิดขาย พอรวมเสร็จเกมจะหายจากหน้าเว็บทันที
+    // ทั้งที่เมื่อกี้ยังขายอยู่ — เอาแบบมีตัวไหนเปิดอยู่ก็ถือว่าเปิด
+    // ส่วนรูป/คำอธิบาย/ผู้ให้บริการ เติมจากตัวที่มีถ้าตัวหลักยังว่าง
+    const pick = <K extends 'image_url' | 'description' | 'publisher'>(key: K) =>
+      target[key] ?? games.find((g) => g[key])?.[key] ?? null
+
+    // เปลี่ยนชื่อ "หลังลบเกมอื่นแล้ว" เท่านั้น
+    //
+    // ชื่อเกมห้ามซ้ำกันในฐานข้อมูล และชื่อที่จะตั้งมักเป็นชื่อของเกมตัวใดตัวหนึ่งในชุด
+    // ที่กำลังรวมอยู่พอดี (เช่นรวม "X", "X (OneOne)", "X (Razer)" แล้วตั้งชื่อว่า "X")
+    // ถ้าเปลี่ยนชื่อก่อนลบ จะไปชนกับตัวที่ยังไม่ถูกลบแล้วล้มทั้งคำสั่ง = กดรวมแล้วไม่มีอะไรเกิดขึ้น
+    await q(
+      `update games
+          set name = $2, image_url = $3, description = $4, publisher = $5, is_published = $6
+        where id = $1`,
+      [
+        target.id,
+        newName || target.name,
+        pick('image_url'),
+        pick('description'),
+        pick('publisher'),
+        games.some((g) => g.is_published),
+      ]
+    )
 
     refreshProductViews(target.id)
     const shownName = newName || target.name
