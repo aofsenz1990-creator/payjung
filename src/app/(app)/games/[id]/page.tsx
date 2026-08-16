@@ -16,6 +16,7 @@ import { toggleProductPublishedAction } from '@/lib/actions/storefront'
 import { money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
+import { MarkupCells } from '@/components/MarkupCells'
 
 export const dynamic = 'force-dynamic'
 
@@ -624,7 +625,6 @@ export default async function GameDetailPage({
                 </thead>
                 <tbody>
                   {products.map((p) => {
-                    const margin = p.sell_price - p.cost_price
                     return (
                       <tr key={p.id}>
                         <td>
@@ -648,31 +648,22 @@ export default async function GameDetailPage({
                         {isAdmin ? (
                           <td className="text-right text-mute">{money(p.cost_price)}</td>
                         ) : null}
-                        <td className="text-right font-medium text-white">
-                          {money(p.sell_price)}
-                        </td>
+                        {/* ราคาขายกับกำไรคิดสดตอนพิมพ์ % จึงต้องอยู่ในคอมโพเนนต์ฝั่งเบราว์เซอร์
+                            ผู้ใช้ทั่วไปที่ไม่ใช่ผู้ดูแลระบบเห็นแค่ราคาขายเหมือนเดิม */}
                         {isAdmin ? (
-                          <td className={`text-right ${margin >= 0 ? 'text-good' : 'text-bad'}`}>
-                            {money(margin)}
+                          <MarkupCells
+                            productId={p.id}
+                            productName={p.name}
+                            cost={p.cost_price}
+                            sellPrice={p.sell_price}
+                            markup={p.markup_percent}
+                            showMoney
+                          />
+                        ) : (
+                          <td className="text-right font-medium text-white">
+                            {money(p.sell_price)}
                           </td>
-                        ) : null}
-                        {/* ช่องกรอกอยู่ในตาราง แต่ผูกกับฟอร์มด้านบนด้วย form="markup-form"
-                            เพราะในตารางมีฟอร์มปุ่มเปิดขาย/ลบอยู่แล้ว ซ้อนฟอร์มกันไม่ได้ */}
-                        {isAdmin ? (
-                          <td className="text-right">
-                            <input
-                              form="markup-form"
-                              name={`markup_${p.id}`}
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              defaultValue={p.markup_percent ?? ''}
-                              className="input w-24 px-2 py-1 text-right text-xs"
-                              placeholder="ตั้งเอง"
-                              aria-label={`กำไรเปอร์เซ็นต์ของ ${p.name}`}
-                            />
-                          </td>
-                        ) : null}
+                        )}
                         <td className="text-right">
                           {p.track_stock ? (
                             <span
