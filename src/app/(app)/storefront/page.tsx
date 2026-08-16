@@ -6,6 +6,7 @@ import {
   saveGameStorefrontAction,
   saveProviderAction,
   toggleGamePublishedAction,
+  togglePinGameAction,
   setAllProductsPublishedAction,
   testProviderAction,
   toggleProductPublishedAction,
@@ -62,6 +63,7 @@ type GameRow = {
   description: string | null
   is_published: boolean
   sort_order: number
+  recent_sales: number
   published_products: number
   total_products: number
 }
@@ -127,6 +129,9 @@ export default async function StorefrontPage({
     ),
     q<GameRow>(
       `select g.id, g.name, g.image_url, g.description, g.is_published, g.sort_order,
+              (select count(*) from sales s
+                where s.game_id = g.id and s.status = 'paid'
+                  and s.sold_at >= now() - interval '30 days')::int as recent_sales,
               (select count(*) from products p
                 where p.game_id = g.id and p.is_published)::int as published_products,
               (select count(*) from products p where p.game_id = g.id)::int as total_products
@@ -780,7 +785,8 @@ export default async function StorefrontPage({
                   <tr>
                     <th>รูป</th>
                     <th>เกม</th>
-                    <th className="text-right">ลำดับ</th>
+                    <th className="text-right">ขาย 30 วัน</th>
+                    <th>ลำดับบนเว็บ</th>
                     <th className="text-right">แพ็กเกจที่เปิดขาย</th>
                     <th>สถานะบนเว็บ</th>
                     <th className="text-right">จัดการ</th>
@@ -811,7 +817,30 @@ export default async function StorefrontPage({
                           </span>
                         ) : null}
                       </td>
-                      <td className="text-right text-mute">{num(g.sort_order)}</td>
+                      {/* หน้าเว็บเรียงตามยอดขาย 30 วันล่าสุด ให้เห็นตัวเลขที่ใช้เรียงจริง */}
+                      <td className="text-right">
+                        {g.recent_sales > 0 ? (
+                          <span className="text-good">{num(g.recent_sales)}</span>
+                        ) : (
+                          <span className="text-mute">—</span>
+                        )}
+                      </td>
+                      <td>
+                        <form action={togglePinGameAction}>
+                          <input type="hidden" name="id" value={g.id} />
+                          <button
+                            type="submit"
+                            className="btn-ghost btn-sm"
+                            title={
+                              g.sort_order < 100
+                                ? 'กดเพื่อเลิกปักหมุด กลับไปเรียงตามยอดขาย'
+                                : 'กดเพื่อดันเกมนี้ขึ้นก่อนบนหน้าเว็บ'
+                            }
+                          >
+                            {g.sort_order < 100 ? '📌 ปักหมุดอยู่' : 'เรียงตามยอดขาย'}
+                          </button>
+                        </form>
+                      </td>
                       <td className="text-right">
                         <span className={g.published_products === 0 ? 'text-warn' : 'text-white'}>
                           {num(g.published_products)}

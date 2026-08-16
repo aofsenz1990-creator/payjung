@@ -12,6 +12,7 @@ type ShopGame = {
   description: string | null
   packages: number
   min_price: number | null
+  recent_sales: number
 }
 
 export default async function ShopHome({
@@ -25,15 +26,21 @@ export default async function ShopHome({
 
   const [games, news] = await Promise.all([
     q<ShopGame>(
+      // เรียงตามกระแส: เกมที่ปักหมุดไว้ขึ้นก่อน จากนั้นเรียงตามยอดขาย 30 วันล่าสุด
+      // เกมที่ยังไม่มีใครซื้อจะไปอยู่ท้าย ๆ แล้วเรียงตามชื่อกันเอง
+      // (ปักหมุด = ตั้ง sort_order ให้น้อยกว่าค่าเริ่มต้น 100)
       `select g.id, g.name, g.image_url, g.description,
               (select count(*) from products p
                 where p.game_id = g.id and p.is_published and p.is_active)::int as packages,
               (select min(p.sell_price)::float8 from products p
-                where p.game_id = g.id and p.is_published and p.is_active) as min_price
+                where p.game_id = g.id and p.is_published and p.is_active) as min_price,
+              (select count(*) from sales s
+                where s.game_id = g.id and s.status = 'paid'
+                  and s.sold_at >= now() - interval '30 days')::int as recent_sales
          from games g
         where g.is_published and g.is_active
           ${search ? 'and (g.name ilike $1 or g.publisher ilike $1 or g.description ilike $1)' : ''}
-        order by g.sort_order, g.name`,
+        order by g.sort_order, recent_sales desc, g.name`,
       search ? [`%${search}%`] : []
     ),
     q<{

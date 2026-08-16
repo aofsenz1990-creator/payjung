@@ -176,6 +176,25 @@ export async function saveGameStorefrontAction(formData: FormData): Promise<Acti
 }
 
 /** เปิด/ปิดการแสดงเกมบนหน้าเว็บลูกค้าแบบเร็ว ๆ จากในตาราง */
+/**
+ * ปักหมุดเกมให้ขึ้นก่อนบนหน้าเว็บลูกค้า
+ *
+ * ปกติหน้าเว็บเรียงตามยอดขาย 30 วันล่าสุด (เกมที่กำลังเป็นกระแสจะขึ้นเอง)
+ * ปุ่มนี้ใช้ตอนอยากดันเกมขึ้นก่อนแม้ยอดขายยังไม่มา เช่นเกมใหม่ที่เพิ่งเปิดหรือช่วงจัดโปร
+ * ทำโดยตั้ง sort_order ให้น้อยกว่าค่าเริ่มต้น 100
+ */
+export async function togglePinGameAction(formData: FormData) {
+  await requireAdmin()
+  const id = int(formData, 'id')
+  await q(
+    `update games set sort_order = case when sort_order < 100 then 100 else 10 end
+      where id = $1`,
+    [id]
+  )
+  revalidatePath('/storefront')
+  revalidatePath('/shop')
+}
+
 export async function toggleGamePublishedAction(formData: FormData) {
   await requireAdmin()
   const id = int(formData, 'id')
