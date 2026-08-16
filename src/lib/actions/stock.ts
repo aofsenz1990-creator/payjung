@@ -65,6 +65,9 @@ export async function stockMoveAction(formData: FormData): Promise<ActionState> 
 
     revalidatePath('/stock')
     revalidatePath('/games')
+    // จำนวนคงเหลือแสดงอยู่ที่หน้าแพ็กเกจของเกมและหน้าเว็บลูกค้าด้วย
+    revalidatePath('/games/[id]', 'page')
+    revalidatePath('/shop/game/[id]', 'page')
     revalidatePath('/')
     return { ok: `อัปเดตสต๊อก "${product.name}" เป็น ${newQty} ชิ้นแล้ว` }
   } catch (err) {

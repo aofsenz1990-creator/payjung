@@ -2,11 +2,33 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { q } from '@/lib/db'
+import { q, q1 } from '@/lib/db'
 import { requireAdmin, requirePage } from '@/lib/auth'
 import { SlipError, uploadImage } from '@/lib/storage'
 import { bool, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
+
+/**
+ * สั่งรีเฟรชทุกหน้าที่แสดงข้อมูลแพ็กเกจ
+ *
+ * ที่ต้องมีตัวช่วยนี้เพราะเคยลืมใส่หน้า /games/[id] ซึ่งเป็นหน้าที่ผู้ใช้ยืนอยู่จริง
+ * ตอนกดบันทึก ผลคือบันทึกผ่านแล้วแต่ตารางไม่ขยับ ต้องกด F5 เอง
+ *
+ * รูปแบบ '/games/[id]' คือสั่งรีเฟรชทุกเกม ใช้ตอนที่ไม่รู้ว่าแพ็กนั้นอยู่เกมไหน
+ */
+function refreshProductViews(gameId?: number | null) {
+  revalidatePath('/games')
+  revalidatePath('/stock')
+  revalidatePath('/storefront')
+  revalidatePath('/shop')
+  if (gameId) {
+    revalidatePath(`/games/${gameId}`)
+    revalidatePath(`/shop/game/${gameId}`)
+  } else {
+    revalidatePath('/games/[id]', 'page')
+    revalidatePath('/shop/game/[id]', 'page')
+  }
+}
 
 /* ---------------------------------- เกม ---------------------------------- */
 
@@ -60,8 +82,7 @@ export async function deleteGameAction(formData: FormData) {
   const id = int(formData, 'id')
   // ลบเกม = ลบแพ็กเกจของเกมนั้นด้วย (on delete cascade) แต่บิลขายเก่ายังอยู่ครบ
   await q('delete from games where id = $1', [id])
-  revalidatePath('/games')
-  revalidatePath('/stock')
+  refreshProductViews(id)
 }
 
 /* -------------------------------- แพ็กเกจเติม ------------------------------- */
@@ -138,9 +159,7 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
     return { error: friendlyError(err) }
   }
 
-  revalidatePath('/games')
-  revalidatePath('/stock')
-  revalidatePath('/storefront')
+  refreshProductViews(gameId)
   if (id) redirect(`/games/${gameId}`)
   return { ok: `บันทึกแพ็กเกจ "${name}" แล้ว` }
 }
@@ -238,9 +257,10 @@ export async function setGamePublishedAction(formData: FormData): Promise<Action
 export async function deleteProductAction(formData: FormData) {
   await requireAdmin()
   const id = int(formData, 'id')
+  // เอาเกมของแพ็กนี้ไว้ก่อนลบ จะได้สั่งรีเฟรชหน้าเกมนั้นได้ตรงตัว
+  const row = await q1<{ game_id: number }>('select game_id from products where id = $1', [id])
   await q('delete from products where id = $1', [id])
-  revalidatePath('/games')
-  revalidatePath('/stock')
+  refreshProductViews(row?.game_id)
 }
 
 /* --------------------------------- ลูกค้า --------------------------------- */

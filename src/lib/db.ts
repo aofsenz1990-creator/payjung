@@ -66,7 +66,14 @@ function serialize<T>(run: () => Promise<T>): Promise<T> {
   return result
 }
 
-/** กันไม่ให้ค้างยาว ถ้าฐานข้อมูลไม่ตอบให้ขึ้น error ใน 12 วินาที จะได้รู้ว่าพังที่ตรงไหน */
+/**
+ * กันไม่ให้ค้างยาว ถ้าฐานข้อมูลไม่ตอบให้ขึ้น error ใน 12 วินาที จะได้รู้ว่าพังที่ตรงไหน
+ *
+ * ต้องครอบ "ตัวคำสั่ง" ที่อยู่ในคิว ไม่ใช่ครอบ "การรอคิว" จากข้างนอก
+ * ถ้าครอบจากข้างนอก คนเรียกจะได้ error ตามกำหนดก็จริง แต่คิวไม่ขยับ เพราะคิวรอ
+ * ให้คำสั่งเดิมจบก่อน คำสั่งที่ค้างตัวเดียวจึงล็อกทุกคำสั่งที่ตามมาไว้ตลอดกาล
+ * อาการที่เห็นคือกดบันทึกแล้วหมุนค้าง ต้องรีเฟรชหน้าถึงจะกลับมาใช้ได้
+ */
 function withTimeout<T>(promise: Promise<T>, ms = 12_000): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -134,7 +141,7 @@ export async function q<T = Record<string, unknown>>(
 ): Promise<T[]> {
   await ensureSchema()
   const sql = getClient()
-  const rows = await withTimeout(serialize(() => sql.unsafe(text, params as never[])))
+  const rows = await serialize(() => withTimeout(sql.unsafe(text, params as never[])))
   return rows as unknown as T[]
 }
 

@@ -143,6 +143,7 @@ export async function deleteProviderAction(formData: FormData) {
 
 /* ----------------------- หน้าเว็บของแต่ละเกม ----------------------- */
 
+// รูปและคำอธิบายเกมแสดงบนหน้าเว็บลูกค้าด้วย จึงต้องรีเฟรชหน้านั้นตามไปด้วย
 export async function saveGameStorefrontAction(formData: FormData): Promise<ActionState> {
   await requireAdmin()
   const id = int(formData, 'id')
@@ -168,16 +169,22 @@ export async function saveGameStorefrontAction(formData: FormData): Promise<Acti
 
   revalidatePath('/storefront')
   revalidatePath('/games')
+  revalidatePath(`/games/${id}`)
+  revalidatePath('/shop')
+  revalidatePath(`/shop/game/${id}`)
   return { ok: 'บันทึกการตั้งค่าหน้าเว็บแล้ว' }
 }
 
 /** เปิด/ปิดการแสดงเกมบนหน้าเว็บลูกค้าแบบเร็ว ๆ จากในตาราง */
 export async function toggleGamePublishedAction(formData: FormData) {
   await requireAdmin()
-  await q('update games set is_published = not is_published where id = $1', [
-    int(formData, 'id'),
-  ])
+  const id = int(formData, 'id')
+  await q('update games set is_published = not is_published where id = $1', [id])
   revalidatePath('/storefront')
+  revalidatePath('/games')
+  revalidatePath(`/games/${id}`)
+  revalidatePath('/shop')
+  revalidatePath(`/shop/game/${id}`)
 }
 
 /**
@@ -209,7 +216,9 @@ export async function setAllProductsPublishedAction(formData: FormData): Promise
 
     revalidatePath('/storefront')
     revalidatePath('/games')
+    revalidatePath('/games/[id]', 'page')
     revalidatePath('/shop')
+    revalidatePath('/shop/game/[id]', 'page')
 
     if (changed === 0) {
       return { ok: published ? 'ทุกแพ็กเกจเปิดขายอยู่แล้ว' : 'ทุกแพ็กเกจซ่อนอยู่แล้ว' }
@@ -233,4 +242,8 @@ export async function toggleProductPublishedAction(formData: FormData) {
   ])
   revalidatePath('/storefront')
   revalidatePath('/games')
+  // ปุ่มนี้กดได้จากหน้าแพ็กเกจของเกมด้วย ถ้าไม่รีเฟรชหน้านั้นจะดูเหมือนกดไม่ติด
+  revalidatePath('/games/[id]', 'page')
+  revalidatePath('/shop')
+  revalidatePath('/shop/game/[id]', 'page')
 }
