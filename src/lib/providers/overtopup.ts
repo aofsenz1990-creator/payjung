@@ -1,6 +1,6 @@
 import 'server-only'
 import { OVERTOPUP_DEFAULT_BASE } from './constants'
-import { ProviderError, type ProviderAdapter } from './types'
+import { ProviderError, type CatalogEntry, type ProviderAdapter } from './types'
 
 /**
  * ตัวเชื่อมต่อ API ของ OverTopup
@@ -179,6 +179,89 @@ export const overtopup: ProviderAdapter = {
     )
 
     return mapStatus(data.order_status, data.note, order.orderId)
+  },
+
+  /**
+   * ดึงรายการสินค้าทั้งหมด
+   * ต่างจาก endpoint อื่นตรงที่เป็น GET และไม่ต้องยืนยันตัวตน
+   *
+   * customer_level เปลี่ยนราคาที่ได้ ('vip' ถูกกว่า 'general')
+   * ถ้าดึงผิดระดับ ราคาทุนในระบบจะไม่ตรงกับที่ถูกตัดจริง = กำไรที่คำนวณได้ผิดตาม
+   */
+  async fetchCatalog(config, opts) {
+    const base = (config.baseUrl || OVERTOPUP_DEFAULT_BASE).replace(/\/+$/, '')
+    const level = opts.vip ? 'vip' : 'general'
+
+    let res: Response
+    try {
+      res = await fetch(`${base}/product?customer_level=${level}`, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(30_000),
+      })
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      throw new ProviderError(`ดึงรายการสินค้าจาก OverTopup ไม่ได้: ${reason}`, true)
+    }
+
+    const text = await res.text()
+    let data: unknown
+    try {
+      data = JSON.parse(text)
+    } catch {
+      throw new ProviderError(
+        `OverTopup ตอบกลับไม่ใช่ JSON (HTTP ${res.status}) — ${text.slice(0, 120)}`,
+        res.status >= 500
+      )
+    }
+
+    const err = data as ErrorBody
+    if (err?.error) {
+      throw new ProviderError(
+        ERROR_HINT[err.error] ?? err.error_description ?? `OverTopup แจ้ง: ${err.error}`
+      )
+    }
+    if (!Array.isArray(data)) {
+      throw new ProviderError('OverTopup ส่งรายการสินค้ามาในรูปแบบที่ไม่รู้จัก')
+    }
+
+    type Game = {
+      game_key?: string
+      game_name?: string
+      ref?: Record<string, unknown>
+      products?: Array<{
+        product_id?: string
+        product_name?: string
+        product_desc?: string
+        price?: string
+      }>
+    }
+
+    const out: CatalogEntry[] = []
+    for (const game of data as Game[]) {
+      const gameId = game.game_key
+      if (!gameId) continue
+      // ref บอกว่าเกมนี้ต้องถามอะไรจากลูกค้า — มีคีย์ uid = เติมด้วย UID
+      // เกมที่ต้องใช้ไอดี+รหัสผ่านล็อกอิน ตัวเชื่อมเรายังไม่รองรับ
+      const refKeys = Object.keys(game.ref ?? {})
+      const needsLogin = refKeys.some((k) => /login|password/i.test(k))
+
+      for (const pack of game.products ?? []) {
+        if (!pack.product_id) continue
+        out.push({
+          gameId,
+          gameName: game.game_name || gameId,
+          serverId: '0', // OverTopup ไม่ได้แยกเซิร์ฟเวอร์ในรายการสินค้า
+          serverName: null,
+          sku: pack.product_id,
+          packName: pack.product_name || pack.product_id,
+          packDesc: pack.product_desc ?? '',
+          price: toNumber(pack.price),
+          productType: needsLogin ? 'gtopup_idpass' : 'gtopup_uid',
+        })
+      }
+    }
+    return out
   },
 }
 

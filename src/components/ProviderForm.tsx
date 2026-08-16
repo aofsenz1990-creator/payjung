@@ -108,8 +108,10 @@ export function ProviderForm({
         </div>
       )}
 
-      {/* 24BUYM ส่งคีย์ไปกับ path ของ URL จึงไม่มีเรื่องวิธียืนยันตัวตนให้เลือก */}
-      {isBuym ? (
+      {/* เจ้าที่เขียนตัวเชื่อมไว้แล้วมีวิธียืนยันตัวตนตายตัวของตัวเอง
+          (24BUYM แนบคีย์ไปกับ path, OverTopup ส่ง ID+รหัสผ่านในบอดี้)
+          จึงไม่ต้องมีตัวเลือกให้สับสน เหลือไว้เฉพาะเจ้าที่ยังไม่ได้เขียนตัวเชื่อม */}
+      {meta.autoSupported ? (
         <input type="hidden" name="auth_type" value="none" />
       ) : (
         <div>
@@ -135,7 +137,7 @@ export function ProviderForm({
       {meta.needsUsername ? (
         <div>
           <label className="label" htmlFor="username">
-            ID ผู้ใช้ / เลขบัญชีร้าน
+            ID ผู้ใช้ / อีเมลที่ใช้ล็อกอิน
           </label>
           <input
             id="username"
@@ -143,8 +145,11 @@ export function ProviderForm({
             className="input"
             autoComplete="off"
             defaultValue={editing?.username ?? ''}
-            placeholder="ID ที่ผู้ให้บริการออกให้ร้านเรา"
+            placeholder="เช่น you@example.com"
           />
+          <p className="mt-1 text-xs leading-relaxed text-mute">
+            ID เดียวกับที่ใช้ล็อกอินหน้าเว็บของผู้ให้บริการ
+          </p>
         </div>
       ) : null}
 

@@ -3,8 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
-import { BuymError, getProducts } from '@/lib/providers/24buym'
-import { decimal, friendlyError, int, str } from '@/lib/form'
+import { BuymError } from '@/lib/providers/24buym'
+import { adapterFor, toConfig } from '@/lib/providers/registry'
+import { ProviderError } from '@/lib/providers/types'
+import { bool, decimal, friendlyError, int, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
 
 /**
@@ -17,44 +19,44 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
   if (!providerId) return { error: 'กรุณาเลือกผู้ให้บริการ' }
 
   const provider = await q1<{
+    id: number
     name: string
     base_url: string | null
+    username: string | null
     api_key: string | null
     kind: string
-  }>('select name, base_url, api_key, kind from api_providers where id = $1', [providerId])
+  }>('select id, name, base_url, username, api_key, kind from api_providers where id = $1', [
+    providerId,
+  ])
 
   if (!provider) return { error: 'ไม่พบผู้ให้บริการนี้' }
-  if (!provider.api_key) return { error: `"${provider.name}" ยังไม่ได้ตั้งคีย์` }
-  if (provider.kind !== '24buym') {
-    return { error: `ยังรองรับการดึงรายการอัตโนมัติเฉพาะ 24BUYM (เจ้านี้เป็นชนิด "${provider.kind}")` }
+  if (!provider.api_key) return { error: `"${provider.name}" ยังไม่ได้ตั้งคีย์/รหัสผ่าน` }
+
+  const adapter = adapterFor(provider.kind)
+  if (!adapter.fetchCatalog) {
+    return {
+      error: `"${provider.name}" ยังไม่รองรับการดึงรายการอัตโนมัติ — กรอกรหัสสินค้าเองที่หน้าแพ็กเกจ`,
+    }
   }
 
-  try {
-    const result = await getProducts(provider.base_url, provider.api_key)
-    if (!result.success) return { error: 'ปลายทางตอบกลับว่าไม่สำเร็จ' }
+  // OverTopup คิดราคาต่างกันตามระดับลูกค้า ดึงผิดระดับ = ราคาทุนในระบบไม่ตรงกับที่ถูกตัดจริง
+  const vip = bool(formData, 'vip')
 
-    // แผ่รายการเกม × เซิร์ฟเวอร์ × แพ็กเกจ ให้เป็นแถวเดียวต่อสินค้าหนึ่งชิ้น
+  try {
+    const entries = await adapter.fetchCatalog(toConfig(provider), { vip })
+
     type Row = [number, string, string, string, string | null, string, string, string, number]
-    const rows: Row[] = []
-    for (const game of result.products ?? []) {
-      const servers =
-        game.servers?.length > 0 ? game.servers : [{ server_id: '0', server_name: '' }]
-      for (const server of servers) {
-        for (const pack of game.packages ?? []) {
-          rows.push([
-            providerId,
-            String(game.game_id),
-            game.game_name,
-            String(server.server_id ?? '0'),
-            server.server_name || null,
-            String(pack.pack_code),
-            pack.pack_name,
-            pack.pack_desc ?? '',
-            Number(pack.pack_price) || 0,
-          ])
-        }
-      }
-    }
+    const rows: Row[] = entries.map((e) => [
+      providerId,
+      e.gameId,
+      e.gameName,
+      e.serverId,
+      e.serverName,
+      e.sku,
+      e.packName,
+      e.packDesc,
+      e.price,
+    ])
 
     if (rows.length === 0) return { error: 'ปลายทางไม่ได้ส่งรายการสินค้ามาเลย' }
 
@@ -81,8 +83,15 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
 
     const games = new Set(rows.map((r) => r[1])).size
     revalidatePath('/storefront')
-    return { ok: `ดึงรายการสำเร็จ — ${games} เกม รวม ${rows.length} รายการสินค้า` }
+    return {
+      ok:
+        `ดึงรายการสำเร็จ — ${games} เกม รวม ${rows.length} รายการสินค้า` +
+        (provider.kind === 'overtopup'
+          ? ` (ราคาระดับ ${vip ? 'VIP' : 'ทั่วไป'} — ถ้าไม่ตรงกับที่ถูกตัดจริง ให้ดึงใหม่อีกระดับ)`
+          : ''),
+    }
   } catch (err) {
+    if (err instanceof ProviderError) return { error: err.message }
     if (err instanceof BuymError) return { error: err.message }
     return { error: friendlyError(err, 'ดึงรายการสินค้าไม่สำเร็จ') }
   }
@@ -120,6 +129,13 @@ export async function importGameAction(formData: FormData): Promise<ActionState>
 
     const gameName = packs[0].game_name
 
+    // OverTopup ต้องระบุชนิดสินค้าตอนสั่ง — ตั้งเป็นเติมด้วย UID ไว้ก่อนซึ่งเป็นแบบที่ใช้บ่อยสุด
+    // ถ้าแพ็กเกจไหนเป็นบัตรเงินสด ไปเปลี่ยนได้ที่หน้าแก้ไขแพ็กเกจ
+    const kind = await q1<{ kind: string }>('select kind from api_providers where id = $1', [
+      providerId,
+    ])
+    const productType = kind?.kind === 'overtopup' ? 'gtopup_uid' : null
+
     // มีเกมชื่อนี้อยู่แล้วก็ใช้ตัวเดิม ไม่สร้างซ้ำ
     const existing = await q1<{ id: number }>(
       'select id from games where lower(name) = lower($1) limit 1',
@@ -155,8 +171,9 @@ export async function importGameAction(formData: FormData): Promise<ActionState>
       await q(
         `insert into products
            (game_id, name, cost_price, sell_price, is_active, sort_order,
-            provider_id, provider_game_id, provider_server_id, provider_sku)
-         values ($1, $2, $3, $4, true, $5, $6, $7, $8, $9)`,
+            provider_id, provider_game_id, provider_server_id, provider_sku,
+            provider_product_type)
+         values ($1, $2, $3, $4, true, $5, $6, $7, $8, $9, $10)`,
         [
           gameId,
           label,
@@ -167,6 +184,7 @@ export async function importGameAction(formData: FormData): Promise<ActionState>
           providerGameId,
           p.server_id,
           p.pack_code,
+          productType,
         ]
       )
       added++

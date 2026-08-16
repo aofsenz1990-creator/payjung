@@ -91,6 +91,21 @@ export class ProviderError extends Error {
   }
 }
 
+/** หนึ่งรายการสินค้าที่ดึงมาจากผู้ให้บริการ — แผ่เป็นแถวเดียวต่อสินค้าหนึ่งชิ้นแล้ว */
+export type CatalogEntry = {
+  gameId: string
+  gameName: string
+  /** เกมที่ไม่มีเซิร์ฟเวอร์ให้ใช้ '0' */
+  serverId: string
+  serverName: string | null
+  sku: string
+  packName: string
+  packDesc: string
+  price: number
+  /** ชนิดสินค้าฝั่งปลายทาง ถ้าเจ้านั้นแยกประเภท */
+  productType?: string | null
+}
+
 export type ProviderAdapter = {
   kind: string
   /** ยอดคงเหลือของร้านเราที่ปลายทาง */
@@ -102,4 +117,9 @@ export type ProviderAdapter = {
     config: ProviderConfig,
     order: { ref: string; orderId: string | null }
   ): Promise<CheckResult>
+  /**
+   * ดึงรายการสินค้าทั้งหมดมาเก็บไว้ให้เลือกจับคู่
+   * ไม่ใส่ก็ได้ — เจ้าที่ไม่มีจะต้องกรอกรหัสสินค้าเองที่หน้าแพ็กเกจ
+   */
+  fetchCatalog?(config: ProviderConfig, opts: { vip: boolean }): Promise<CatalogEntry[]>
 }

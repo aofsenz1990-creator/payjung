@@ -1,9 +1,10 @@
 import 'server-only'
-import { BuymError, addOrder, getAccount, getOrder } from './24buym'
+import { BuymError, addOrder, getAccount, getOrder, getProducts } from './24buym'
 import { providerMeta } from './constants'
 import { overtopup } from './overtopup'
 import {
   ProviderError,
+  type CatalogEntry,
   type ProviderAdapter,
   type ProviderConfig,
 } from './types'
@@ -87,6 +88,37 @@ const buym: ProviderAdapter = {
         message: found.message || (status === 1 ? 'กำลังเติม' : 'อยู่ในคิว'),
         orderId,
       }
+    } catch (err) {
+      wrapBuym(err)
+    }
+  },
+
+  /** แผ่รายการเกม × เซิร์ฟเวอร์ × แพ็กเกจ ให้เป็นแถวเดียวต่อสินค้าหนึ่งชิ้น */
+  async fetchCatalog(config) {
+    try {
+      const result = await getProducts(config.baseUrl, config.secret)
+      if (!result.success) throw new ProviderError('ปลายทางตอบกลับว่าไม่สำเร็จ')
+
+      const out: CatalogEntry[] = []
+      for (const game of result.products ?? []) {
+        const servers =
+          game.servers?.length > 0 ? game.servers : [{ server_id: '0', server_name: '' }]
+        for (const server of servers) {
+          for (const pack of game.packages ?? []) {
+            out.push({
+              gameId: String(game.game_id),
+              gameName: game.game_name,
+              serverId: String(server.server_id ?? '0'),
+              serverName: server.server_name || null,
+              sku: String(pack.pack_code),
+              packName: pack.pack_name,
+              packDesc: pack.pack_desc ?? '',
+              price: Number(pack.pack_price) || 0,
+            })
+          }
+        }
+      }
+      return out
     } catch (err) {
       wrapBuym(err)
     }
