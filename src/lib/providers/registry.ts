@@ -46,12 +46,17 @@ const buym: ProviderAdapter = {
       // (ลูกค้าที่สั่งตอนตีสองจะค้างเป็น "รอดำเนินการ" จนกว่าจะมีคนเปิดหลังร้าน)
       const callbackUrl = await providerCallbackUrl()
 
+      // ปกติเซิร์ฟเวอร์ของ 24BUYM ติดมากับตัวแพ็กเกจอยู่แล้ว (นำเข้าแยกทีละเซิร์ฟเวอร์)
+      // แต่ถ้าแพ็กไหนตั้งให้ลูกค้าเลือกเซิร์ฟเวอร์เอง ต้องใช้ค่าที่ลูกค้าเลือกก่อนเสมอ
+      // ถ้าใช้ค่าที่ติดมากับแพ็กแทน = เติมเข้าผิดเซิร์ฟเวอร์ ซึ่งเอาเงินคืนไม่ได้
+      const chosenServer = input.fields?.server?.trim()
+
       const res = await addOrder(config.baseUrl, config.secret, {
-        UserID: input.account,
+        UserID: input.fields?.uid?.trim() || input.account,
         game_id: input.gameId,
         pack_code: input.sku,
         quantity: input.quantity,
-        server_id: input.serverId || '0',
+        server_id: chosenServer || input.serverId || '0',
         ref_no: input.ref,
         ...(callbackUrl ? { callback_api: callbackUrl } : {}),
       })

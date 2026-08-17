@@ -319,7 +319,10 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
   if (!customer) return { error: 'กรุณาเข้าสู่ระบบก่อนสั่งซื้อ' }
 
   const productId = int(formData, 'product_id')
-  const qty = Math.max(int(formData, 'qty', 1), 1)
+  // ต้องมีเพดานฝั่งเซิร์ฟเวอร์ด้วย ไม่ใช่แค่ในฟอร์ม เพราะค่าที่ส่งมาแก้ได้จากเบราว์เซอร์
+  // ถ้าไม่จำกัด มีคนสั่ง 5,000 ชิ้นได้ ซึ่งเกินเพดาน 1,000 ของผู้ให้บริการ
+  // ผลคือเครดิตถูกตัดไปแล้วแต่ปลายทางปฏิเสธ ต้องมาตามคืนเงินเอง
+  const qty = Math.min(Math.max(int(formData, 'qty', 1), 1), 99)
 
   if (!productId) return { error: 'ไม่พบแพ็กเกจที่เลือก' }
 
