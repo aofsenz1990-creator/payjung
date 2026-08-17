@@ -4,7 +4,14 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin, requirePage } from '@/lib/auth'
-import { getShopCustomer, getSiteSettings, registrationOpen, SITE_KEYS } from '@/lib/shop'
+import {
+  getShopCustomer,
+  getSiteSettings,
+  isPartner,
+  priceExpr,
+  registrationOpen,
+  SITE_KEYS,
+} from '@/lib/shop'
 import { SlipError, uploadImage } from '@/lib/storage'
 import { autoDispatchOn, dispatchSale, markForDispatch } from '@/lib/dispatch'
 import { jsonArray } from '@/lib/json'
@@ -322,6 +329,8 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
   }
 
   try {
+    // ราคาคิดจากฐานข้อมูลตามระดับของลูกค้าเสมอ ไม่เคยเชื่อค่าที่ส่งมาจากฟอร์ม
+    // (ฟอร์มแก้ได้จากฝั่งเบราว์เซอร์ ถ้าเชื่อก็เท่ากับให้ลูกค้าตั้งราคาเองได้)
     const product = await q1<{
       id: number
       game_id: number
@@ -332,9 +341,10 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
       stock_qty: number
       provider_fields: unknown
     }>(
-      `select id, game_id, name, sell_price::float8 as sell_price, cost_price::float8 as cost_price,
-              track_stock, stock_qty, provider_fields
-         from products where id = $1 and is_active and is_published`,
+      `select p.id, p.game_id, p.name, ${priceExpr(isPartner(customer))}::float8 as sell_price,
+              p.cost_price::float8 as cost_price,
+              p.track_stock, p.stock_qty, p.provider_fields
+         from products p where p.id = $1 and p.is_active and p.is_published`,
       [productId]
     )
     if (!product) return { error: 'แพ็กเกจนี้ปิดขายอยู่' }

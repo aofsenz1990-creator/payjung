@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { q } from '@/lib/db'
-import { getSiteSettings } from '@/lib/shop'
+import { getShopCustomer, getSiteSettings, isPartner, priceExpr } from '@/lib/shop'
 import { dateOnly, money, num } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
@@ -24,6 +24,10 @@ export default async function ShopHome({
   const search = (keyword ?? '').trim()
   const settings = await getSiteSettings()
 
+  // ราคาเริ่มต้นที่โชว์บนการ์ดต้องเป็นราคาที่ลูกค้าคนนี้จ่ายจริง
+  // ไม่งั้นพาร์ทเนอร์เห็นราคาทั่วไปที่หน้าแรก แล้วไปเจออีกราคาตอนกดเข้าเกม
+  const partner = isPartner(await getShopCustomer())
+
   const [games, news] = await Promise.all([
     q<ShopGame>(
       // เรียงตามกระแส: เกมที่ปักหมุดไว้ขึ้นก่อน จากนั้นเรียงตามยอดขาย 30 วันล่าสุด
@@ -32,7 +36,7 @@ export default async function ShopHome({
       `select g.id, g.name, g.image_url, g.description,
               (select count(*) from products p
                 where p.game_id = g.id and p.is_published and p.is_active)::int as packages,
-              (select min(p.sell_price)::float8 from products p
+              (select min(${priceExpr(partner)})::float8 from products p
                 where p.game_id = g.id and p.is_published and p.is_active) as min_price,
               (select count(*) from sales s
                 where s.game_id = g.id and s.status = 'paid'

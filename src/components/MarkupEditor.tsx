@@ -15,7 +15,7 @@ import { money } from '@/lib/format'
  * เห็นผลก่อนตัดสินใจได้ทั้งหมด
  */
 
-type MarkupItem = { id: number; markup: number | null }
+type MarkupItem = { id: number; markup: number | null; partnerMarkup: number | null }
 
 type Ctx = {
   /** ค่าที่กำลังพิมพ์อยู่บนหน้าจอ */
@@ -23,6 +23,10 @@ type Ctx = {
   /** ค่าที่บันทึกไว้จริงในฐานข้อมูล ใช้เทียบว่าแถวไหนถูกแก้ */
   saved: Record<number, string>
   set: (id: number, value: string) => void
+  /** ชุดเดียวกันแต่ของราคาพาร์ทเนอร์ */
+  partnerValues: Record<number, string>
+  partnerSaved: Record<number, string>
+  setPartner: (id: number, value: string) => void
 }
 
 const MarkupCtx = createContext<Ctx | null>(null)
@@ -44,12 +48,22 @@ export function MarkupProvider({
     return out
   }, [items])
 
+  const partnerSaved = useMemo(() => {
+    const out: Record<number, string> = {}
+    for (const it of items) out[it.id] = textOf(it.partnerMarkup)
+    return out
+  }, [items])
+
   const [values, setValues] = useState<Record<number, string>>(saved)
+  const [partnerValues, setPartnerValues] = useState<Record<number, string>>(partnerSaved)
 
   const ctx: Ctx = {
     values,
     saved,
     set: (id, value) => setValues((v) => ({ ...v, [id]: value })),
+    partnerValues,
+    partnerSaved,
+    setPartner: (id, value) => setPartnerValues((v) => ({ ...v, [id]: value })),
   }
 
   return <MarkupCtx.Provider value={ctx}>{children}</MarkupCtx.Provider>
@@ -73,16 +87,23 @@ export function MarkupBulkBar({
   gameId: number
   action: (formData: FormData) => Promise<ActionState>
 }) {
-  const { values, saved, set } = useMarkup()
+  const { values, saved, set, partnerValues, partnerSaved, setPartner } = useMarkup()
   const [bulk, setBulk] = useState('')
+  const [partnerBulk, setPartnerBulk] = useState('')
 
   const ids = Object.keys(saved).map(Number)
   const total = ids.length
   const autoCount = ids.filter((id) => (values[id] ?? '').trim() !== '').length
-  const changed = ids.filter((id) => (values[id] ?? '').trim() !== (saved[id] ?? '').trim()).length
+  const changed =
+    ids.filter((id) => (values[id] ?? '').trim() !== (saved[id] ?? '').trim()).length +
+    ids.filter((id) => (partnerValues[id] ?? '').trim() !== (partnerSaved[id] ?? '').trim()).length
+  const partnerCount = ids.filter((id) => (partnerValues[id] ?? '').trim() !== '').length
 
   const fillAll = (value: string) => {
     for (const id of ids) set(id, value)
+  }
+  const fillAllPartner = (value: string) => {
+    for (const id of ids) setPartner(id, value)
   }
 
   return (
@@ -130,6 +151,36 @@ export function MarkupBulkBar({
           </span>
         </div>
 
+        {/* ราคาพาร์ทเนอร์ — คิดจากต้นทุนเหมือนกันแต่คนละ % ปกติตั้งให้ต่ำกว่าราคาทั่วไป */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-brand-500/20 pt-3">
+          <span className="text-sm font-medium text-grape-400">🤝 กำไรสำหรับ Partner</span>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={partnerBulk}
+            onChange={(e) => setPartnerBulk(e.target.value)}
+            className="input w-28"
+            placeholder="เช่น 2"
+            aria-label="เปอร์เซ็นต์กำไรพาร์ทเนอร์ที่จะใส่ให้ทุกแพ็ก"
+          />
+          <span className="text-sm text-mute">%</span>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => fillAllPartner(partnerBulk.trim())}
+            disabled={partnerBulk.trim() === ''}
+          >
+            ใส่ให้ทุกแพ็ก
+          </button>
+          <button type="button" className="btn-ghost" onClick={() => fillAllPartner('')}>
+            ล้างทุกช่อง
+          </button>
+          <span className="text-xs text-mute">
+            ตั้งไว้ {partnerCount} จาก {total} แพ็ก · ช่องที่ว่าง พาร์ทเนอร์จ่ายเท่าราคาปกติ
+          </span>
+        </div>
+
         <p className="mt-2 text-xs leading-relaxed text-mute">
           ใส่ % แล้วกด <b className="text-slate-200">ใส่ให้ทุกแพ็ก</b>{' '}
           เพื่อกรอกให้ทุกแถวในตาราง จากนั้นแก้เฉพาะแถวที่อยากให้ต่างได้ แล้วกดบันทึกครั้งเดียว ·
@@ -168,16 +219,19 @@ export function MarkupCells({
   productName,
   cost,
   sellPrice,
+  partnerPrice,
   showMoney,
 }: {
   productId: number
   productName: string
   cost: number
   sellPrice: number
+  /** ราคาพาร์ทเนอร์ที่บันทึกไว้ (null = ยังไม่ได้ตั้ง จ่ายเท่าราคาปกติ) */
+  partnerPrice: number | null
   /** แสดงคอลัมน์กำไรไหม (เฉพาะผู้ดูแลระบบ) */
   showMoney: boolean
 }) {
-  const { values, saved, set } = useMarkup()
+  const { values, saved, set, partnerValues, partnerSaved, setPartner } = useMarkup()
 
   const text = (values[productId] ?? '').trim()
   const savedText = (saved[productId] ?? '').trim()
@@ -191,6 +245,15 @@ export function MarkupCells({
 
   const dirty = text !== savedText
   const bad = text !== '' && !usePct
+
+  const pText = (partnerValues[productId] ?? '').trim()
+  const pSavedText = (partnerSaved[productId] ?? '').trim()
+  const pPct = Number(pText)
+  const usePPct = pText !== '' && Number.isFinite(pPct) && pPct >= 0
+  // ไม่ได้ตั้ง % พาร์ทเนอร์ = พาร์ทเนอร์จ่ายเท่าราคาปกติที่กำลังจะบันทึก
+  const nextPartner = usePPct ? Math.ceil(cost * (1 + pPct / 100)) : (partnerPrice ?? nextSell)
+  const pDirty = pText !== pSavedText
+  const pBad = pText !== '' && !usePPct
 
   return (
     <>
@@ -228,6 +291,37 @@ export function MarkupCells({
           }`}
           placeholder="ตั้งเอง"
           aria-label={`กำไรเปอร์เซ็นต์ของ ${productName}`}
+        />
+      </td>
+
+      {/* ราคาพาร์ทเนอร์ที่จะได้ + ช่องกรอก % ของพาร์ทเนอร์ */}
+      <td
+        className={`text-right font-medium ${
+          pDirty ? 'text-warn' : usePPct || partnerPrice != null ? 'text-grape-400' : 'text-mute'
+        }`}
+      >
+        {money(nextPartner)}
+      </td>
+      <td className="text-right">
+        <input
+          type="hidden"
+          form="markup-form"
+          name={`pmarkup_was_${productId}`}
+          value={pSavedText}
+        />
+        <input
+          form="markup-form"
+          name={`pmarkup_${productId}`}
+          type="number"
+          min={0}
+          step="0.01"
+          value={partnerValues[productId] ?? ''}
+          onChange={(e) => setPartner(productId, e.target.value)}
+          className={`input w-24 px-2 py-1 text-right text-xs ${
+            pBad ? 'border-bad' : pDirty ? 'border-warn' : ''
+          }`}
+          placeholder="เท่าปกติ"
+          aria-label={`กำไรเปอร์เซ็นต์สำหรับพาร์ทเนอร์ของ ${productName}`}
         />
       </td>
     </>

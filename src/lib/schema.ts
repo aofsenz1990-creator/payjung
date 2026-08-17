@@ -298,6 +298,31 @@ export const SCHEMA_STATEMENTS: string[] = [
     where p.role = 'staff'
       and exists (select 1 from customers c where c.auth_user_id = p.id)`,
 
+  // ระดับของลูกค้า: 'normal' = ลูกค้าทั่วไป, 'partner' = พาร์ทเนอร์ที่ได้ราคาพิเศษ
+  `alter table customers add column if not exists tier text not null default 'normal'`,
+
+  // ราคาสำหรับพาร์ทเนอร์ — คิดจากต้นทุนด้วย % กำไรอีกชุดหนึ่ง แยกจากราคาขายปกติ
+  // ว่างไว้ = พาร์ทเนอร์จ่ายเท่าราคาปกติ (ยังไม่ได้ตั้งราคาพิเศษให้แพ็กนี้)
+  `alter table products add column if not exists partner_markup_percent numeric(6,2)`,
+  `alter table products add column if not exists partner_price numeric(12,2)`,
+
+  // กล่องข้อความจากร้านถึงลูกค้า — ทางเดียว ลูกค้าอ่านอย่างเดียวตอบกลับไม่ได้
+  // ใช้ส่งโค้ดบัตรเติมเกมเป็นหลัก จึงต้องเก็บถาวรและหาย้อนหลังได้
+  // (ถ้าเด้งเป็น popup ตอนสั่งซื้ออย่างเดียว ลูกค้าเผลอปิดหน้าไปคือโค้ดหาย = ร้านเสียเงินฟรี)
+  `create table if not exists customer_messages (
+    id serial primary key,
+    customer_id int not null references customers(id) on delete cascade,
+    sale_id int references sales(id) on delete set null,
+    kind text not null default 'message',
+    title text,
+    body text not null,
+    read_at timestamptz,
+    created_by uuid references profiles(id) on delete set null,
+    created_at timestamptz not null default now()
+  )`,
+  `create index if not exists customer_messages_customer_idx
+     on customer_messages (customer_id, created_at desc)`,
+
   // ตัวนับสำหรับกันยิงรัว ๆ (ล็อกอินผิดซ้ำ / สมัครรัว / แจ้งโอนรัว)
   // เก็บในฐานข้อมูลเพราะ Vercel รันหลาย instance ตัวแปรในหน่วยความจำนับข้ามกันไม่ได้
   `create table if not exists rate_limits (

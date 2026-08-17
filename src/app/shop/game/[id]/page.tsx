@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
-import { getShopCustomer } from '@/lib/shop'
+import { getShopCustomer, isPartner, priceExpr } from '@/lib/shop'
 import { jsonArray } from '@/lib/json'
 import { shopOrderAction } from '@/lib/actions/shop'
 import { BuyForm, type BuyField, type BuyPackage } from '@/components/BuyForm'
@@ -13,20 +13,23 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
   const gameId = Number(id)
   if (!Number.isFinite(gameId)) notFound()
 
-  const [game, packages, customer] = await Promise.all([
+  // ต้องรู้ก่อนว่าใครกำลังดูอยู่ เพราะราคาที่ดึงมาขึ้นกับระดับของลูกค้า
+  const customer = await getShopCustomer()
+  const partner = isPartner(customer)
+
+  const [game, packages] = await Promise.all([
     q1<{ id: number; name: string; image_url: string | null; description: string | null }>(
       'select id, name, image_url, description from games where id = $1 and is_published and is_active',
       [gameId]
     ),
     q<Omit<BuyPackage, 'fields'> & { provider_fields: unknown; provider_variant: string | null }>(
-      `select id, name, sell_price::float8 as sell_price, image_url, track_stock, stock_qty,
-              provider_fields, provider_variant
-         from products
-        where game_id = $1 and is_published and is_active
-        order by provider_variant nulls first, sort_order, sell_price`,
+      `select p.id, p.name, ${priceExpr(partner)}::float8 as sell_price, p.image_url,
+              p.track_stock, p.stock_qty, p.provider_fields, p.provider_variant
+         from products p
+        where p.game_id = $1 and p.is_published and p.is_active
+        order by p.provider_variant nulls first, p.sort_order, sell_price`,
       [gameId]
     ),
-    getShopCustomer(),
   ])
 
   if (!game) notFound()
@@ -63,6 +66,12 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
           <h1 className="text-2xl font-bold text-white">{game.name}</h1>
           {game.description ? (
             <p className="mt-1 text-sm leading-relaxed text-mute">{game.description}</p>
+          ) : null}
+          {/* บอกให้พาร์ทเนอร์รู้ว่าราคาที่เห็นคือราคาพิเศษแล้ว ไม่ต้องทักมาถามร้าน */}
+          {partner ? (
+            <span className="chip mt-2 inline-block bg-grape-600/20 text-grape-400">
+              🤝 ราคาพาร์ทเนอร์
+            </span>
           ) : null}
         </div>
       </div>
