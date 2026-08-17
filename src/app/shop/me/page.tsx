@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { q } from '@/lib/db'
-import { getShopCustomer } from '@/lib/shop'
+import { getShopCustomer, isPartner } from '@/lib/shop'
 import { dateTime, money, num } from '@/lib/format'
 import { SALE_STATUS, type SaleStatus } from '@/lib/constants'
 import { MessageBox, type ShopMessage } from '@/components/MessageBox'
@@ -92,6 +92,14 @@ export default async function ShopAccountPage() {
           <p className="text-sm text-mute">สวัสดี</p>
           <p className="text-xl font-bold text-white">{customer.name}</p>
           <p className="text-xs text-mute">{customer.email}</p>
+          {/* บอกระดับให้ลูกค้าเห็นชัด ๆ พาร์ทเนอร์จะได้รู้ว่าราคาที่เห็นคือราคาพิเศษแล้ว */}
+          {isPartner(customer) ? (
+            <span className="chip mt-2 inline-block bg-grape-600/25 text-grape-400">
+              🤝 Partner — ได้ราคาพิเศษ
+            </span>
+          ) : (
+            <span className="chip mt-2 inline-block bg-ink-700/60 text-mute">ลูกค้าทั่วไป</span>
+          )}
         </div>
         <div className="text-right">
           <p className="text-sm text-mute">เครดิตคงเหลือ</p>
