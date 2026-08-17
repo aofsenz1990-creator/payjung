@@ -298,6 +298,20 @@ export const SCHEMA_STATEMENTS: string[] = [
     where p.role = 'staff'
       and exists (select 1 from customers c where c.auth_user_id = p.id)`,
 
+  // ราคาที่ "ขึ้นหน้าเว็บจริง" แยกจากราคาที่ตั้งไว้ในหลังร้าน
+  //
+  // ทำไมต้องแยก: ตอนดึงราคาจากผู้ให้บริการหรือไล่ปรับกำไรทีละเกม ราคาจะเปลี่ยนทีละหลายร้อยแพ็ก
+  // ถ้าขึ้นเว็บทันทีทุกครั้งที่กดบันทึก ลูกค้าที่กำลังเลือกของอยู่จะเจอราคาขยับกลางคัน
+  // (และถ้าเผลอกรอกผิด ก็ขายผิดราคาไปแล้วก่อนจะรู้ตัว)
+  // ตอนนี้แก้ในหลังร้านได้เต็มที่ แล้วค่อยกดปุ่มให้ขึ้นเว็บทีเดียวเมื่อพร้อม
+  `alter table products add column if not exists published_sell_price numeric(12,2)`,
+  `alter table products add column if not exists published_partner_price numeric(12,2)`,
+
+  // แพ็กที่ยังไม่เคยเผยแพร่ ให้ถือว่าราคาปัจจุบันคือราคาที่ขึ้นเว็บอยู่แล้ว
+  // (ของเดิมที่ขายอยู่จะได้ไม่เปลี่ยนราคาตอนอัปเดตระบบ และแพ็กใหม่ก็ขึ้นเว็บได้ทันที)
+  `update products set published_sell_price = sell_price, published_partner_price = partner_price
+    where published_sell_price is null`,
+
   // ระดับของลูกค้า: 'normal' = ลูกค้าทั่วไป, 'partner' = พาร์ทเนอร์ที่ได้ราคาพิเศษ
   `alter table customers add column if not exists tier text not null default 'normal'`,
 

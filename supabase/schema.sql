@@ -283,6 +283,12 @@ delete from profiles p
     where p.role = 'staff'
       and exists (select 1 from customers c where c.auth_user_id = p.id);
 
+-- ราคาที่ขึ้นหน้าเว็บจริง แยกจากราคาที่ตั้งไว้ในหลังร้าน (กดปุ่มเผยแพร่ถึงจะขึ้น)
+alter table products add column if not exists published_sell_price numeric(12,2);
+alter table products add column if not exists published_partner_price numeric(12,2);
+update products set published_sell_price = sell_price, published_partner_price = partner_price
+  where published_sell_price is null;
+
 -- ระดับของลูกค้า: 'normal' = ลูกค้าทั่วไป, 'partner' = พาร์ทเนอร์ที่ได้ราคาพิเศษ
 alter table customers add column if not exists tier text not null default 'normal';
 

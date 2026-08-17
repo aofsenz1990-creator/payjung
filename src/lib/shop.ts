@@ -141,11 +141,15 @@ export function isPartner(customer: { tier: string } | null | undefined) {
  *
  * เขียนไว้ที่เดียวแล้วเรียกใช้ทุกหน้า เพราะราคาที่โชว์กับราคาที่ตัดเงินจริง
  * ต้องมาจากสูตรเดียวกันเป๊ะ ๆ ไม่งั้นลูกค้าเห็นราคาหนึ่งแต่โดนตัดอีกราคาหนึ่ง
+ *
+ * ใช้ราคาที่ "เผยแพร่แล้ว" เท่านั้น ราคาที่เพิ่งแก้ในหลังร้านจะยังไม่มีผลกับลูกค้า
+ * จนกว่าจะกดปุ่มอัปเดตราคาขึ้นหน้าเว็บ (coalesce ไว้กันกรณีแพ็กใหม่ที่ยังไม่เคยเผยแพร่)
  */
 export function priceExpr(partner: boolean, alias = 'p') {
+  const normal = `coalesce(${alias}.published_sell_price, ${alias}.sell_price)`
   return partner
-    ? `coalesce(${alias}.partner_price, ${alias}.sell_price)`
-    : `${alias}.sell_price`
+    ? `coalesce(${alias}.published_partner_price, ${normal})`
+    : normal
 }
 
 /**

@@ -16,6 +16,8 @@ import { money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
 import { MarkupBulkBar, MarkupCells, MarkupProvider } from '@/components/MarkupEditor'
+import { PublishPrices } from '@/components/PublishPrices'
+import { countPendingPrices } from '@/lib/pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,7 +63,7 @@ export default async function GameDetailPage({
   const gameId = Number(id)
   if (!Number.isFinite(gameId)) notFound()
 
-  const [game, products, editing, providers, otherGames] = await Promise.all([
+  const [game, products, editing, providers, otherGames, pendingPrices] = await Promise.all([
     q1<{
       id: number
       name: string
@@ -102,6 +104,7 @@ export default async function GameDetailPage({
       'select id, name from games where id <> $1 order by name',
       [gameId]
     ),
+    countPendingPrices(gameId),
   ])
 
   if (!game) notFound()
@@ -583,6 +586,9 @@ export default async function GameDetailPage({
               markup: p.markup_percent,
               partnerMarkup: p.partner_markup_percent,
             }))}>
+          {/* กดเผยแพร่แล้วราคาที่แก้ไว้ถึงจะขึ้นหน้าเว็บลูกค้า */}
+          {isAdmin ? <PublishPrices pending={pendingPrices} gameId={game.id} /> : null}
+
           {/* แก้กำไรทั้งเกมในที่เดียว: ใส่ % ให้ทุกแพ็กก่อน แล้วค่อยแก้ทีละช่อง แล้วบันทึกครั้งเดียว */}
           {products.length > 0 && isAdmin ? (
             <MarkupBulkBar gameId={game.id} action={saveMarkupsAction} />

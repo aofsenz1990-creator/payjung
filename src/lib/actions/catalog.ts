@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin, requirePage } from '@/lib/auth'
 import { SlipError, uploadImage } from '@/lib/storage'
+import { PRICE_DIRTY_SQL } from '@/lib/pricing'
 import { bool, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
 
@@ -173,7 +174,9 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
 
   refreshProductViews(gameId)
   if (id) redirect(`/games/${gameId}`)
-  return { ok: `บันทึกแพ็กเกจ "${name}" แล้ว` }
+  return {
+    ok: `บันทึกแพ็กเกจ "${name}" แล้ว — ถ้าแก้ราคา อย่าลืมกด "อัปเดตราคาขึ้นหน้าเว็บ"`,
+  }
 }
 
 /**
@@ -553,10 +556,46 @@ export async function saveMarkupsAction(formData: FormData): Promise<ActionState
     if (normalCount > 0) parts.push(`ราคาปกติ ${normalCount} แพ็กเกจ`)
     if (partnerCount > 0) parts.push(`ราคาพาร์ทเนอร์ ${partnerCount} แพ็กเกจ`)
     return {
-      ok: `บันทึกกำไรแล้ว — ${parts.join(' และ ')} (ปัดขึ้นเป็นจำนวนเต็มบาท)`,
+      ok:
+        `บันทึกกำไรแล้ว — ${parts.join(' และ ')} (ปัดขึ้นเป็นจำนวนเต็มบาท) · ` +
+        'ลูกค้ายังเห็นราคาเดิมอยู่ กดปุ่ม "อัปเดตราคาขึ้นหน้าเว็บ" ด้านบนเมื่อพร้อม',
     }
   } catch (err) {
     return { error: friendlyError(err, 'บันทึกกำไรไม่สำเร็จ') }
+  }
+}
+
+/**
+ * เผยแพร่ราคาที่ตั้งไว้ขึ้นหน้าเว็บลูกค้า
+ *
+ * ก๊อบราคาปัจจุบันไปไว้ในช่อง "ราคาที่เผยแพร่แล้ว" ซึ่งเป็นช่องที่หน้าเว็บอ่าน
+ * ส่ง game_id มาด้วย = เผยแพร่เฉพาะเกมนั้น ไม่ส่ง = ทั้งร้าน
+ */
+export async function publishPricesAction(formData: FormData): Promise<ActionState> {
+  await requirePage('games')
+  const gameId = int(formData, 'game_id') || null
+
+  try {
+    const updated = await q<{ id: number }>(
+      `update products
+          set published_sell_price = sell_price,
+              published_partner_price = partner_price
+        where ${PRICE_DIRTY_SQL}
+          ${gameId ? 'and game_id = $1' : ''}
+       returning id`,
+      gameId ? [gameId] : []
+    )
+
+    if (updated.length === 0) {
+      return { ok: 'ราคาบนหน้าเว็บตรงกับที่ตั้งไว้อยู่แล้ว — ไม่มีอะไรต้องอัปเดต' }
+    }
+
+    refreshProductViews(gameId)
+    return {
+      ok: `อัปเดตราคาขึ้นหน้าเว็บแล้ว ${updated.length} แพ็กเกจ — ลูกค้าเห็นราคาใหม่ทันที`,
+    }
+  } catch (err) {
+    return { error: friendlyError(err, 'อัปเดตราคาขึ้นหน้าเว็บไม่สำเร็จ') }
   }
 }
 

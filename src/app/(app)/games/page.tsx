@@ -6,6 +6,8 @@ import { money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { ImageInput } from '@/components/ImageInput'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
+import { PublishPrices } from '@/components/PublishPrices'
+import { countPendingPrices } from '@/lib/pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +37,7 @@ export default async function GamesPage({
   const { edit, q: keyword } = await searchParams
   const search = (keyword ?? '').trim()
 
-  const [games, editing] = await Promise.all([
+  const [games, editing, pendingPrices] = await Promise.all([
     q<GameRow>(
       `select g.id, g.name, g.publisher, g.note, g.is_active, g.image_url,
               (select count(*) from products p where p.game_id = g.id)::int as products,
@@ -56,6 +58,7 @@ export default async function GamesPage({
           Number(edit),
         ])
       : Promise.resolve(null),
+    countPendingPrices(),
   ])
 
   return (
@@ -64,6 +67,8 @@ export default async function GamesPage({
         title="รายชื่อเกมที่ขาย"
         subtitle="จัดการเกมและแพ็กเกจเติมของแต่ละเกม (กดที่ชื่อเกมเพื่อดูแพ็กเกจ)"
       />
+
+      <PublishPrices pending={pendingPrices} />
 
       <div className="grid gap-6 lg:grid-cols-[22rem_1fr]">
         <div className="card h-fit">
