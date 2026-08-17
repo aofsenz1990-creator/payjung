@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LineQrButton } from '@/components/LineQrButton'
 
 /**
  * ปุ่มลอยมุมขวาของหน้าเว็บลูกค้า
@@ -8,11 +9,16 @@ import Link from 'next/link'
  */
 export function FloatingActions({
   lineUrl,
+  lineId,
+  lineQr,
   facebookUrl,
   signedIn,
   unread,
 }: {
   lineUrl: string | null
+  lineId: string | null
+  /** รูป QR ที่อัปโหลดไว้ในหน้าตั้งค่า — มีแล้วจะกดเด้ง QR แทนการลิงก์ออกไปเลย */
+  lineQr: string | null
   facebookUrl: string | null
   signedIn: boolean
   unread: number
@@ -46,7 +52,11 @@ export function FloatingActions({
         </FloatingButton>
       ) : null}
 
-      {lineUrl ? (
+      {/* มี QR = กดแล้วเด้งรูปให้สแกน (ใช้ได้ทั้งคนเปิดบนคอมและบนมือถือ)
+          ไม่มี QR = ลิงก์ออกไปที่ LINE ตรง ๆ เหมือนเดิม */}
+      {lineQr ? (
+        <LineQrButton qrUrl={lineQr} lineUrl={lineUrl} lineId={lineId} />
+      ) : lineUrl ? (
         <FloatingButton href={lineUrl} label="แชทกับร้านทาง LINE" external className="bg-[#06C755] text-white">
           <span className="text-[11px] font-extrabold tracking-tight">LINE</span>
         </FloatingButton>

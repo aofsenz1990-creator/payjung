@@ -147,6 +147,8 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       {/* ปุ่มลอยมุมขวา — กดถึงสิ่งที่ใช้บ่อยได้จากทุกหน้า */}
       <FloatingActions
         lineUrl={lineLink(settings.contact_line)}
+        lineId={settings.contact_line ?? null}
+        lineQr={settings.contact_line_qr ?? null}
         facebookUrl={facebookLink(settings.contact_facebook)}
         signedIn={Boolean(customer)}
         unread={unread}
