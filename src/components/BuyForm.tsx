@@ -175,7 +175,7 @@ export function BuyForm({
                 className={`rounded-xl border px-3 py-3 text-center text-sm transition ${
                   v === variant
                     ? 'border-brand-500 bg-brand-600/15 font-medium text-fg'
-                    : 'border-ink-700 bg-ink-850 text-slate-300 hover:border-ink-600'
+                    : 'border-ink-700 bg-ink-850 text-body hover:border-ink-600'
                 }`}
               >
                 {variantLabel(variants, v)}

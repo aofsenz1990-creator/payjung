@@ -228,7 +228,7 @@ export default async function ShopAccountPage() {
                         {dateTime(c.created_at)}
                       </td>
                       <td>
-                        <span className="block text-slate-200">
+                        <span className="block text-body">
                           {CREDIT_KINDS[c.kind] ?? c.kind}
                         </span>
                         {c.note ? <span className="block text-xs text-mute">{c.note}</span> : null}

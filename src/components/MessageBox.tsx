@@ -80,7 +80,7 @@ export function MessageBox({ messages }: { messages: ShopMessage[] }) {
                 <CopyButton value={m.body} />
               </div>
             ) : (
-              <p className="whitespace-pre-line text-sm leading-relaxed text-slate-200">
+              <p className="whitespace-pre-line text-sm leading-relaxed text-body">
                 {m.body}
               </p>
             )}

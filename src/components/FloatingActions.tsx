@@ -29,7 +29,7 @@ export function FloatingActions({
       <FloatingButton
         href={signedIn ? '/shop/topup' : '/shop/login'}
         label="เติมเครดิต"
-        className="bg-linear-to-br from-sun to-warn text-ink-950"
+        className="bg-linear-to-br from-sun to-warn text-[#221803]"
       >
         <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="9" cy="20" r="1.4" />

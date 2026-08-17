@@ -19,6 +19,8 @@ type CustomerRow = {
   note: string | null
   web_enabled: boolean | null
   tier: string
+  /** เครดิต (แต้ม) ของลูกค้า — พนักงานต้องเห็นเวลาลูกค้าโทรมาถาม */
+  points: number
   orders: number
   spent: number
   last_buy: string | null
@@ -36,7 +38,7 @@ export default async function CustomersPage({
 
   const [customers, editing, creditCustomers] = await Promise.all([
     q<CustomerRow>(
-      `select c.id, c.name, c.phone, c.contact, c.game_uid, c.note, c.web_enabled, c.tier,
+      `select c.id, c.name, c.phone, c.contact, c.game_uid, c.note, c.web_enabled, c.tier, c.points::float8 as points,
               coalesce(t.orders, 0)::int as orders,
               coalesce(t.spent, 0)::float8 as spent,
               t.last_buy
@@ -196,6 +198,7 @@ export default async function CustomersPage({
                     <th>ไอดีเกม</th>
                     <th className="text-right">จำนวนบิล</th>
                     <th className="text-right">ยอดซื้อสะสม</th>
+                    <th className="text-right">เครดิต</th>
                     <th>ซื้อล่าสุด</th>
                     <th className="text-right">จัดการ</th>
                   </tr>
@@ -224,6 +227,7 @@ export default async function CustomersPage({
                       <td className="font-mono text-xs text-mute">{c.game_uid ?? '-'}</td>
                       <td className="text-right">{num(c.orders)}</td>
                       <td className="text-right font-medium text-white">{money(c.spent)}</td>
+                      <td className="text-right text-grape-400">{num(c.points)}</td>
                       <td className="whitespace-nowrap text-xs text-mute">
                         {c.last_buy ? dateOnly(c.last_buy) : '-'}
                       </td>

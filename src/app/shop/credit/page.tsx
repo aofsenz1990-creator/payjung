@@ -163,7 +163,7 @@ export default async function ShopCreditPage() {
                       <td className="whitespace-nowrap text-xs text-mute">
                         {dateTime(h.created_at)}
                       </td>
-                      <td className="text-slate-200">
+                      <td className="text-body">
                         {KIND_LABEL[h.kind] ?? h.kind}
                         {h.amount ? (
                           <span className="ml-1 text-xs text-good">
@@ -178,7 +178,7 @@ export default async function ShopCreditPage() {
                         {h.points >= 0 ? '+' : ''}
                         {num(h.points)}
                       </td>
-                      <td className="text-right text-slate-300">{num(h.balance_after)}</td>
+                      <td className="text-right text-body">{num(h.balance_after)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -115,7 +115,7 @@ export function WhyUs() {
               {f.icon}
             </div>
             <h3 className="text-base font-semibold text-fg">{f.title}</h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-slate-300">{f.body}</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-body">{f.body}</p>
             <p className="mt-2 text-xs leading-relaxed text-mute">{f.note}</p>
           </article>
         ))}

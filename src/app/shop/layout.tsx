@@ -71,7 +71,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         className={`shop-overlay pointer-events-none fixed inset-0 z-0 bg-linear-to-b ${shopOverlayClass(settings)}`}
       />
       {settings.announcement ? (
-        <div className="relative z-10 bg-linear-to-r from-brand-600 to-grape-600 px-4 py-2 text-center text-sm font-medium text-fg">
+        <div className="relative z-10 bg-linear-to-r from-brand-600 to-grape-600 px-4 py-2 text-center text-sm font-medium text-white">
           {settings.announcement}
         </div>
       ) : null}
@@ -153,19 +153,19 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         <div className="mx-auto flex max-w-[1440px] gap-1 overflow-x-auto px-4 py-2">
           <Link
             href="/shop"
-            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-fg"
+            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-body transition hover:bg-ink-800 hover:text-fg"
           >
             หน้าแรก
           </Link>
           <Link
             href="/shop#games"
-            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-fg"
+            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-body transition hover:bg-ink-800 hover:text-fg"
           >
             เกม
           </Link>
           <Link
             href="/shop/credit"
-            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-fg"
+            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-body transition hover:bg-ink-800 hover:text-fg"
           >
             เครดิต
           </Link>

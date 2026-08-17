@@ -109,7 +109,7 @@ export function ContactBar({
               alt="QR Code LINE ของร้าน"
               className="mx-auto mt-3 w-full max-w-[16rem] rounded-xl bg-white p-3"
             />
-            <p className="mt-3 text-sm text-slate-200">{line}</p>
+            <p className="mt-3 text-sm text-body">{line}</p>
             <div className="mt-4 flex flex-col gap-2">
               {lineUrl ? (
                 <a href={lineUrl} target="_blank" rel="noreferrer" className="btn-primary w-full">

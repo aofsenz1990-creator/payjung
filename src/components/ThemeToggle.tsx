@@ -28,7 +28,7 @@ export function ThemeToggle({ initial }: { initial: 'dark' | 'light' }) {
       onClick={toggle}
       aria-label={theme === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
       title={theme === 'dark' ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
-      className="rounded-lg border border-ink-700 bg-ink-850 px-2.5 py-1.5 text-sm text-slate-300 transition hover:border-ink-600 hover:bg-ink-800"
+      className="rounded-lg border border-ink-700 bg-ink-850 px-2.5 py-1.5 text-sm text-body transition hover:border-ink-600 hover:bg-ink-800"
     >
       {theme === 'dark' ? '☀️' : '🌙'}
     </button>
