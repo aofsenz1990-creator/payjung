@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { q } from '@/lib/db'
 import { getShopCustomer, getSiteSettings, isPartner, priceExpr } from '@/lib/shop'
 import { dateOnly, money, num } from '@/lib/format'
+import { WhyUs } from '@/components/WhyUs'
 
 export const dynamic = 'force-dynamic'
 
@@ -177,6 +178,10 @@ export default async function ShopHome({
           </div>
         )}
       </section>
+
+      {/* จุดขายของร้าน — วางไว้ใต้รายการเกม เพราะคนที่เลื่อนมาถึงตรงนี้คือคนที่ยังลังเล
+          ส่วนคนที่รู้อยู่แล้วว่าจะเติมเกมอะไรก็กดจากด้านบนไปเลยไม่ต้องอ่าน */}
+      <WhyUs />
 
       {/* ข่าวสารด้านล่างเว็บ */}
       {news.length > 0 ? (
