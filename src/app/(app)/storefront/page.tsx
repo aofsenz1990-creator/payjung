@@ -105,6 +105,17 @@ type NewsRow = {
   created_at: string
 }
 
+/** แท็บของหน้าจัดการเว็บไซต์ — เรียงตามที่ใช้บ่อยจากซ้ายไปขวา */
+const TABS = [
+  { key: 'games', label: '🎮 เกมบนหน้าเว็บ' },
+  { key: 'products', label: '📦 แพ็กเกจ & การผูก API' },
+  { key: 'catalog', label: '⬇️ ดึงรายการสินค้า' },
+  { key: 'providers', label: '🔌 ผู้ให้บริการ API' },
+  { key: 'topups', label: '💵 เติมเงินให้ผู้ให้บริการ' },
+  { key: 'line', label: '🔔 แจ้งเตือน LINE' },
+  { key: 'site', label: '⚙️ ตั้งค่าหน้าเว็บ & ข่าวสาร' },
+] as const
+
 const AUTH_LABELS: Record<string, string> = {
   bearer: 'Bearer Token (ส่งใน Authorization)',
   apikey: 'API Key (ส่งใน header)',
@@ -115,10 +126,22 @@ const AUTH_LABELS: Record<string, string> = {
 export default async function StorefrontPage({
   searchParams,
 }: {
-  searchParams: Promise<{ provider?: string; game?: string; cq?: string }>
+  searchParams: Promise<{ provider?: string; game?: string; cq?: string; tab?: string }>
 }) {
   await requireAdmin()
-  const { provider: editProvider, game: editGame, cq } = await searchParams
+  const { provider: editProvider, game: editGame, cq, tab: tabParam } = await searchParams
+
+  // หน้านี้ยาวมาก แบ่งเป็นแท็บให้เลือกดูทีละส่วน
+  // ถ้ากำลังแก้ไขอะไรอยู่ ให้เด้งไปแท็บนั้นเอง ไม่งั้นกดแก้ไขแล้วจะหาฟอร์มไม่เจอ
+  const tab = editProvider
+    ? 'providers'
+    : editGame
+      ? 'games'
+      : cq
+        ? 'catalog'
+        : TABS.some((t) => t.key === tabParam)
+          ? (tabParam as string)
+          : 'games'
   const catalogSearch = (cq ?? '').trim()
 
   const [providers, games, products, editingProvider, editingGame, news, settings, catalog] =
@@ -169,7 +192,10 @@ export default async function StorefrontPage({
            from news order by pinned desc, created_at desc`
       ),
       getSiteSettings(),
-      q<CatalogGame>(
+      // ตารางรายการสินค้าของผู้ให้บริการมีหลายพันแถว และรวมกลุ่มทุกครั้งที่เปิดหน้า
+      // ดึงเฉพาะตอนเปิดแท็บนี้จริง ๆ หน้าที่เหลือจะโหลดเร็วขึ้นมาก
+      tab === 'catalog'
+      ? q<CatalogGame>(
         `select c.provider_id, c.game_id, min(c.game_name) as game_name,
                 count(*)::int as packs,
                 count(distinct c.server_id)::int as servers,
@@ -184,7 +210,8 @@ export default async function StorefrontPage({
           group by c.provider_id, c.game_id
           order by min(c.game_name)`,
         catalogSearch ? [`%${catalogSearch}%`] : []
-      ),
+      )
+      : Promise.resolve([] as CatalogGame[]),
     ])
 
   const publishedGames = games.filter((g) => g.is_published).length
@@ -323,7 +350,27 @@ export default async function StorefrontPage({
         </div>
       </div>
 
+      {/* แถบเลือกแท็บ — เลื่อนแนวนอนได้บนจอแคบ ไม่งั้นปุ่มจะตกบรรทัดจนสูงเป็นกำแพง */}
+      <div className="mb-6 -mx-1 overflow-x-auto px-1">
+        <div className="flex w-max gap-2">
+          {TABS.map((t) => (
+            <Link
+              key={t.key}
+              href={`/storefront?tab=${t.key}`}
+              className={
+                t.key === tab
+                  ? 'whitespace-nowrap rounded-lg border border-brand-500/60 bg-brand-500/15 px-3 py-2 text-sm font-medium text-brand-400'
+                  : 'whitespace-nowrap rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-sm text-slate-300 transition hover:border-ink-600 hover:bg-ink-800'
+              }
+            >
+              {t.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
       {/* ---------------- ประวัติเติมเงินให้ผู้ให้บริการ ---------------- */}
+      {tab === 'topups' ? (<>
       <div className="card mb-6">
           <SectionTitle
             right={
@@ -343,7 +390,9 @@ export default async function StorefrontPage({
           />
       </div>
 
+      </>) : null}
       {/* ---------------- แจ้งเตือนเข้า LINE ---------------- */}
+      {tab === 'line' ? (<>
       <div className="card mb-6">
         <SectionTitle
           right={
@@ -362,7 +411,9 @@ export default async function StorefrontPage({
         />
       </div>
 
+      </>) : null}
       {/* ---------------- ผู้ให้บริการ API ---------------- */}
+      {tab === 'providers' ? (<>
       <div className="mb-6 grid gap-6 lg:grid-cols-[24rem_1fr]">
         <div className="card h-fit">
           <SectionTitle
@@ -550,7 +601,9 @@ export default async function StorefrontPage({
         </div>
       </div>
 
+      </>) : null}
       {/* ---------------- รายการสินค้าจากผู้ให้บริการ ---------------- */}
+      {tab === 'catalog' ? (<>
       {providers.length > 0 ? (
         <div className="card mb-6">
           <SectionTitle
@@ -759,7 +812,9 @@ export default async function StorefrontPage({
         </div>
       ) : null}
 
+      </>) : null}
       {/* ---------------- เกมบนหน้าเว็บ ---------------- */}
+      {tab === 'games' ? (<>
       <div className="mb-6 grid gap-6 lg:grid-cols-[24rem_1fr]">
         <div className="card h-fit">
           <SectionTitle
@@ -950,7 +1005,9 @@ export default async function StorefrontPage({
         </div>
       </div>
 
+      </>) : null}
       {/* ---------------- แพ็กเกจกับการผูก API ---------------- */}
+      {tab === 'products' ? (<>
       <div className="card">
         <SectionTitle
           right={
@@ -1049,7 +1106,9 @@ export default async function StorefrontPage({
         )}
       </div>
 
+      </>) : null}
       {/* ---------------- ข่าวสาร + ช่องทางติดต่อ ---------------- */}
+      {tab === 'site' ? (<>
       <div className="mt-6 grid gap-6 lg:grid-cols-[24rem_1fr]">
         <div className="space-y-6">
           <div className="card h-fit">
@@ -1210,6 +1269,7 @@ export default async function StorefrontPage({
           )}
         </div>
       </div>
+      </>) : null}
     </>
   )
 }
