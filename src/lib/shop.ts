@@ -127,6 +127,25 @@ export type ShopCustomer = {
   phone: string | null
   game_uid: string | null
   email: string
+  /** 'partner' = ได้ราคาพาร์ทเนอร์ (ถ้าแพ็กนั้นตั้งไว้), อย่างอื่น = ราคาปกติ */
+  tier: string
+}
+
+/** ลูกค้ารายนี้ได้ราคาพาร์ทเนอร์ไหม */
+export function isPartner(customer: { tier: string } | null | undefined) {
+  return customer?.tier === 'partner'
+}
+
+/**
+ * นิพจน์ SQL ของ "ราคาที่ลูกค้ารายนี้ต้องจ่าย"
+ *
+ * เขียนไว้ที่เดียวแล้วเรียกใช้ทุกหน้า เพราะราคาที่โชว์กับราคาที่ตัดเงินจริง
+ * ต้องมาจากสูตรเดียวกันเป๊ะ ๆ ไม่งั้นลูกค้าเห็นราคาหนึ่งแต่โดนตัดอีกราคาหนึ่ง
+ */
+export function priceExpr(partner: boolean, alias = 'p') {
+  return partner
+    ? `coalesce(${alias}.partner_price, ${alias}.sell_price)`
+    : `${alias}.sell_price`
 }
 
 /**
@@ -143,7 +162,7 @@ export const getShopCustomer = cache(async function getShopCustomer(): Promise<S
     if (!user) return null
 
     const row = await q1<Omit<ShopCustomer, 'email'>>(
-      `select id, name, credit::float8 as credit, phone, game_uid
+      `select id, name, credit::float8 as credit, phone, game_uid, tier
          from customers where auth_user_id = $1 and web_enabled limit 1`,
       [user.id]
     )

@@ -42,6 +42,8 @@ type ProductRow = {
   provider_sku: string | null
   provider_product_type: string | null
   markup_percent: number | null
+  partner_markup_percent: number | null
+  partner_price: number | null
   provider_variant: string | null
 }
 
@@ -71,6 +73,8 @@ export default async function GameDetailPage({
       `select p.id, p.game_id, p.name, p.sku, p.cost_price::float8 as cost_price,
               p.sell_price::float8 as sell_price, p.track_stock, p.stock_qty, p.low_stock,
               p.is_active, p.is_published, p.markup_percent::float8 as markup_percent,
+              p.partner_markup_percent::float8 as partner_markup_percent,
+              p.partner_price::float8 as partner_price,
               p.provider_variant,
               coalesce((select sum(s.qty) from sales s
                          where s.product_id = p.id and s.status = 'paid'), 0)::int as sold
@@ -83,7 +87,9 @@ export default async function GameDetailPage({
           `select id, game_id, name, sku, cost_price::float8 as cost_price,
                   sell_price::float8 as sell_price, track_stock, stock_qty, low_stock, is_active,
                   image_url, is_published, sort_order, provider_id, provider_sku,
-                  provider_product_type, markup_percent::float8 as markup_percent
+                  provider_product_type, markup_percent::float8 as markup_percent,
+                  partner_markup_percent::float8 as partner_markup_percent,
+                  partner_price::float8 as partner_price
              from products where id = $1`,
           [Number(edit)]
         )
@@ -224,6 +230,34 @@ export default async function GameDetailPage({
                 กรอกไว้แล้ว <b className="text-slate-200">ระบบจะคิดราคาขายให้เอง</b>{' '}
                 (ช่องราคาขายด้านบนจะถูกทับ) ปัดขึ้นเป็นจำนวนเต็มบาท
                 และคิดใหม่ทุกครั้งที่ต้นทุนเปลี่ยน กำไรจึงคงที่โดยไม่ต้องมาไล่แก้เอง
+              </p>
+            </div>
+
+            {/* ราคาสำหรับลูกค้าระดับ Partner — คิดจากต้นทุนเหมือนกันแต่คนละ % */}
+            <div>
+              <label className="label" htmlFor="partner_markup_percent">
+                บวกกำไรสำหรับ Partner (%)
+              </label>
+              <input
+                id="partner_markup_percent"
+                name="partner_markup_percent"
+                type="number"
+                min={0}
+                step="0.01"
+                className="input"
+                defaultValue={editing?.partner_markup_percent ?? ''}
+                placeholder="เว้นว่าง = พาร์ทเนอร์จ่ายเท่าราคาปกติ"
+              />
+              <p className="mt-1 text-xs leading-relaxed text-mute">
+                ใส่ % ที่ต่ำกว่าช่องด้านบน ลูกค้าที่ตั้งระดับเป็น{' '}
+                <b className="text-grape-400">Partner</b> จะเห็นและจ่ายราคานี้แทนราคาปกติ
+                {editing?.partner_price != null ? (
+                  <>
+                    {' '}
+                    · ตอนนี้ราคาพาร์ทเนอร์คือ{' '}
+                    <b className="text-grape-400">{money(editing.partner_price)}</b> บาท
+                  </>
+                ) : null}
               </p>
             </div>
 
@@ -544,7 +578,11 @@ export default async function GameDetailPage({
           ) : null}
 
           {/* ทั้งแถบตั้งกำไรและช่องในตารางใช้ค่าชุดเดียวกัน กดใส่ให้ทุกแพ็กแล้วช่องในตารางจึงขึ้นตาม */}
-          <MarkupProvider items={products.map((p) => ({ id: p.id, markup: p.markup_percent }))}>
+          <MarkupProvider items={products.map((p) => ({
+              id: p.id,
+              markup: p.markup_percent,
+              partnerMarkup: p.partner_markup_percent,
+            }))}>
           {/* แก้กำไรทั้งเกมในที่เดียว: ใส่ % ให้ทุกแพ็กก่อน แล้วค่อยแก้ทีละช่อง แล้วบันทึกครั้งเดียว */}
           {products.length > 0 && isAdmin ? (
             <MarkupBulkBar gameId={game.id} action={saveMarkupsAction} />
@@ -562,6 +600,8 @@ export default async function GameDetailPage({
                     <th className="text-right">ราคาขาย</th>
                     {isAdmin ? <th className="text-right">กำไร/หน่วย</th> : null}
                     {isAdmin ? <th className="w-28 text-right">ปรับกำไร %</th> : null}
+                    {isAdmin ? <th className="text-right">ราคาพาร์ทเนอร์</th> : null}
+                    {isAdmin ? <th className="w-28 text-right">พาร์ทเนอร์ %</th> : null}
                     <th className="text-right">สต๊อก</th>
                     <th className="text-right">ขายไปแล้ว</th>
                     <th>สถานะ</th>
@@ -602,6 +642,7 @@ export default async function GameDetailPage({
                             productName={p.name}
                             cost={p.cost_price}
                             sellPrice={p.sell_price}
+                            partnerPrice={p.partner_price}
                             showMoney
                           />
                         ) : (

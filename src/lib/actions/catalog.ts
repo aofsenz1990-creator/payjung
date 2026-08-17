@@ -108,11 +108,15 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
   // กรอก % ไว้ = ให้ระบบคิดราคาขายจากต้นทุนให้เอง เว้นว่าง = ตั้งราคาขายเอง
   const markupRaw = optStr(formData, 'markup_percent')
   const markup = markupRaw === null ? null : decimal(formData, 'markup_percent')
+  // % กำไรสำหรับพาร์ทเนอร์ เว้นว่าง = พาร์ทเนอร์จ่ายเท่าราคาปกติ
+  const pMarkupRaw = optStr(formData, 'partner_markup_percent')
+  const pMarkup = pMarkupRaw === null ? null : decimal(formData, 'partner_markup_percent')
 
   if (!gameId) return { error: 'กรุณาเลือกเกม' }
   if (!name) return { error: 'กรุณากรอกชื่อแพ็กเกจ เช่น 100 เพชร' }
   if (price < 0 || cost < 0) return { error: 'ราคาต้องไม่ติดลบ' }
   if (markup !== null && markup < 0) return { error: 'เปอร์เซ็นต์กำไรต้องไม่ติดลบ' }
+  if (pMarkup !== null && pMarkup < 0) return { error: 'เปอร์เซ็นต์กำไรพาร์ทเนอร์ต้องไม่ติดลบ' }
 
   try {
     if (id) {
@@ -123,6 +127,9 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
            sell_price = case when $16::numeric is null then $5
                              else ceil($4::numeric * (1 + $16::numeric / 100)) end,
            markup_percent = $16,
+           partner_markup_percent = $17,
+           partner_price = case when $17::numeric is null then null
+                                else ceil($4::numeric * (1 + $17::numeric / 100)) end,
            track_stock = $6, low_stock = $7, is_active = $8, image_url = $10,
            is_published = $11, sort_order = $12, provider_id = $13, provider_sku = $14,
            provider_product_type = $15
@@ -130,6 +137,7 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
         [
           gameId, name, sku, cost, price, trackStock, lowStock, isActive, Number(id),
           imageUrl, isPublished, sortOrder, providerId, providerSku, providerProductType, markup,
+          pMarkup,
         ]
       )
     } else {
@@ -137,14 +145,18 @@ export async function saveProductAction(formData: FormData): Promise<ActionState
       const rows = await q<{ id: number }>(
         `insert into products (game_id, name, sku, cost_price, sell_price, track_stock, low_stock,
                                stock_qty, image_url, is_published, sort_order, provider_id, provider_sku,
-                               provider_product_type, markup_percent)
+                               provider_product_type, markup_percent,
+                               partner_markup_percent, partner_price)
          values ($1, $2, $3, $4,
                  case when $15::numeric is null then $5
                       else ceil($4::numeric * (1 + $15::numeric / 100)) end,
-                 $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) returning id`,
+                 $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                 case when $16::numeric is null then null
+                      else ceil($4::numeric * (1 + $16::numeric / 100)) end) returning id`,
         [
           gameId, name, sku, cost, price, trackStock, lowStock, trackStock ? openingQty : 0,
           imageUrl, isPublished, sortOrder, providerId, providerSku, providerProductType, markup,
+          pMarkup,
         ]
       )
       if (trackStock && openingQty > 0) {
@@ -458,59 +470,90 @@ export async function saveMarkupsAction(formData: FormData): Promise<ActionState
   // เอาเฉพาะแถวที่ "ค่าต่างจากเดิม" เท่านั้น
   // ฟอร์มส่งทุกแถวมาเสมอ ถ้าเหมาเอาว่าช่องว่าง = สั่งให้เลิกคิดอัตโนมัติ
   // การพิมพ์แค่แถวเดียวแล้วกดบันทึก จะไปล้างค่าของแถวอื่นที่ไม่ได้แตะทิ้งหมด
-  const rows: Array<[number, number | null]> = []
-  for (const [key, raw] of formData.entries()) {
-    if (!key.startsWith('markup_') || key.startsWith('markup_was_')) continue
-    if (typeof raw !== 'string') continue
-    const productId = Number(key.slice('markup_'.length))
-    if (!Number.isFinite(productId) || productId <= 0) continue
+  /** อ่านช่อง % ที่ถูกแก้จริงของคำนำหน้าที่กำหนด (markup_ = ราคาปกติ, pmarkup_ = พาร์ทเนอร์) */
+  function changedRows(prefix: string): Array<[number, number | null]> | string {
+    const out: Array<[number, number | null]> = []
+    for (const [key, raw] of formData.entries()) {
+      if (!key.startsWith(prefix) || key.startsWith(`${prefix}was_`)) continue
+      if (typeof raw !== 'string') continue
+      const productId = Number(key.slice(prefix.length))
+      if (!Number.isFinite(productId) || productId <= 0) continue
 
-    const text = raw.trim()
-    const before = formData.get(`markup_was_${productId}`)
-    if (typeof before === 'string' && before.trim() === text) continue // ไม่ได้แก้แถวนี้
+      const text = raw.trim()
+      const before = formData.get(`${prefix}was_${productId}`)
+      if (typeof before === 'string' && before.trim() === text) continue // ไม่ได้แก้แถวนี้
 
-    if (text === '') {
-      rows.push([productId, null])
-      continue
+      if (text === '') {
+        out.push([productId, null])
+        continue
+      }
+      const pct = Number(text.replace(/,/g, ''))
+      if (!Number.isFinite(pct) || pct < 0) {
+        return 'เปอร์เซ็นต์กำไรต้องเป็นตัวเลขและไม่ติดลบ'
+      }
+      out.push([productId, pct])
     }
-    const pct = Number(text.replace(/,/g, ''))
-    if (!Number.isFinite(pct) || pct < 0) {
-      return { error: 'เปอร์เซ็นต์กำไรต้องเป็นตัวเลขและไม่ติดลบ' }
-    }
-    rows.push([productId, pct])
+    return out
   }
 
-  if (rows.length === 0) {
+  const rows = changedRows('markup_')
+  if (typeof rows === 'string') return { error: rows }
+  const partnerRows = changedRows('pmarkup_')
+  if (typeof partnerRows === 'string') return { error: partnerRows }
+
+  if (rows.length === 0 && partnerRows.length === 0) {
     return { ok: 'ไม่มีแถวไหนถูกแก้ — ไม่ได้เปลี่ยนอะไร' }
   }
 
-  try {
+  /** ยิงอัปเดตชุดหนึ่ง โดยเทียบเฉพาะคอลัมน์ที่เกี่ยวข้อง คืนจำนวนแถวที่เปลี่ยนจริง */
+  async function applyRows(
+    changes: Array<[number, number | null]>,
+    pctColumn: string,
+    priceColumn: string
+  ) {
+    if (changes.length === 0) return 0
     // สร้างตารางชั่วคราวจากค่าที่กรอกมา แล้วอัปเดตทีเดียวทั้งชุด
-    const values = rows
+    const values = changes
       .map((_, i) => (i === 0 ? `($1::int, $2::numeric)` : `($${i * 2 + 1}, $${i * 2 + 2})`))
       .join(',')
-    const params: unknown[] = rows.flat()
+    const params: unknown[] = changes.flat()
     params.push(gameId)
+
+    // ล้าง % ทิ้ง = กลับไปใช้ราคาที่ตั้งเอง (ราคาปกติ) หรือเลิกให้ราคาพิเศษ (พาร์ทเนอร์)
+    const priceExpr =
+      priceColumn === 'partner_price'
+        ? `case when v.pct is null then null else ceil(p.cost_price * (1 + v.pct / 100)) end`
+        : `case when v.pct is null then p.${priceColumn}
+                 else ceil(p.cost_price * (1 + v.pct / 100)) end`
 
     const updated = await q<{ id: number }>(
       `update products p
-          set markup_percent = v.pct,
-              sell_price = case when v.pct is null then p.sell_price
-                                else ceil(p.cost_price * (1 + v.pct / 100)) end
+          set ${pctColumn} = v.pct,
+              ${priceColumn} = ${priceExpr}
          from (values ${values}) as v(id, pct)
         where p.id = v.id
           and p.game_id = $${params.length}
-          and p.markup_percent is distinct from v.pct
+          and p.${pctColumn} is distinct from v.pct
        returning p.id`,
       params
     )
+    return updated.length
+  }
+
+  try {
+    const normalCount = await applyRows(rows, 'markup_percent', 'sell_price')
+    const partnerCount = await applyRows(partnerRows, 'partner_markup_percent', 'partner_price')
 
     refreshProductViews(gameId)
-    if (updated.length === 0) return { ok: 'ไม่มีแพ็กเกจไหนเปลี่ยน — ค่าที่กรอกตรงกับของเดิมอยู่แล้ว' }
+    if (normalCount === 0 && partnerCount === 0) {
+      return { ok: 'ไม่มีแพ็กเกจไหนเปลี่ยน — ค่าที่กรอกตรงกับของเดิมอยู่แล้ว' }
+    }
+
+    const parts: string[] = []
+    if (normalCount > 0) parts.push(`ราคาปกติ ${normalCount} แพ็กเกจ`)
+    if (partnerCount > 0) parts.push(`ราคาพาร์ทเนอร์ ${partnerCount} แพ็กเกจ`)
     return {
-      ok:
-        `บันทึกกำไร ${updated.length} แพ็กเกจแล้ว — คิดราคาขายใหม่ให้เรียบร้อย ` +
-        '(ปัดขึ้นเป็นจำนวนเต็มบาท)',
+      ok: `บันทึกกำไรแล้ว — ${parts.join(' และ ')} (ปัดขึ้นเป็นจำนวนเต็มบาท)`,
     }
   } catch (err) {
     return { error: friendlyError(err, 'บันทึกกำไรไม่สำเร็จ') }
@@ -536,19 +579,23 @@ export async function saveCustomerAction(formData: FormData): Promise<ActionStat
   const contact = optStr(formData, 'contact')
   const gameUid = optStr(formData, 'game_uid')
   const note = optStr(formData, 'note')
+  // ระดับลูกค้า — รับแค่สองค่าที่รู้จัก ค่าอื่นถือเป็นลูกค้าทั่วไป
+  const tier = str(formData, 'tier') === 'partner' ? 'partner' : 'normal'
 
   if (!name) return { error: 'กรุณากรอกชื่อลูกค้า' }
 
   try {
     if (id) {
       await q(
-        'update customers set name = $1, phone = $2, contact = $3, game_uid = $4, note = $5 where id = $6',
-        [name, phone, contact, gameUid, note, Number(id)]
+        `update customers set name = $1, phone = $2, contact = $3, game_uid = $4, note = $5,
+                              tier = $7
+          where id = $6`,
+        [name, phone, contact, gameUid, note, Number(id), tier]
       )
     } else {
       await q(
-        'insert into customers (name, phone, contact, game_uid, note) values ($1, $2, $3, $4, $5)',
-        [name, phone, contact, gameUid, note]
+        'insert into customers (name, phone, contact, game_uid, note, tier) values ($1, $2, $3, $4, $5, $6)',
+        [name, phone, contact, gameUid, note, tier]
       )
     }
   } catch (err) {

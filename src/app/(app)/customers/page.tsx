@@ -18,6 +18,7 @@ type CustomerRow = {
   game_uid: string | null
   note: string | null
   web_enabled: boolean | null
+  tier: string
   orders: number
   spent: number
   last_buy: string | null
@@ -35,7 +36,7 @@ export default async function CustomersPage({
 
   const [customers, editing, creditCustomers] = await Promise.all([
     q<CustomerRow>(
-      `select c.id, c.name, c.phone, c.contact, c.game_uid, c.note, c.web_enabled,
+      `select c.id, c.name, c.phone, c.contact, c.game_uid, c.note, c.web_enabled, c.tier,
               coalesce(t.orders, 0)::int as orders,
               coalesce(t.spent, 0)::float8 as spent,
               t.last_buy
@@ -50,7 +51,7 @@ export default async function CustomersPage({
     ),
     edit
       ? q1<CustomerRow>(
-          'select id, name, phone, contact, game_uid, note from customers where id = $1',
+          'select id, name, phone, contact, game_uid, note, tier from customers where id = $1',
           [Number(edit)]
         )
       : Promise.resolve(null),
@@ -133,6 +134,24 @@ export default async function CustomersPage({
               />
             </div>
             <div>
+              <label className="label" htmlFor="tier">
+                ระดับลูกค้า
+              </label>
+              <select
+                id="tier"
+                name="tier"
+                className="input"
+                defaultValue={editing?.tier ?? 'normal'}
+              >
+                <option value="normal">ลูกค้าทั่วไป — ใช้ราคาขายปกติ</option>
+                <option value="partner">Partner — ใช้ราคาพาร์ทเนอร์ (ถ้าตั้งไว้)</option>
+              </select>
+              <p className="mt-1 text-xs text-mute">
+                ตั้งราคาพาร์ทเนอร์ของแต่ละแพ็กเกจได้ที่เมนูเกม → เปิดเกม → ช่อง &quot;พาร์ทเนอร์ %&quot;
+                · แพ็กที่ไม่ได้ตั้งไว้ พาร์ทเนอร์จะจ่ายเท่าราคาปกติ
+              </p>
+            </div>
+            <div>
               <label className="label" htmlFor="note">
                 หมายเหตุ
               </label>
@@ -185,7 +204,14 @@ export default async function CustomersPage({
                   {customers.map((c) => (
                     <tr key={c.id}>
                       <td>
-                        <span className="block font-medium text-white">{c.name}</span>
+                        <span className="block font-medium text-white">
+                          {c.name}
+                          {c.tier === 'partner' ? (
+                            <span className="chip ml-2 bg-grape-600/20 text-grape-400">
+                              Partner
+                            </span>
+                          ) : null}
+                        </span>
                         {c.note ? <span className="block text-xs text-mute">{c.note}</span> : null}
                       </td>
                       <td className="text-slate-300">

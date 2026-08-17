@@ -277,7 +277,12 @@ export async function refreshImportedAction(formData: FormData): Promise<ActionS
               -- ตั้งราคาเอง = ไม่แตะราคาขายเด็ดขาด
               sell_price = case when p.markup_percent is not null
                                 then ceil(c.pack_price * (1 + p.markup_percent / 100))
-                                else p.sell_price end
+                                else p.sell_price end,
+              -- ราคาพาร์ทเนอร์คิดใหม่ด้วยหลักเดียวกัน ไม่งั้นต้นทุนขึ้นแล้วราคาพาร์ทเนอร์
+              -- ค้างที่ของเดิม กลายเป็นขายต่ำกว่าทุนให้พาร์ทเนอร์โดยไม่รู้ตัว
+              partner_price = case when p.partner_markup_percent is not null
+                                   then ceil(c.pack_price * (1 + p.partner_markup_percent / 100))
+                                   else p.partner_price end
          from provider_catalog c
         where c.provider_id = p.provider_id
           and c.game_id = p.provider_game_id

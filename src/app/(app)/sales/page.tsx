@@ -33,11 +33,12 @@ export default async function SalesPage() {
     q<ProductOption>(
       // เรียงตามลำดับที่บันทึกเข้าระบบ (id) ไม่ใช่ตามตัวอักษร
       // เพราะชื่อแพ็กเกจขึ้นต้นด้วยตัวเลข พอเรียงตามตัวอักษรแล้วดูสับสน
-      `select id, game_id, name, sell_price::float8 as sell_price, cost_price::float8 as cost_price,
+      `select id, game_id, name, sell_price::float8 as sell_price,
+              partner_price::float8 as partner_price, cost_price::float8 as cost_price,
               track_stock, stock_qty
          from products where is_active order by game_id, id`
     ),
-    q<CustomerOption>('select id, name, game_uid from customers order by name'),
+    q<CustomerOption>('select id, name, game_uid, tier from customers order by name'),
     q<{
       id: number
       code: string

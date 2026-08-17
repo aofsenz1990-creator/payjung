@@ -11,11 +11,18 @@ export type ProductOption = {
   game_id: number
   name: string
   sell_price: number
+  /** ราคาสำหรับพาร์ทเนอร์ (null = จ่ายเท่าราคาปกติ) */
+  partner_price: number | null
   cost_price: number
   track_stock: boolean
   stock_qty: number
 }
-export type CustomerOption = { id: number; name: string; game_uid: string | null }
+export type CustomerOption = {
+  id: number
+  name: string
+  game_uid: string | null
+  tier: string
+}
 
 const baht = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -68,14 +75,42 @@ export function SaleForm({
   const total = qtyNum * (Number(price) || 0)
   const profit = total - qtyNum * (Number(cost) || 0)
 
+  /**
+   * ลูกค้าที่พิมพ์ชื่อไว้เป็นพาร์ทเนอร์ไหม
+   * เทียบด้วยชื่อเพราะช่องลูกค้าเป็นช่องพิมพ์อิสระ (พิมพ์ชื่อใหม่ที่ยังไม่มีในระบบก็ได้)
+   */
+  const matchedCustomer = useMemo(
+    () => customers.find((c) => c.name.toLowerCase() === customerName.trim().toLowerCase()) ?? null,
+    [customers, customerName]
+  )
+  const partner = matchedCustomer?.tier === 'partner'
+
+  /** ราคาที่ควรใช้กับลูกค้าคนนี้ */
+  function priceFor(p: ProductOption, isPartner: boolean) {
+    return isPartner && p.partner_price != null ? p.partner_price : p.sell_price
+  }
+
   function pickProduct(id: string) {
     setProductId(id)
     const p = products.find((x) => String(x.id) === id)
     if (p) {
       setItemName(p.name)
-      setPrice(String(p.sell_price))
+      setPrice(String(priceFor(p, partner)))
       setCost(String(p.cost_price))
     }
+  }
+
+  /**
+   * เปลี่ยนชื่อลูกค้าแล้วเติมราคาให้ใหม่ตามระดับของคนนั้น
+   * เลือกแพ็กเกจก่อนแล้วค่อยพิมพ์ชื่อลูกค้าเป็นลำดับที่คนใช้จริงทำบ่อยกว่า
+   * ถ้าไม่เติมให้ตรงนี้ ราคาพาร์ทเนอร์จะไม่ขึ้นเลยเวลาลงยอดหน้าร้าน
+   */
+  function changeCustomer(name: string) {
+    setCustomerName(name)
+    if (!selected) return
+    const nextPartner =
+      customers.find((c) => c.name.toLowerCase() === name.trim().toLowerCase())?.tier === 'partner'
+    setPrice(String(priceFor(selected, nextPartner)))
   }
 
   return (
@@ -197,7 +232,7 @@ export function SaleForm({
           list="customer-list"
           autoComplete="off"
           value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
+          onChange={(e) => changeCustomer(e.target.value)}
           placeholder="พิมพ์ชื่อ หรือเลือกจากรายชื่อเดิม"
         />
         <datalist id="customer-list">
@@ -207,7 +242,16 @@ export function SaleForm({
             </option>
           ))}
         </datalist>
-        <p className="mt-1 text-xs text-mute">เว้นว่างได้ถ้าเป็นลูกค้าทั่วไป</p>
+        {partner ? (
+          <p className="mt-1 text-xs text-grape-400">
+            🤝 ลูกค้ารายนี้เป็น Partner — เติมราคาพาร์ทเนอร์ให้แล้ว
+            {selected && selected.partner_price == null
+              ? ' (แพ็กนี้ยังไม่ได้ตั้งราคาพาร์ทเนอร์ จึงใช้ราคาปกติ)'
+              : ''}
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-mute">เว้นว่างได้ถ้าเป็นลูกค้าทั่วไป</p>
+        )}
       </div>
 
       <div>
