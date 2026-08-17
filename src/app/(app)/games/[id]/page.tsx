@@ -6,7 +6,6 @@ import { requirePage } from '@/lib/auth'
 import {
   deleteProductAction,
   saveProductAction,
-  mergeGamesAction,
   saveMarkupsAction,
   setGamePublishedAction,
   splitVariantAction,
@@ -63,7 +62,7 @@ export default async function GameDetailPage({
   const gameId = Number(id)
   if (!Number.isFinite(gameId)) notFound()
 
-  const [game, products, editing, providers, otherGames, pendingPrices] = await Promise.all([
+  const [game, products, editing, providers, pendingPrices] = await Promise.all([
     q1<{
       id: number
       name: string
@@ -99,11 +98,6 @@ export default async function GameDetailPage({
     q<{ id: number; name: string }>(
       'select id, name from api_providers where is_active order by priority, name'
     ),
-    // เกมอื่นที่รวมเข้าด้วยกันได้ — เรียงชื่อคล้ายกันขึ้นก่อนจะได้หาง่าย
-    q<{ id: number; name: string }>(
-      'select id, name from games where id <> $1 order by name',
-      [gameId]
-    ),
     countPendingPrices(gameId),
   ])
 
@@ -115,11 +109,6 @@ export default async function GameDetailPage({
   const variantsInGame = [
     ...new Set(products.map((p) => p.provider_variant).filter(Boolean)),
   ] as string[]
-
-  // ชื่อเกมที่ตัดวงเล็บท้ายออกแล้ว ใช้เป็นค่าตั้งต้นตอนรวมเกม
-  // ผู้ให้บริการตั้งชื่อสินค้าเป็น "Ragnarok : zero global (GOC)" ทุกตัว
-  // พอรวมกันแล้วควรเหลือชื่อเกมสะอาด ๆ ส่วนช่องทางไปอยู่ในปุ่มเลือกของหน้าสั่งซื้อ
-  const baseGameName = game.name.replace(/\s*[([][^)\]]*[)\]]\s*$/, '').trim() || game.name
 
   return (
     <>
@@ -533,52 +522,9 @@ export default async function GameDetailPage({
             </div>
           ) : null}
 
-          {/* ผู้ให้บริการแยกเกมเดียวกันเป็นหลายสินค้าตามประเทศ/ค่าเงิน
-              พอนำเข้ามาจึงกลายเป็นคนละเกม รวมเข้าด้วยกันแล้วหน้าเว็บจะขึ้นปุ่มให้ลูกค้าเลือกเอง */}
-          {isAdmin && otherGames.length > 0 ? (
-            <div className="mb-4 rounded-xl border border-ink-700 bg-ink-850 p-3">
-              <p className="mb-1 text-sm font-medium text-slate-100">
-                🔗 รวมเกมนี้เข้ากับเกมอื่น
-              </p>
-              <p className="mb-2 text-xs leading-relaxed text-mute">
-                ใช้ตอนที่ผู้ให้บริการแยกเกมเดียวกันเป็นหลายแบบตามประเทศหรือค่าเงิน
-                (เช่น OneOne THB / OneOne MYR / GOC) รวมแล้ว{' '}
-                <b className="text-slate-200">
-                  หน้าเว็บลูกค้าจะขึ้นปุ่มให้เลือกประเภทเองในหน้าเดียว
-                </b>{' '}
-                · แพ็กเกจทั้งหมดของเกมนี้จะย้ายไป แล้วเกมนี้จะถูกลบทิ้ง
-              </p>
-              <ActionForm action={mergeGamesAction} className="space-y-2">
-                <input type="hidden" name="game_ids" value={game.id} />
-                <select name="game_ids" className="input" required defaultValue="">
-                  <option value="" disabled>
-                    — เลือกเกมปลายทาง —
-                  </option>
-                  {otherGames.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex flex-wrap gap-2">
-                  <input
-                    name="new_name"
-                    className="input flex-1"
-                    defaultValue={baseGameName}
-                    placeholder="ชื่อที่จะแสดงบนหน้าเว็บ"
-                    aria-label="ชื่อเกมที่จะแสดงบนหน้าเว็บ"
-                  />
-                  <SubmitButton className="btn-ghost" pendingLabel="กำลังรวม...">
-                    ย้ายไปรวม
-                  </SubmitButton>
-                </div>
-                <p className="text-xs leading-relaxed text-mute">
-                  ชื่อนี้จะไปเปลี่ยนชื่อ<b className="text-slate-200">เกมปลายทาง</b>{' '}
-                  ให้เป็นชื่อสะอาด ๆ ไม่ติดชื่อช่องทาง เว้นว่างไว้ = ใช้ชื่อเดิมของปลายทาง
-                </p>
-              </ActionForm>
-            </div>
-          ) : null}
+          {/* กล่อง "รวมเกมนี้เข้ากับเกมอื่น" ถูกย้ายไปหน้ารายชื่อเกมแล้ว
+              ที่นั่นติ๊กรวมได้ทีละหลายเกมพร้อมกัน ซึ่งเป็นวิธีที่ใช้จริง
+              เก็บไว้สองที่มีแต่ทำให้สับสนว่าต้องใช้อันไหน */}
 
           {/* ทั้งแถบตั้งกำไรและช่องในตารางใช้ค่าชุดเดียวกัน กดใส่ให้ทุกแพ็กแล้วช่องในตารางจึงขึ้นตาม */}
           <MarkupProvider items={products.map((p) => ({
