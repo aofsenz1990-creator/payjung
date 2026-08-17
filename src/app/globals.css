@@ -54,10 +54,17 @@ select option {
     @apply mb-1.5 block text-xs font-medium text-mute;
   }
 
+  /*
+    ขนาดตัวอักษร 16px บนจอเล็ก แล้วค่อยลดเป็น 14px บนจอใหญ่
+    ไม่ใช่เรื่องความสวย แต่เป็นเรื่องที่ต้องทำ: Safari บน iPhone/iPad
+    จะซูมหน้าเว็บเข้าเองทุกครั้งที่แตะช่องกรอกที่ตัวอักษรเล็กกว่า 16px
+    ลูกค้าต้องมานั่งถ่างนิ้วซูมออกเองทุกช่อง ซึ่งน่ารำคาญมากตอนกรอกไอดีเกม
+  */
   .input {
-    @apply w-full rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-sm text-white
+    @apply w-full rounded-lg border border-ink-700 bg-ink-850 px-3 py-2 text-base text-white
       outline-none transition placeholder:text-ink-600
-      focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25;
+      focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25
+      sm:text-sm;
   }
 
   .btn {

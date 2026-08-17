@@ -282,10 +282,13 @@ export function BuyForm({
           <label className="label" htmlFor="qty">
             จำนวนแพ็ก
           </label>
+          {/* ปุ่มบวกลบต้องกว้างและสูงอย่างน้อย 44px ตามขนาดนิ้วมือ
+              ของเดิมกว้างแค่ 31px กดพลาดง่ายมากบนมือถือ */}
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="btn-ghost px-3"
+              className="btn-ghost size-11 shrink-0 p-0 text-lg"
+              aria-label="ลดจำนวน"
               onClick={() => setQty((v) => Math.max(1, v - 1))}
             >
               −
@@ -293,13 +296,19 @@ export function BuyForm({
             <input
               id="qty"
               type="number"
+              inputMode="numeric"
               min={1}
               max={99}
-              className="input text-center"
+              className="input h-11 text-center"
               value={qty}
               onChange={(e) => setQty(Math.max(1, Math.min(99, Number(e.target.value) || 1)))}
             />
-            <button type="button" className="btn-ghost px-3" onClick={() => setQty((v) => Math.min(99, v + 1))}>
+            <button
+              type="button"
+              className="btn-ghost size-11 shrink-0 p-0 text-lg"
+              aria-label="เพิ่มจำนวน"
+              onClick={() => setQty((v) => Math.min(99, v + 1))}
+            >
               +
             </button>
           </div>
