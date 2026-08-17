@@ -92,12 +92,19 @@ export function shopOverlayClass(settings: SiteSettings) {
   return OVERLAY_CLASSES.medium
 }
 
-/** สร้างลิงก์เพิ่มเพื่อน LINE จาก @id หรือคืนลิงก์เดิมถ้ากรอกมาเป็นลิงก์อยู่แล้ว */
+/**
+ * สร้างลิงก์เพิ่มเพื่อน LINE จาก @id หรือคืนลิงก์เดิมถ้ากรอกมาเป็นลิงก์อยู่แล้ว
+ *
+ * ใช้ page.line.me ไม่ใช่ line.me/R/ti/p/@id
+ * ตัวหลังเป็นลิงก์สำหรับสั่งให้ "แอป" LINE เปิดหน้าโปรไฟล์ พอกดบนคอมที่ไม่มีแอป
+ * จะขึ้น 404 Not Found ส่วน page.line.me เป็นหน้าเว็บจริง เปิดได้ทุกเครื่อง
+ * และมีทั้งปุ่มเพิ่มเพื่อนกับ QR อยู่ในหน้าเดียว
+ */
 export function lineLink(value?: string | null) {
   if (!value) return null
   if (/^https?:\/\//i.test(value)) return value
   const id = value.trim().replace(/^@/, '')
-  return id ? `https://line.me/R/ti/p/%40${encodeURIComponent(id)}` : null
+  return id ? `https://page.line.me/${encodeURIComponent(id)}` : null
 }
 
 /** สร้างลิงก์เพจ Facebook จากชื่อเพจ หรือคืนลิงก์เดิมถ้ากรอกมาเป็นลิงก์อยู่แล้ว */
