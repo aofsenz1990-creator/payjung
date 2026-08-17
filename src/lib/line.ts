@@ -36,6 +36,24 @@ export async function lineConfig(): Promise<LineConfig> {
   }
 }
 
+/**
+ * แบบเดียวกันแต่จำค่าไว้ 60 วินาที ใช้เฉพาะปลายทางที่เปิดรับจากภายนอก
+ *
+ * ปลายทาง webhook ต้องอ่านคีย์จากฐานข้อมูลก่อนถึงจะตรวจลายเซ็นได้
+ * ถ้าไม่จำไว้ คนที่ยิงมั่ว ๆ รัว ๆ จะทำให้เกิดคำสั่งฐานข้อมูลหนึ่งครั้งต่อหนึ่งรีเควสต์
+ * ทั้งที่รีเควสต์พวกนั้นจะถูกปฏิเสธอยู่ดี — กลายเป็นช่องให้ถล่มฐานข้อมูลทางอ้อม
+ *
+ * หน้าหลังร้านยังอ่านค่าสดเสมอ (ใช้ lineConfig ปกติ) การกดบันทึกคีย์แล้วทดสอบทันทีจึงไม่เพี้ยน
+ */
+let cachedConfig: { at: number; value: LineConfig } | null = null
+
+export async function lineConfigCached(): Promise<LineConfig> {
+  if (cachedConfig && Date.now() - cachedConfig.at < 60_000) return cachedConfig.value
+  const value = await lineConfig()
+  cachedConfig = { at: Date.now(), value }
+  return value
+}
+
 /** ตรวจว่ารีเควสต์มาจาก LINE จริง ไม่ใช่ใครก็ได้ที่เดา URL เจอ */
 export function verifyLineSignature(secret: string, body: string, signature: string | null) {
   if (!signature) return false

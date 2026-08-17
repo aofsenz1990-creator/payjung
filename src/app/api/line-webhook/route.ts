@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { q } from '@/lib/db'
-import { activePairCode, lineConfig, replyLine, verifyLineSignature } from '@/lib/line'
+import { activePairCode, lineConfigCached, replyLine, verifyLineSignature } from '@/lib/line'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 15
@@ -22,7 +22,7 @@ type LineEvent = {
  * โดยระบบไม่ไปยุ่งและไม่เก็บข้อความของใครทั้งนั้น
  */
 export async function POST(request: NextRequest) {
-  const { secret, token } = await lineConfig()
+  const { secret, token } = await lineConfigCached()
 
   // ยังไม่ได้ตั้งค่า = ยังไม่เปิดใช้ ตอบเหมือนไม่มีหน้านี้
   if (!secret || !token) return NextResponse.json({ error: 'not found' }, { status: 404 })
