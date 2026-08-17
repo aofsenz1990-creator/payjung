@@ -37,6 +37,29 @@ export const SITE_KEYS = [
     ],
   },
   { key: 'shop_tagline', label: 'ข้อความใต้ชื่อร้าน', placeholder: 'เติมเกมไว ราคาถูก บริการ 24 ชม.' },
+
+  // เกมที่เติมด้วยลิงก์ แต่ละค่ายเอาลิงก์มาจากคนละที่
+  // เขียนวิธีของแต่ละค่ายไว้ตรงนี้ ระบบจะเลือกแสดงให้ตรงกับเกมที่ลูกค้าเปิดอยู่เอง
+  {
+    key: 'link_hint_oneone',
+    label: 'วิธีเอาลิงก์ — เกมค่าย OneOne',
+    placeholder: 'เช่น เข้าหน้าเติมเงินในเกม กดแชร์ แล้วคัดลอกลิงก์มาวาง',
+  },
+  {
+    key: 'link_hint_goc',
+    label: 'วิธีเอาลิงก์ — เกมค่าย GOC',
+    placeholder: 'เขียนขั้นตอนสั้น ๆ ให้ลูกค้าทำตามได้',
+  },
+  {
+    key: 'link_hint_razer',
+    label: 'วิธีเอาลิงก์ — Razer',
+    placeholder: 'เขียนขั้นตอนสั้น ๆ ให้ลูกค้าทำตามได้',
+  },
+  {
+    key: 'link_hint_default',
+    label: 'วิธีเอาลิงก์ — ค่ายอื่น ๆ',
+    placeholder: 'ใช้กับเกมที่ไม่เข้าพวกสามค่ายด้านบน',
+  },
   { key: 'announcement', label: 'ประกาศแถบบนสุด', placeholder: 'เว้นว่างถ้าไม่ต้องการแสดง' },
   { key: 'bank_name', label: 'ธนาคารที่ให้ลูกค้าโอนเข้า', placeholder: 'เช่น กสิกรไทย' },
   { key: 'bank_account_no', label: 'เลขที่บัญชี', placeholder: 'xxx-x-xxxxx-x' },

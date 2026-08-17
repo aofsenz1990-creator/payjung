@@ -39,6 +39,29 @@ const FIELD_LABEL_TH: Record<string, string> = {
   contact_fb: 'Facebook ติดต่อ',
 }
 
+/**
+ * คำแนะนำของช่อง "ลิงก์" แยกตามประเภทของเกม
+ *
+ * เกมที่เติมด้วยลิงก์ แต่ละค่ายเอาลิงก์มาจากคนละที่ (OneOne / GOC / Razer)
+ * ถ้าเขียนคำแนะนำรวมกันอันเดียว ลูกค้าจะวางลิงก์ผิดที่แล้วเติมไม่เข้า
+ * ข้อความจริงให้ร้านไปตั้งเองในหลังร้าน เพราะร้านรู้ขั้นตอนของแต่ละค่ายดีที่สุด
+ */
+export type LinkHints = {
+  oneone?: string | null
+  goc?: string | null
+  razer?: string | null
+  fallback?: string | null
+}
+
+/** เดาประเภทลิงก์จากชื่อประเภทที่ผู้ให้บริการตั้งมา เช่น "OneOne THB", "Ragnarok (GOC)" */
+function linkKindOf(variant: string | null | undefined): keyof LinkHints {
+  const v = (variant ?? '').toLowerCase()
+  if (v.includes('one')) return 'oneone'
+  if (v.includes('goc')) return 'goc'
+  if (v.includes('razer')) return 'razer'
+  return 'fallback'
+}
+
 /** คำใบ้เพิ่มเติมสำหรับช่องที่ลูกค้ามักงงว่าต้องเอามาจากไหน */
 const FIELD_HINT_TH: Record<string, string> = {
   link: 'คัดลอกลิงก์เติมเงินจากในเกมมาวาง',
@@ -90,6 +113,7 @@ export function BuyForm({
   signedIn,
   defaultGameUid,
   fields,
+  linkHints,
 }: {
   action: (formData: FormData) => Promise<ActionState>
   packages: BuyPackage[]
@@ -98,6 +122,8 @@ export function BuyForm({
   defaultGameUid?: string | null
   /** ช่องที่เกมนี้บังคับกรอก ถ้าไม่มีจะใช้ช่องไอดีเกมช่องเดียวแบบเดิม */
   fields?: BuyField[] | null
+  /** คำแนะนำของช่องลิงก์ แยกตามค่าย ตั้งได้จากหลังร้าน */
+  linkHints?: LinkHints
 }) {
   const [productId, setProductId] = useState<number | null>(packages[0]?.id ?? null)
   const [qty, setQty] = useState(1)
@@ -257,7 +283,14 @@ export function BuyForm({
                   }
                   required
                 />
-                {FIELD_HINT_TH[f.key] ? (
+                {f.key === 'link' ? (
+                  // ช่องลิงก์ใช้คำแนะนำของค่ายนั้น ๆ ถ้าร้านยังไม่ได้ตั้งไว้ค่อยใช้คำกลาง
+                  <p className="mt-1 text-xs leading-relaxed text-mute">
+                    {linkHints?.[linkKindOf(selected?.variant)] ||
+                      linkHints?.fallback ||
+                      FIELD_HINT_TH.link}
+                  </p>
+                ) : FIELD_HINT_TH[f.key] ? (
                   <p className="mt-1 text-xs text-mute">{FIELD_HINT_TH[f.key]}</p>
                 ) : null}
               </div>
