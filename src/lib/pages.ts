@@ -13,6 +13,7 @@ export type PageKey =
   | 'customers'
   | 'claims'
   | 'topups'
+  | 'credit-codes'
   | 'storefront'
   | 'expenses'
   | 'users'
@@ -37,6 +38,14 @@ export const PAGES: PageDef[] = [
   { key: 'customers', href: '/customers', label: 'รายชื่อลูกค้า', icon: '👥', hint: 'ข้อมูลติดต่อและยอดซื้อ' },
   { key: 'topups', href: '/topups', label: 'อนุมัติเติมเครดิต', icon: '💰', hint: 'ลูกค้าแจ้งโอนเงินเข้ามา' },
   { key: 'claims', href: '/claims', label: 'เคลม / คืนเงิน', icon: '↩️', hint: 'เติมไม่สำเร็จ ต้องโอนคืนลูกค้า' },
+  {
+    key: 'credit-codes',
+    href: '/credit-codes',
+    label: 'โค้ดเครดิต',
+    icon: '🎟️',
+    adminOnly: true,
+    hint: 'สร้างโค้ดให้ลูกค้าแลกเป็นเครดิต',
+  },
   {
     key: 'storefront',
     href: '/storefront',

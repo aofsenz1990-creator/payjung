@@ -333,6 +333,44 @@ export const SCHEMA_STATEMENTS: string[] = [
   `update products set published_sell_price = sell_price, published_partner_price = partner_price
     where published_sell_price is null`,
 
+  // ระบบ "เครดิต" (แต้ม) แยกจาก "ยอดเงิน" (บาท) ที่ใช้ซื้อของ
+  //
+  // ลูกค้าได้เครดิตจากการแลกโค้ด แล้วกดแลกเครดิตเป็นยอดเงินเองทีหลัง
+  // เก็บเป็นจำนวนเต็ม (bigint) ไม่ใช่ทศนิยม เพราะแต้มไม่มีเศษ
+  // และการบวกลบจำนวนเต็มไม่มีปัญหาปัดเศษเหมือนทศนิยม
+  `alter table customers add column if not exists points bigint not null default 0`,
+
+  // โค้ดเครดิตที่ร้านสร้างไว้แจก/ขาย — ห้ามรหัสซ้ำ และแลกได้ครั้งเดียวเท่านั้น
+  `create table if not exists credit_codes (
+    id serial primary key,
+    code text not null,
+    points bigint not null default 0,
+    note text,
+    batch text,
+    redeemed_by int references customers(id) on delete set null,
+    redeemed_at timestamptz,
+    created_by uuid references profiles(id) on delete set null,
+    created_at timestamptz not null default now()
+  )`,
+  // กันรหัสซ้ำที่ระดับฐานข้อมูล ไม่ใช่แค่ตอนสร้าง
+  // ถ้ากันแค่ตอนสร้าง การกดสร้างพร้อมกันสองหน้าจออาจได้รหัสซ้ำกันได้
+  `create unique index if not exists credit_codes_code_uniq on credit_codes (upper(code))`,
+  `create index if not exists credit_codes_created_idx on credit_codes (created_at desc)`,
+
+  // สมุดบัญชีเครดิต — ทุกครั้งที่แต้มเข้า-ออกต้องมีบรรทัดบันทึกไว้
+  `create table if not exists point_transactions (
+    id serial primary key,
+    customer_id int not null references customers(id) on delete cascade,
+    kind text not null,
+    points bigint not null default 0,
+    balance_after bigint not null default 0,
+    amount numeric(12,2),
+    note text,
+    created_at timestamptz not null default now()
+  )`,
+  `create index if not exists point_transactions_customer_idx
+     on point_transactions (customer_id, created_at desc)`,
+
   // ช่องที่ลูกค้าต้องกรอกตอนสั่งเติมเกมนี้
   //
   // ปกติระบบอ่านจากผู้ให้บริการว่าเกมไหนขออะไร แต่บางเจ้า (เช่น 24BUYM)

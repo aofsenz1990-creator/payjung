@@ -37,6 +37,11 @@ export const SITE_KEYS = [
     ],
   },
   { key: 'shop_tagline', label: 'ข้อความใต้ชื่อร้าน', placeholder: 'เติมเกมไว ราคาถูก บริการ 24 ชม.' },
+  {
+    key: 'points_per_baht',
+    label: 'กี่เครดิตเท่ากับ 1 บาท',
+    placeholder: '100 (ค่าเริ่มต้น — 100 เครดิต = 1 บาท)',
+  },
 
   // เกมที่เติมด้วยลิงก์ แต่ละค่ายเอาลิงก์มาจากคนละที่
   // เขียนวิธีของแต่ละค่ายไว้ตรงนี้ ระบบจะเลือกแสดงให้ตรงกับเกมที่ลูกค้าเปิดอยู่เอง
@@ -138,6 +143,16 @@ export function facebookLink(value?: string | null) {
   return name ? `https://www.facebook.com/${encodeURIComponent(name)}` : null
 }
 
+/**
+ * อัตราแลกเครดิตเป็นยอดเงิน — กี่เครดิตเท่ากับ 1 บาท
+ * ค่าเริ่มต้น 100 (100 เครดิต = 1 บาท) ตั้งใหม่ได้จากหน้าจัดการเว็บไซต์
+ * กันค่าเพี้ยนไว้ด้วย เพราะถ้าเผลอตั้งเป็น 0 การหารจะพัง และถ้าติดลบจะแจกเงินฟรี
+ */
+export function pointsPerBaht(settings: SiteSettings) {
+  const n = Number(settings.points_per_baht)
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 100
+}
+
 /** เปิดให้ลูกค้าสมัครเองไหม — ไม่เคยตั้งค่า = เปิดไว้ */
 export function registrationOpen(settings: SiteSettings) {
   return (settings.allow_register ?? 'on') !== 'off'
@@ -157,6 +172,8 @@ export type ShopCustomer = {
   phone: string | null
   game_uid: string | null
   email: string
+  /** เครดิต (แต้ม) แยกจากยอดเงินที่ใช้ซื้อของ — ได้จากการแลกโค้ด */
+  points: number
   /** 'partner' = ได้ราคาพาร์ทเนอร์ (ถ้าแพ็กนั้นตั้งไว้), อย่างอื่น = ราคาปกติ */
   tier: string
 }
@@ -196,7 +213,8 @@ export const getShopCustomer = cache(async function getShopCustomer(): Promise<S
     if (!user) return null
 
     const row = await q1<Omit<ShopCustomer, 'email'>>(
-      `select id, name, credit::float8 as credit, phone, game_uid, tier
+      `select id, name, credit::float8 as credit, phone, game_uid, tier,
+              points::float8 as points
          from customers where auth_user_id = $1 and web_enabled limit 1`,
       [user.id]
     )

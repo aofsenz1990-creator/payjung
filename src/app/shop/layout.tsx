@@ -94,16 +94,25 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
                   ✉ {num(unread)} ข้อความใหม่
                 </Link>
               ) : null}
+              {/* สองก้อนนี้คนละอย่างกัน จึงต้องแยกสีและแยกป้ายให้ชัด
+                  ยอดเงิน = ใช้ซื้อของได้เลย · เครดิต = ต้องแลกเป็นยอดเงินก่อน */}
               <Link
                 href="/shop/me"
                 className="rounded-lg border border-good/40 bg-good/10 px-3 py-1.5 text-sm"
               >
-                <span className="text-mute">เครดิต </span>
+                <span className="text-mute">ยอดเงิน </span>
                 <span className="font-bold text-good">{money(customer.credit)}</span>
                 <span className="text-xs text-mute"> บาท</span>
               </Link>
+              <Link
+                href="/shop/credit"
+                className="rounded-lg border border-grape-500/50 bg-grape-600/15 px-3 py-1.5 text-sm"
+              >
+                <span className="text-mute">เครดิต </span>
+                <span className="font-bold text-grape-400">{num(customer.points)}</span>
+              </Link>
               <Link href="/shop/topup" className="btn-primary btn-sm">
-                + เติมเครดิต
+                + เติมยอดเงิน
               </Link>
               <form action={shopLogoutAction}>
                 <button type="submit" className="btn-ghost btn-sm">
@@ -125,6 +134,30 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
           )}
         </div>
       </header>
+
+      {/* เมนูหลักของหน้าเว็บลูกค้า — เลื่อนแนวนอนได้บนจอแคบ */}
+      <nav className="relative z-10 border-b border-ink-800/60 bg-ink-950/60 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1440px] gap-1 overflow-x-auto px-4 py-2">
+          <Link
+            href="/shop"
+            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-white"
+          >
+            หน้าแรก
+          </Link>
+          <Link
+            href="/shop#games"
+            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-white"
+          >
+            เกม
+          </Link>
+          <Link
+            href="/shop/credit"
+            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-white"
+          >
+            เครดิต
+          </Link>
+        </div>
+      </nav>
 
       <main className="relative z-10 mx-auto w-full max-w-[1440px] flex-1 px-4 py-6">{children}</main>
 

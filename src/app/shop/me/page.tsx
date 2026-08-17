@@ -103,7 +103,7 @@ export default async function ShopAccountPage() {
           )}
         </div>
         <div className="text-right">
-          <p className="text-sm text-mute">เครดิตคงเหลือ</p>
+          <p className="text-sm text-mute">ยอดเงินคงเหลือ</p>
           <p className="text-3xl font-bold text-good">{money(customer.credit)}</p>
           <p className="text-xs text-mute">บาท</p>
         </div>

@@ -112,7 +112,8 @@ export default async function ShopHome({
         </div>
       </section>
 
-      <section className="mb-10">
+      {/* scroll-mt กันหัวข้อถูกแถบเมนูด้านบนบังตอนกดลิงก์ "เกม" */}
+      <section id="games" className="mb-10 scroll-mt-24">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
             {/* แถบไล่สีเล็ก ๆ หน้าหัวข้อ ทำให้สายตาจับจุดเริ่มต้นของแต่ละส่วนได้ทันที */}
