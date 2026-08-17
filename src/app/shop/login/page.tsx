@@ -12,7 +12,7 @@ export default async function ShopLoginPage() {
 
   return (
     <div className="mx-auto max-w-sm py-6">
-      <h1 className="text-center text-xl font-bold text-white">เข้าสู่ระบบลูกค้า</h1>
+      <h1 className="text-center text-xl font-bold text-fg">เข้าสู่ระบบลูกค้า</h1>
       <p className="mt-1 text-center text-sm text-mute">
         {canRegister ? 'ยังไม่มีบัญชี? สมัครฟรีได้เลย' : 'ใช้อีเมลและรหัสผ่านที่ทางร้านสร้างให้'}
       </p>

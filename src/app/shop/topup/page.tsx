@@ -61,13 +61,13 @@ export default async function ShopTopupPage() {
         <>
           {/* ช่องทางโอนเงิน */}
           <section className="card border-ink-700/70 bg-ink-900/75 backdrop-blur-md">
-            <h1 className="text-lg font-bold text-white">1. โอนเงินมาที่บัญชีนี้</h1>
+            <h1 className="text-lg font-bold text-fg">1. โอนเงินมาที่บัญชีนี้</h1>
             <div className="mt-4 grid gap-5 sm:grid-cols-[1fr_auto]">
               <dl className="space-y-3 text-sm">
                 {settings.bank_name ? (
                   <div className="flex justify-between gap-3">
                     <dt className="text-mute">ธนาคาร</dt>
-                    <dd className="font-medium text-white">{settings.bank_name}</dd>
+                    <dd className="font-medium text-fg">{settings.bank_name}</dd>
                   </div>
                 ) : null}
                 {settings.bank_account_no ? (
@@ -81,7 +81,7 @@ export default async function ShopTopupPage() {
                 {settings.bank_account_name ? (
                   <div className="flex justify-between gap-3">
                     <dt className="text-mute">ชื่อบัญชี</dt>
-                    <dd className="text-white">{settings.bank_account_name}</dd>
+                    <dd className="text-fg">{settings.bank_account_name}</dd>
                   </div>
                 ) : null}
                 {settings.promptpay ? (
@@ -114,7 +114,7 @@ export default async function ShopTopupPage() {
 
           {/* แจ้งโอน */}
           <section className="card mt-6 border-ink-700/70 bg-ink-900/75 backdrop-blur-md">
-            <h2 className="text-lg font-bold text-white">2. แจ้งโอนพร้อมแนบสลิป</h2>
+            <h2 className="text-lg font-bold text-fg">2. แจ้งโอนพร้อมแนบสลิป</h2>
             <p className="mt-1 text-sm text-mute">
               กรอกจำนวนเงินที่โอนจริง แล้วแนบสลิป ทางร้านจะตรวจสอบและเติมเครดิตให้
             </p>
@@ -160,7 +160,7 @@ export default async function ShopTopupPage() {
 
       {/* ประวัติการแจ้ง */}
       <section className="mt-6">
-        <h2 className="mb-3 text-lg font-semibold text-white">
+        <h2 className="mb-3 text-lg font-semibold text-fg">
           ประวัติการแจ้งโอน
           <span className="ml-2 text-sm font-normal text-mute">{num(requests.length)} รายการ</span>
         </h2>
@@ -188,7 +188,7 @@ export default async function ShopTopupPage() {
                         <td className="whitespace-nowrap text-xs text-mute">
                           {dateTime(r.created_at)}
                         </td>
-                        <td className="text-right font-medium text-white">{money(r.amount)}</td>
+                        <td className="text-right font-medium text-fg">{money(r.amount)}</td>
                         <td>
                           <span className={`chip ${s.cls}`}>{s.text}</span>
                           {r.reviewed_at ? (

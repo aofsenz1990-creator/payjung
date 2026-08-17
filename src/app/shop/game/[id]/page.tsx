@@ -72,7 +72,7 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
           )}
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">{game.name}</h1>
+          <h1 className="text-2xl font-bold text-fg">{game.name}</h1>
           {game.description ? (
             <p className="mt-1 text-sm leading-relaxed text-mute">{game.description}</p>
           ) : null}

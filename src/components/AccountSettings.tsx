@@ -18,13 +18,13 @@ export function AccountSettings({
 }) {
   return (
     <details className="rounded-2xl border border-ink-700/70 bg-ink-900/70 backdrop-blur-sm">
-      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-white">
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-fg">
         ⚙️ แก้ไขข้อมูลส่วนตัว / เปลี่ยนรหัสผ่าน
       </summary>
 
       <div className="grid gap-4 border-t border-ink-700/70 p-4 md:grid-cols-2">
         <div>
-          <p className="mb-3 text-sm font-medium text-slate-100">ข้อมูลส่วนตัว</p>
+          <p className="mb-3 text-sm font-medium text-fg">ข้อมูลส่วนตัว</p>
           <ActionForm action={updateMyProfileAction} className="space-y-3">
             <div>
               <label className="label" htmlFor="acc-name">
@@ -74,7 +74,7 @@ export function AccountSettings({
         </div>
 
         <div>
-          <p className="mb-3 text-sm font-medium text-slate-100">เปลี่ยนรหัสผ่าน</p>
+          <p className="mb-3 text-sm font-medium text-fg">เปลี่ยนรหัสผ่าน</p>
           <ActionForm action={changeMyPasswordAction} className="space-y-3" resetOnSuccess>
             <div>
               <label className="label" htmlFor="acc-current">

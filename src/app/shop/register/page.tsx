@@ -14,7 +14,7 @@ export default async function ShopRegisterPage() {
     return (
       <div className="mx-auto max-w-sm py-10 text-center">
         <p className="text-4xl">🔒</p>
-        <h1 className="mt-3 text-xl font-bold text-white">ตอนนี้ปิดรับสมัครเอง</h1>
+        <h1 className="mt-3 text-xl font-bold text-fg">ตอนนี้ปิดรับสมัครเอง</h1>
         <p className="mt-2 text-sm leading-relaxed text-mute">
           กรุณาติดต่อทางร้านเพื่อเปิดบัญชีให้ (ดูช่องทางติดต่อด้านล่างหน้าเว็บ)
         </p>
@@ -27,7 +27,7 @@ export default async function ShopRegisterPage() {
 
   return (
     <div className="mx-auto max-w-md py-6">
-      <h1 className="text-center text-xl font-bold text-white">สมัครบัญชีลูกค้า</h1>
+      <h1 className="text-center text-xl font-bold text-fg">สมัครบัญชีลูกค้า</h1>
       <p className="mt-1 text-center text-sm text-mute">
         กรอกแค่อีเมลกับรหัสผ่าน แล้วเติมเครดิตกับทางร้านเพื่อเริ่มสั่งซื้อ
       </p>

@@ -46,7 +46,7 @@ export default async function ShopCreditPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-2xl font-bold text-white">เครดิตของฉัน</h1>
+      <h1 className="text-2xl font-bold text-fg">เครดิตของฉัน</h1>
       <p className="mt-1 text-sm text-mute">
         แลกโค้ดเพื่อรับเครดิต แล้วแลกเครดิตเป็นยอดเงินไว้ซื้อของในร้าน
       </p>
@@ -82,7 +82,7 @@ export default async function ShopCreditPage() {
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {/* แลกโค้ด */}
         <div className="rounded-2xl border border-ink-700/70 bg-ink-900/75 p-5 backdrop-blur-md">
-          <h2 className="text-base font-semibold text-white">🎟️ แลกโค้ดเครดิต</h2>
+          <h2 className="text-base font-semibold text-fg">🎟️ แลกโค้ดเครดิต</h2>
           <p className="mt-1 mb-3 text-xs leading-relaxed text-mute">
             กรอกโค้ดที่ได้รับจากทางร้าน โค้ดหนึ่งใบใช้ได้ครั้งเดียว
           </p>
@@ -102,7 +102,7 @@ export default async function ShopCreditPage() {
 
         {/* แลกเครดิตเป็นเงิน */}
         <div className="rounded-2xl border border-ink-700/70 bg-ink-900/75 p-5 backdrop-blur-md">
-          <h2 className="text-base font-semibold text-white">💱 แลกเป็นยอดเงิน</h2>
+          <h2 className="text-base font-semibold text-fg">💱 แลกเป็นยอดเงิน</h2>
           <p className="mt-1 mb-3 text-xs leading-relaxed text-mute">
             {exchangeable > 0 ? (
               <>
@@ -137,7 +137,7 @@ export default async function ShopCreditPage() {
       </div>
 
       <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-white">
+        <h2 className="mb-3 text-lg font-semibold text-fg">
           ประวัติเครดิต
           <span className="ml-2 text-sm font-normal text-mute">{num(history.length)} รายการ</span>
         </h2>

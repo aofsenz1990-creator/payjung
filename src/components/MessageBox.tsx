@@ -64,7 +64,7 @@ export function MessageBox({ messages }: { messages: ShopMessage[] }) {
               {m.unread ? (
                 <span className="chip bg-brand-500/15 text-brand-400">ใหม่</span>
               ) : null}
-              <h3 className="font-medium text-white">
+              <h3 className="font-medium text-fg">
                 {m.title || (isCode ? 'โค้ดสินค้าของคุณ' : 'ข้อความจากร้าน')}
               </h3>
               {m.sale_code ? (

@@ -115,7 +115,7 @@ export default async function ShopHome({
       {/* scroll-mt กันหัวข้อถูกแถบเมนูด้านบนบังตอนกดลิงก์ "เกม" */}
       <section id="games" className="mb-10 scroll-mt-24">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-fg">
             {/* แถบไล่สีเล็ก ๆ หน้าหัวข้อ ทำให้สายตาจับจุดเริ่มต้นของแต่ละส่วนได้ทันที */}
             <span
               aria-hidden
@@ -162,7 +162,7 @@ export default async function ShopHome({
                   />
                 </div>
                 <div className="p-2.5">
-                  <p className="truncate text-sm font-medium text-white transition group-hover:text-brand-400">
+                  <p className="truncate text-sm font-medium text-fg transition group-hover:text-brand-400">
                     {g.name}
                   </p>
                   {g.packages > 0 ? (
@@ -187,7 +187,7 @@ export default async function ShopHome({
       {/* ข่าวสารด้านล่างเว็บ */}
       {news.length > 0 ? (
         <section>
-          <h2 className="mb-4 text-lg font-semibold text-white">ข่าวสารและโปรโมชั่น</h2>
+          <h2 className="mb-4 text-lg font-semibold text-fg">ข่าวสารและโปรโมชั่น</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {news.map((n) => {
               const card = (
@@ -202,7 +202,7 @@ export default async function ShopHome({
                   ) : null}
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-medium text-white">{n.title}</h3>
+                      <h3 className="font-medium text-fg">{n.title}</h3>
                       {n.pinned ? (
                         <span className="chip shrink-0 bg-brand-500/15 text-brand-400">ปักหมุด</span>
                       ) : null}

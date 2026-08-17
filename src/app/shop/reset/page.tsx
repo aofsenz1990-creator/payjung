@@ -28,7 +28,7 @@ export default async function ShopResetPage({
 
   return (
     <div className="mx-auto max-w-sm py-6">
-      <h1 className="text-center text-xl font-bold text-white">ตั้งรหัสผ่านใหม่</h1>
+      <h1 className="text-center text-xl font-bold text-fg">ตั้งรหัสผ่านใหม่</h1>
 
       <div className="card mt-6 border-ink-700/70 bg-ink-900/75 backdrop-blur-md">
         {signedIn ? (

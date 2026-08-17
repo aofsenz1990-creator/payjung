@@ -174,7 +174,7 @@ export function BuyForm({
                 }}
                 className={`rounded-xl border px-3 py-3 text-center text-sm transition ${
                   v === variant
-                    ? 'border-brand-500 bg-brand-600/15 font-medium text-white'
+                    ? 'border-brand-500 bg-brand-600/15 font-medium text-fg'
                     : 'border-ink-700 bg-ink-850 text-slate-300 hover:border-ink-600'
                 }`}
               >
@@ -225,7 +225,7 @@ export function BuyForm({
                   </span>
                 )}
                 <span className="w-full">
-                  <span className="block text-sm leading-snug font-medium text-white">
+                  <span className="block text-sm leading-snug font-medium text-fg">
                     {p.name}
                   </span>
                   <span className="mt-1 block text-lg font-bold text-brand-400">
@@ -363,7 +363,7 @@ export function BuyForm({
           <div>
             <p className="text-sm text-mute">
               ยอดที่ต้องจ่าย{' '}
-              <span className="ml-1 text-xl font-bold text-white">{baht.format(total)}</span>{' '}
+              <span className="ml-1 text-xl font-bold text-fg">{baht.format(total)}</span>{' '}
               <span className="text-sm">บาท</span>
             </p>
             {signedIn ? (

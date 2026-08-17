@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 export default function ShopForgotPage() {
   return (
     <div className="mx-auto max-w-sm py-6">
-      <h1 className="text-center text-xl font-bold text-white">ลืมรหัสผ่าน</h1>
+      <h1 className="text-center text-xl font-bold text-fg">ลืมรหัสผ่าน</h1>
       <p className="mt-1 text-center text-sm text-mute">
         กรอกอีเมลที่ใช้สมัคร เราจะส่งลิงก์ตั้งรหัสผ่านใหม่ไปให้
       </p>

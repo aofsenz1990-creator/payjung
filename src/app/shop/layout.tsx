@@ -15,11 +15,20 @@ import { shopLogoutAction } from '@/lib/actions/shop'
 import { BrandLogo, BrandWordmark } from '@/components/Brand'
 import { money, num } from '@/lib/format'
 import { q1 } from '@/lib/db'
+import { cookies } from 'next/headers'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
-  const [settings, customer] = await Promise.all([getSiteSettings(), getShopCustomer()])
+  const [settings, customer, jar] = await Promise.all([
+    getSiteSettings(),
+    getShopCustomer(),
+    cookies(),
+  ])
+
+  // อ่านธีมจาก cookie ตั้งแต่ฝั่งเซิร์ฟเวอร์ หน้าจะได้ไม่กระพริบตอนโหลด
+  const theme = jar.get("shop-theme")?.value === "light" ? "light" : "dark"
 
   // จำนวนข้อความที่ยังไม่ได้อ่าน — ต้องเด่นตั้งแต่แถบบน เพราะโค้ดบัตรเติมเกมส่งมาทางนี้
   // ถ้าลูกค้าไม่รู้ว่ามีข้อความ ก็เท่ากับซื้อของแล้วไม่ได้ของ
@@ -37,7 +46,11 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col">
+    <div
+      data-shop-root
+      data-theme={theme}
+      className="relative flex min-h-screen flex-col bg-ink-950 text-fg"
+    >
       {/*
         พื้นหลังของหน้าเว็บลูกค้า
         ห้ามใช้ z-index ติดลบ เพราะเบราว์เซอร์จะวาดพื้นหลังทึบของ body ทับลงไปอีกที
@@ -49,16 +62,16 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 z-0 bg-ink-950 bg-[length:100%_auto] bg-top bg-no-repeat md:bg-cover md:bg-center"
+        className="shop-bg pointer-events-none fixed inset-0 z-0 bg-ink-950 bg-[length:100%_auto] bg-top bg-no-repeat md:bg-cover md:bg-center"
         style={{ backgroundImage: `url(${shopBackground(settings)})` }}
       />
       {/* ฝ้าทับให้ตัวหนังสืออ่านง่าย ปรับความเข้มได้จากหลังร้าน */}
       <div
         aria-hidden
-        className={`pointer-events-none fixed inset-0 z-0 bg-linear-to-b ${shopOverlayClass(settings)}`}
+        className={`shop-overlay pointer-events-none fixed inset-0 z-0 bg-linear-to-b ${shopOverlayClass(settings)}`}
       />
       {settings.announcement ? (
-        <div className="relative z-10 bg-linear-to-r from-brand-600 to-grape-600 px-4 py-2 text-center text-sm font-medium text-white">
+        <div className="relative z-10 bg-linear-to-r from-brand-600 to-grape-600 px-4 py-2 text-center text-sm font-medium text-fg">
           {settings.announcement}
         </div>
       ) : null}
@@ -70,13 +83,13 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+          className="shop-bg pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: `url(${shopCover(settings)})` }}
         />
         {/* ฝ้าเข้มที่ริมสองข้าง เพราะโลโก้กับปุ่มอยู่ตรงนั้น ตรงกลางปล่อยให้เห็นภาพชัด */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-linear-to-r from-ink-950/85 via-ink-950/45 to-ink-950/85"
+          className="shop-overlay pointer-events-none absolute inset-0 bg-linear-to-r from-ink-950/85 via-ink-950/45 to-ink-950/85"
         />
         <div className="relative mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link href="/shop" className="flex items-center gap-2.5">
@@ -140,22 +153,26 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         <div className="mx-auto flex max-w-[1440px] gap-1 overflow-x-auto px-4 py-2">
           <Link
             href="/shop"
-            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-white"
+            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-fg"
           >
             หน้าแรก
           </Link>
           <Link
             href="/shop#games"
-            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-white"
+            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-fg"
           >
             เกม
           </Link>
           <Link
             href="/shop/credit"
-            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-white"
+            className="whitespace-nowrap rounded-lg px-3 py-1.5 text-sm text-slate-300 transition hover:bg-ink-800 hover:text-fg"
           >
             เครดิต
           </Link>
+          {/* ดันไปชิดขวาสุด จะได้ไม่ปนกับเมนูหลัก */}
+          <div className="ml-auto shrink-0">
+            <ThemeToggle initial={theme} />
+          </div>
         </div>
       </nav>
 
@@ -163,7 +180,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
 
       <footer className="relative z-10 mt-10 border-t border-ink-800/60 bg-ink-900/70 backdrop-blur-md">
         <div className="mx-auto max-w-[1440px] px-4 py-8">
-          <h2 className="text-base font-semibold text-white">ช่องทางติดต่อ</h2>
+          <h2 className="text-base font-semibold text-fg">ช่องทางติดต่อ</h2>
           <ContactBar
             line={settings.contact_line}
             lineUrl={lineLink(settings.contact_line)}

@@ -42,21 +42,21 @@ export function ContactBar({
             <button type="button" onClick={() => setShowQr(true)} className={chip}>
               <span aria-hidden>💬</span>
               <span className="text-mute">LINE</span>
-              <span className="text-slate-100">{line}</span>
+              <span className="text-fg">{line}</span>
               <span className="text-xs text-brand-400">· กดดู QR</span>
             </button>
           ) : lineUrl ? (
             <a href={lineUrl} target="_blank" rel="noreferrer" className={chip}>
               <span aria-hidden>💬</span>
               <span className="text-mute">LINE</span>
-              <span className="text-slate-100">{line}</span>
+              <span className="text-fg">{line}</span>
               <span className="text-xs text-brand-400">· เพิ่มเพื่อน</span>
             </a>
           ) : (
             <span className={chip}>
               <span aria-hidden>💬</span>
               <span className="text-mute">LINE</span>
-              <span className="text-slate-100">{line}</span>
+              <span className="text-fg">{line}</span>
             </span>
           )
         ) : null}
@@ -66,14 +66,14 @@ export function ContactBar({
             <a href={facebookUrl} target="_blank" rel="noreferrer" className={chip}>
               <span aria-hidden>📘</span>
               <span className="text-mute">Facebook</span>
-              <span className="max-w-[16rem] truncate text-slate-100">{facebook}</span>
+              <span className="max-w-[16rem] truncate text-fg">{facebook}</span>
               <span className="text-xs text-brand-400">↗</span>
             </a>
           ) : (
             <span className={chip}>
               <span aria-hidden>📘</span>
               <span className="text-mute">Facebook</span>
-              <span className="text-slate-100">{facebook}</span>
+              <span className="text-fg">{facebook}</span>
             </span>
           )
         ) : null}
@@ -82,7 +82,7 @@ export function ContactBar({
           <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className={chip}>
             <span aria-hidden>📞</span>
             <span className="text-mute">โทร</span>
-            <span className="text-slate-100">{phone}</span>
+            <span className="text-fg">{phone}</span>
           </a>
         ) : null}
       </div>
@@ -102,7 +102,7 @@ export function ContactBar({
             role="dialog"
             aria-label="QR Code ของ LINE"
           >
-            <p className="text-sm font-medium text-white">สแกนเพื่อเพิ่มเพื่อนใน LINE</p>
+            <p className="text-sm font-medium text-fg">สแกนเพื่อเพิ่มเพื่อนใน LINE</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={lineQr}

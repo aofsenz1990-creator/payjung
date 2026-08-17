@@ -39,7 +39,7 @@ export function LineQrButton({
         title="แอดไลน์ร้าน"
         className="group relative flex size-12 items-center justify-center rounded-full bg-[#06C755] text-white shadow-lg shadow-black/40 transition hover:scale-110 active:scale-95"
       >
-        <span className="pointer-events-none absolute right-full mr-2 hidden whitespace-nowrap rounded-lg bg-ink-950/90 px-2.5 py-1 text-xs text-white opacity-0 shadow-lg transition group-hover:opacity-100 sm:block">
+        <span className="pointer-events-none absolute right-full mr-2 hidden whitespace-nowrap rounded-lg bg-ink-950/90 px-2.5 py-1 text-xs text-fg opacity-0 shadow-lg transition group-hover:opacity-100 sm:block">
           แอดไลน์ร้าน
         </span>
         <span className="text-[11px] font-extrabold tracking-tight">LINE</span>
@@ -56,7 +56,7 @@ export function LineQrButton({
             className="w-full max-w-xs rounded-2xl border border-ink-700 bg-ink-900 p-5 text-center shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-base font-semibold text-white">แอดไลน์ร้าน Pay Jung</p>
+            <p className="text-base font-semibold text-fg">แอดไลน์ร้าน Pay Jung</p>
             <p className="mt-1 text-xs text-mute">สแกน QR นี้ด้วยแอป LINE ในมือถือ</p>
 
             <div className="mt-4 overflow-hidden rounded-xl bg-white p-3">

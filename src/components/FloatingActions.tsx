@@ -91,7 +91,7 @@ function FloatingButton({
   // ป้ายชื่อจะคลี่ออกตอนชี้เมาส์บนจอใหญ่ ส่วนบนมือถือใช้ปุ่มกลม ๆ อย่างเดียวไม่ให้กินพื้นที่
   const inner = (
     <>
-      <span className="pointer-events-none absolute right-full mr-2 hidden whitespace-nowrap rounded-lg bg-ink-950/90 px-2.5 py-1 text-xs text-white opacity-0 shadow-lg transition group-hover:opacity-100 sm:block">
+      <span className="pointer-events-none absolute right-full mr-2 hidden whitespace-nowrap rounded-lg bg-ink-950/90 px-2.5 py-1 text-xs text-fg opacity-0 shadow-lg transition group-hover:opacity-100 sm:block">
         {label}
       </span>
       {children}

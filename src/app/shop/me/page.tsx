@@ -91,7 +91,7 @@ export default async function ShopAccountPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-ink-700 bg-linear-to-r from-brand-600/20 to-grape-600/20 p-5">
         <div>
           <p className="text-sm text-mute">สวัสดี</p>
-          <p className="text-xl font-bold text-white">{customer.name}</p>
+          <p className="text-xl font-bold text-fg">{customer.name}</p>
           <p className="text-xs text-mute">{customer.email}</p>
           {/* บอกระดับให้ลูกค้าเห็นชัด ๆ พาร์ทเนอร์จะได้รู้ว่าราคาที่เห็นคือราคาพิเศษแล้ว */}
           {isPartner(customer) ? (
@@ -129,7 +129,7 @@ export default async function ShopAccountPage() {
       </p>
 
       <section className="mb-8" id="messages">
-        <h2 className="mb-3 text-lg font-semibold text-white">
+        <h2 className="mb-3 text-lg font-semibold text-fg">
           กล่องข้อความจากร้าน
           {unreadCount > 0 ? (
             <span className="ml-2 chip bg-brand-500/15 text-brand-400">
@@ -141,7 +141,7 @@ export default async function ShopAccountPage() {
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-lg font-semibold text-white">
+        <h2 className="mb-3 text-lg font-semibold text-fg">
           ประวัติการสั่งซื้อ
           <span className="ml-2 text-sm font-normal text-mute">{num(orders.length)} รายการ</span>
         </h2>
@@ -174,12 +174,12 @@ export default async function ShopAccountPage() {
                           {dateTime(o.sold_at)}
                         </td>
                         <td>
-                          <span className="block text-slate-100">{o.item_name}</span>
+                          <span className="block text-fg">{o.item_name}</span>
                           <span className="block text-xs text-mute">{o.game ?? '-'}</span>
                         </td>
                         <td className="text-xs text-mute">{o.game_account ?? '-'}</td>
                         <td className="text-right">{num(o.qty)}</td>
-                        <td className="text-right font-medium text-white">{money(o.total)}</td>
+                        <td className="text-right font-medium text-fg">{money(o.total)}</td>
                         <td>
                           <span
                             className={`chip ${
@@ -204,7 +204,7 @@ export default async function ShopAccountPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-white">ประวัติเครดิต</h2>
+        <h2 className="mb-3 text-lg font-semibold text-fg">ประวัติเครดิต</h2>
         {credits.length === 0 ? (
           <div className="rounded-xl border border-dashed border-ink-700/70 bg-ink-900/40 px-4 py-10 text-center text-sm text-mute backdrop-blur-sm">
             ยังไม่มีการเคลื่อนไหวของเครดิต
@@ -239,7 +239,7 @@ export default async function ShopAccountPage() {
                         {c.amount >= 0 ? '+' : ''}
                         {money(c.amount)}
                       </td>
-                      <td className="text-right text-white">{money(c.balance_after)}</td>
+                      <td className="text-right text-fg">{money(c.balance_after)}</td>
                     </tr>
                   ))}
                 </tbody>
