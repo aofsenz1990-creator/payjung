@@ -89,6 +89,55 @@ export async function startLinePairingAction(): Promise<ActionState> {
   }
 }
 
+/**
+ * ตรวจว่าคีย์ที่กรอกไว้ถูกต้องจริงไหม โดยยิงถามข้อมูลบัญชีจาก LINE
+ *
+ * ตรวจได้โดยไม่ต้องผูกปลายทางก่อน จึงใช้แยกปัญหาได้ว่า
+ * "คีย์ผิด" หรือ "คีย์ถูกแต่ยังไม่ได้ผูกปลายทาง" ซึ่งสองอันนี้แก้คนละทาง
+ */
+export async function verifyLineKeysAction(): Promise<ActionState> {
+  await requireAdmin()
+  const { token, secret } = await lineConfig()
+
+  if (!token) return { error: 'ยังไม่ได้บันทึก Channel access token' }
+  if (!secret) return { error: 'ยังไม่ได้บันทึก Channel secret' }
+
+  // Channel secret ของ LINE เป็นเลขฐานสิบหก 32 ตัวเสมอ ผิดรูปแบบ = วางผิดช่องแน่นอน
+  const secretLooksRight = /^[0-9a-f]{32}$/i.test(secret)
+
+  try {
+    const res = await fetch('https://api.line.me/v2/bot/info', {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(8000),
+    })
+
+    if (res.status === 401) {
+      return {
+        error:
+          'Channel access token ไม่ถูกต้องหรือถูกยกเลิกไปแล้ว — ' +
+          'ไปที่ LINE Developers แท็บ Messaging API แล้วกด Issue ใหม่ จากนั้นเอามาวางแล้วบันทึกอีกครั้ง',
+      }
+    }
+    if (!res.ok) {
+      return { error: `LINE ตอบกลับผิดปกติ (HTTP ${res.status}) ลองใหม่อีกครั้ง` }
+    }
+
+    const info = (await res.json()) as { displayName?: string; basicId?: string }
+    const name = info.displayName ?? 'ไม่ทราบชื่อ'
+    const basicId = info.basicId ?? ''
+
+    return {
+      ok:
+        `✓ Channel access token ถูกต้อง — เชื่อมอยู่กับบัญชี "${name}" ${basicId}` +
+        (secretLooksRight
+          ? ' · Channel secret รูปแบบถูกต้อง'
+          : ' · ⚠ แต่ Channel secret ผิดรูปแบบ (ต้องเป็นตัวอักษร a-f และตัวเลข รวม 32 ตัว) — น่าจะวางสลับช่องกัน'),
+    }
+  } catch {
+    return { error: 'ติดต่อ LINE ไม่ได้ในตอนนี้ ลองใหม่อีกครั้ง' }
+  }
+}
+
 /** ส่งข้อความทดสอบ เพื่อยืนยันว่าตั้งค่าครบจริง */
 export async function testLineNotifyAction(): Promise<ActionState> {
   await requireAdmin()

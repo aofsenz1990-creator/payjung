@@ -5,6 +5,7 @@ import {
   startLinePairingAction,
   testLineNotifyAction,
   unlinkLineAction,
+  verifyLineKeysAction,
 } from '@/lib/actions/line'
 
 /**
@@ -99,6 +100,15 @@ export function LineNotifyPanel({
             บันทึกคีย์
           </SubmitButton>
         </ActionForm>
+
+        {/* ตรวจคีย์ได้โดยไม่ต้องผูกปลายทางก่อน ใช้แยกว่าปัญหาอยู่ที่คีย์หรือที่การผูก */}
+        <div className="mt-2">
+          <ActionForm action={verifyLineKeysAction}>
+            <SubmitButton className="btn-ghost w-full" pendingLabel="กำลังตรวจ...">
+              ตรวจสอบว่าคีย์ถูกต้องไหม
+            </SubmitButton>
+          </ActionForm>
+        </div>
       </div>
 
       {/* ขั้นที่ 3 : ปลายทาง — ทางลัดที่ไม่ต้องตั้ง webhook เลย */}
