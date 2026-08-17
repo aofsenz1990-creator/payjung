@@ -10,6 +10,7 @@ import {
   shopOverlayClass,
 } from '@/lib/shop'
 import { ContactBar } from '@/components/ContactBar'
+import { FloatingActions } from '@/components/FloatingActions'
 import { shopLogoutAction } from '@/lib/actions/shop'
 import { BrandLogo, BrandWordmark } from '@/components/Brand'
 import { money, num } from '@/lib/format'
@@ -142,6 +143,14 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
           <p className="mt-6 text-xs text-mute">© Pay Jung · ระบบเติมเกมออนไลน์</p>
         </div>
       </footer>
+
+      {/* ปุ่มลอยมุมขวา — กดถึงสิ่งที่ใช้บ่อยได้จากทุกหน้า */}
+      <FloatingActions
+        lineUrl={lineLink(settings.contact_line)}
+        facebookUrl={facebookLink(settings.contact_facebook)}
+        signedIn={Boolean(customer)}
+        unread={unread}
+      />
     </div>
   )
 }
