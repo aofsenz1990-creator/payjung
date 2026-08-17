@@ -5,6 +5,15 @@ export function str(fd: FormData, key: string) {
   return typeof v === 'string' ? v.trim() : ''
 }
 
+/**
+ * ตัดข้อความให้ไม่เกินความยาวที่กำหนด
+ * ใช้กับช่องที่ลูกค้าพิมพ์เองบนหน้าเว็บ เพราะช่อง text ของฐานข้อมูลไม่มีเพดานความยาว
+ * ถ้าไม่ตัด มีคนส่งข้อความยาวเป็นล้านตัวอักษรเข้ามาได้ ฐานข้อมูลจะบวมและหน้าหลังร้านจะอืดตาม
+ */
+export function clip(value: string, max: number) {
+  return value.length > max ? value.slice(0, max) : value
+}
+
 export function optStr(fd: FormData, key: string) {
   const v = str(fd, key)
   return v === '' ? null : v

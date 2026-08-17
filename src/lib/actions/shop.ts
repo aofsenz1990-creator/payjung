@@ -9,7 +9,7 @@ import { SlipError, uploadImage } from '@/lib/storage'
 import { autoDispatchOn, dispatchSale, markForDispatch } from '@/lib/dispatch'
 import { jsonArray } from '@/lib/json'
 import { supabaseAdmin, supabaseServer } from '@/lib/supabase'
-import { bool, customerError, decimal, friendlyError, int, optStr, str } from '@/lib/form'
+import { bool, clip, customerError, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import { tooMany, tooManyFromIp, TOO_MANY_MESSAGE } from '@/lib/ratelimit'
 import type { ActionState } from '@/components/ActionForm'
 
@@ -351,13 +351,13 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
       for (const f of spec) {
         const v = str(formData, `field_${f.key}`)
         if (!v) return { error: `กรุณากรอก "${f.label || f.key}" ให้ครบ` }
-        values[f.key] = v
+        values[f.key] = clip(v, 120)
       }
       fieldValues = values
       // เก็บค่าหลักไว้ในช่องเดิมด้วย เพื่อให้หลังร้านค้นหาและอ่านบิลได้เหมือนเดิม
       gameAccount = values.uid ?? values.id_login ?? Object.values(values)[0] ?? ''
     } else {
-      gameAccount = str(formData, 'game_account')
+      gameAccount = clip(str(formData, 'game_account'), 120)
     }
 
     if (!gameAccount) return { error: 'กรุณากรอกไอดีเกมที่ต้องการเติม' }

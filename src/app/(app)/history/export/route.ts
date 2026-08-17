@@ -6,8 +6,16 @@ import { SALE_STATUS, type SaleStatus } from '@/lib/constants'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * แปลงค่าหนึ่งช่องให้ปลอดภัยก่อนเขียนลง CSV
+ *
+ * ที่ต้องเติมเครื่องหมาย ' ข้างหน้าค่าที่ขึ้นต้นด้วย = + - @ เพราะ Excel มองว่านั่นคือ "สูตร"
+ * แล้วสั่งรันให้ทันทีที่เปิดไฟล์ ช่องอย่าง "ไอดีเกม" กับ "หมายเหตุ" ลูกค้าเป็นคนพิมพ์เอง
+ * ถ้าลูกค้าพิมพ์สูตรแฝงมา พอพนักงานดาวน์โหลดรายงานไปเปิดใน Excel สูตรนั้นจะทำงานบนเครื่องพนักงาน
+ */
 function csvCell(value: unknown) {
-  const s = value === null || value === undefined ? '' : String(value)
+  let s = value === null || value === undefined ? '' : String(value)
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 

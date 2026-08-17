@@ -5,7 +5,7 @@ import { q } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
 import { getShopCustomer } from '@/lib/shop'
 import { removeSlip, SlipError, uploadSlip } from '@/lib/storage'
-import { customerError, decimal, friendlyError, int, optStr, str } from '@/lib/form'
+import { clip, customerError, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import { tooMany, tooManyFromIp, TOO_MANY_MESSAGE } from '@/lib/ratelimit'
 import type { ActionState } from '@/components/ActionForm'
 
@@ -15,7 +15,8 @@ export async function requestTopupAction(formData: FormData): Promise<ActionStat
   if (!customer) return { error: 'กรุณาเข้าสู่ระบบก่อน' }
 
   const amount = decimal(formData, 'amount')
-  const note = optStr(formData, 'note')
+  const noteRaw = optStr(formData, 'note')
+  const note = noteRaw ? clip(noteRaw, 500) : null
   const slipData = str(formData, 'slip_data')
 
   if (amount <= 0) return { error: 'กรุณากรอกจำนวนเงินที่โอน' }
