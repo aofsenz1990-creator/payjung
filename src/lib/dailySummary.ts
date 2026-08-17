@@ -15,10 +15,25 @@ const THAI_MONTHS = [
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
 ]
 
-function thaiDateLabel(d = new Date()) {
-  // แปลงเป็นเวลาไทยก่อนเสมอ ไม่งั้นสรุป "เมื่อวาน" ตอนตีหนึ่งจะได้วันผิด
-  const bkk = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
-  return `${bkk.getDate()} ${THAI_MONTHS[bkk.getMonth()]} ${bkk.getFullYear() + 543}`
+function thaiDateLabel(d: Date) {
+  return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`
+}
+
+/**
+ * หา "วันที่จะสรุป" ตามเวลาไทย
+ *
+ * ตัวสรุปทำงานตอนเที่ยงคืน ซึ่งตอนนั้นวันใหม่เพิ่งเริ่มไปไม่กี่วินาที
+ * ถ้าสรุป "วันนี้" ตรง ๆ จะได้ข้อความว่างเปล่าทุกคืน เพราะยังไม่มีใครซื้ออะไร
+ * ช่วงหลังเที่ยงคืนถึงตีหก จึงถือว่ากำลังสรุป "วันที่เพิ่งจบไป"
+ * ส่วนถ้ากดปุ่มดูเองระหว่างวัน ก็จะได้ยอดของวันนั้นตามปกติ
+ */
+function targetDay() {
+  const bkk = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
+  if (bkk.getHours() < 6) bkk.setDate(bkk.getDate() - 1)
+  const y = bkk.getFullYear()
+  const m = String(bkk.getMonth() + 1).padStart(2, '0')
+  const d = String(bkk.getDate()).padStart(2, '0')
+  return { date: bkk, iso: `${y}-${m}-${d}` }
 }
 
 const baht = (n: number) => n.toLocaleString('th-TH', { maximumFractionDigits: 2 })
@@ -28,7 +43,7 @@ const baht = (n: number) => n.toLocaleString('th-TH', { maximumFractionDigits: 2
  * @param refresh ยิงถามยอดคงเหลือจากผู้ให้บริการก่อนไหม (ตัวสรุปรายวันควรถาม จะได้ตรงจริง)
  */
 export async function buildDailySummary(refresh = true): Promise<string> {
-  const today = `(now() at time zone 'Asia/Bangkok')::date`
+  const day = targetDay()
 
   const [games, byProvider, totals] = await Promise.all([
     q<{ game: string; orders: number; total: number }>(
@@ -38,9 +53,10 @@ export async function buildDailySummary(refresh = true): Promise<string> {
          from sales s
          left join games g on g.id = s.game_id
         where s.status = 'paid'
-          and (s.sold_at at time zone 'Asia/Bangkok')::date = ${today}
+          and (s.sold_at at time zone 'Asia/Bangkok')::date = $1::date
         group by coalesce(g.name, 'ไม่ระบุเกม')
-        order by sum(s.total) desc`
+        order by sum(s.total) desc`,
+      [day.iso]
     ),
     q<{ provider: string; orders: number; cost: number }>(
       `select coalesce(ap.name, 'เติมเอง / ไม่ผ่าน API') as provider,
@@ -49,9 +65,10 @@ export async function buildDailySummary(refresh = true): Promise<string> {
          from sales s
          left join api_providers ap on ap.id = s.provider_id
         where s.status = 'paid'
-          and (s.sold_at at time zone 'Asia/Bangkok')::date = ${today}
+          and (s.sold_at at time zone 'Asia/Bangkok')::date = $1::date
         group by coalesce(ap.name, 'เติมเอง / ไม่ผ่าน API')
-        order by sum(s.cost_total) desc`
+        order by sum(s.cost_total) desc`,
+      [day.iso]
     ),
     q<{ orders: number; total: number; cost: number; profit: number }>(
       `select count(*)::int as orders,
@@ -60,7 +77,8 @@ export async function buildDailySummary(refresh = true): Promise<string> {
               coalesce(sum(profit), 0)::float8 as profit
          from sales
         where status = 'paid'
-          and (sold_at at time zone 'Asia/Bangkok')::date = ${today}`
+          and (sold_at at time zone 'Asia/Bangkok')::date = $1::date`,
+      [day.iso]
     ),
   ])
 
@@ -85,7 +103,7 @@ export async function buildDailySummary(refresh = true): Promise<string> {
     }
   }
 
-  const lines: string[] = [`📊 สรุปยอดขาย ${thaiDateLabel()}`, '']
+  const lines: string[] = [`📊 สรุปยอดขาย ${thaiDateLabel(day.date)}`, '']
 
   lines.push('🎮 เติมเกม')
   if (games.length === 0) {
