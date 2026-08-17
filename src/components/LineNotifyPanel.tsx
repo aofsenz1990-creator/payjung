@@ -1,6 +1,7 @@
 import { ActionForm, SubmitButton } from '@/components/ActionForm'
 import {
   saveLineSettingsAction,
+  saveLineTargetAction,
   startLinePairingAction,
   testLineNotifyAction,
   unlinkLineAction,
@@ -100,10 +101,50 @@ export function LineNotifyPanel({
         </ActionForm>
       </div>
 
-      {/* ขั้นที่ 3 : เอา URL ไปใส่ใน LINE */}
+      {/* ขั้นที่ 3 : ปลายทาง — ทางลัดที่ไม่ต้องตั้ง webhook เลย */}
+      <div className="rounded-xl border border-brand-500/40 bg-brand-500/10 p-3">
+        <p className="mb-2 text-sm font-medium text-slate-100">
+          ขั้นที่ 3 · จะให้แจ้งเตือนไปหาใคร (วิธีเร็ว)
+        </p>
+        <p className="mb-2 text-xs leading-relaxed text-mute">
+          ที่{' '}
+          <a
+            href="https://developers.line.biz/console/"
+            target="_blank"
+            rel="noreferrer"
+            className="text-brand-400 underline"
+          >
+            developers.line.biz
+          </a>{' '}
+          → เข้า Channel ของร้าน → แท็บ <b className="text-slate-200">Basic settings</b> →
+          เลื่อนล่างสุด จะเจอบรรทัด <b className="text-slate-200">Your user ID</b> ขึ้นต้นด้วย U →
+          กดคัดลอกมาวางตรงนี้
+        </p>
+        <ActionForm action={saveLineTargetAction} className="flex flex-wrap gap-2">
+          <input
+            name="line_target_id"
+            className="input min-w-0 flex-1 font-mono text-xs"
+            placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            autoComplete="off"
+          />
+          <SubmitButton className="btn-primary" pendingLabel="กำลังบันทึก...">
+            บันทึกปลายทาง
+          </SubmitButton>
+        </ActionForm>
+        <p className="mt-2 text-xs leading-relaxed text-mute">
+          ⚠️ ต้องแอดเพื่อนกับ OA ของร้านไว้ก่อน ไม่งั้น LINE จะไม่ยอมส่งข้อความให้ ·
+          ใช้วิธีนี้แล้ว<b className="text-slate-200">ข้ามขั้นที่ 4 และ 5 ไปได้เลย</b>
+        </p>
+      </div>
+
+      {/* ขั้นที่ 4 : เอา URL ไปใส่ใน LINE (จำเป็นเฉพาะตอนอยากส่งเข้ากลุ่ม) */}
       <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
         <p className="mb-2 text-sm font-medium text-slate-100">
-          ขั้นที่ 3 · ใส่ Webhook URL ในหน้า LINE
+          ขั้นที่ 4 · ใส่ Webhook URL (ข้ามได้ถ้าทำขั้นที่ 3 แล้ว)
+        </p>
+        <p className="mb-2 text-xs leading-relaxed text-mute">
+          ทำเฉพาะตอนอยากให้แจ้งเตือน<b className="text-slate-200">เข้ากลุ่ม LINE ของทีมงาน</b>{' '}
+          เพราะกลุ่มไม่มีที่ให้ดูรหัสปลายทาง ต้องผูกด้วยรหัส 6 หลักในขั้นที่ 5 แทน
         </p>
         <p className="mb-2 text-xs leading-relaxed text-mute">
           กลับไปที่แท็บ <b className="text-slate-200">Messaging API</b> → หัวข้อ Webhook settings →
@@ -122,7 +163,7 @@ export function LineNotifyPanel({
       {/* ขั้นที่ 4 : ผูกปลายทาง */}
       <div className="rounded-xl border border-ink-700 bg-ink-850 p-3">
         <p className="mb-2 text-sm font-medium text-slate-100">
-          ขั้นที่ 4 · บอกระบบว่าจะให้แจ้งเตือนไปที่ไหน
+          ขั้นที่ 5 · ผูกด้วยรหัส 6 หลัก (ข้ามได้ถ้าทำขั้นที่ 3 แล้ว)
         </p>
         <p className="mb-3 text-xs leading-relaxed text-mute">
           กดปุ่มด้านล่างเพื่อรับรหัส 6 หลัก แล้วเปิดแอป LINE

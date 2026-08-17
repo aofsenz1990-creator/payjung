@@ -38,6 +38,35 @@ export async function saveLineSettingsAction(formData: FormData): Promise<Action
   return { ok: 'บันทึกค่า LINE แล้ว — ขั้นต่อไปกดสร้างรหัสผูกด้านล่าง' }
 }
 
+/**
+ * ตั้งปลายทางแจ้งเตือนด้วยการวางรหัสตรง ๆ
+ *
+ * หน้า LINE Developers แท็บ Basic settings มีบรรทัด "Your user ID" ให้คัดลอกได้เลย
+ * ทางนี้เร็วกว่าการผูกด้วยรหัส 6 หลักมาก และไม่ต้องตั้ง webhook เลยด้วยซ้ำ
+ * (เก็บวิธีผูกด้วยรหัสไว้เผื่อกรณีอยากส่งเข้ากลุ่ม ซึ่งกลุ่มไม่มีที่ให้ดูรหัส)
+ */
+export async function saveLineTargetAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const target = str(formData, 'line_target_id')
+
+  if (!target) return { error: 'กรุณาวางรหัสปลายทาง (User ID)' }
+  // U = คนเดียว, C = กลุ่ม, R = ห้องแชท — ของ LINE ยาว 33 ตัวเสมอ
+  if (!/^[UCR][0-9a-f]{32}$/i.test(target)) {
+    return {
+      error: 'รูปแบบรหัสไม่ถูกต้อง — ต้องขึ้นต้นด้วย U แล้วตามด้วยตัวเลขผสมตัวอักษร 32 ตัว',
+    }
+  }
+
+  try {
+    await setSetting('line_target_id', target)
+  } catch (err) {
+    return { error: friendlyError(err, 'บันทึกปลายทางไม่สำเร็จ') }
+  }
+
+  revalidatePath('/storefront')
+  return { ok: 'บันทึกปลายทางแล้ว — กดปุ่ม "ส่งข้อความทดสอบ" เพื่อยืนยันว่าใช้ได้จริง' }
+}
+
 /** สร้างรหัส 6 หลักสำหรับผูกปลายทางแจ้งเตือน ใช้ได้ 15 นาที */
 export async function startLinePairingAction(): Promise<ActionState> {
   await requireAdmin()
