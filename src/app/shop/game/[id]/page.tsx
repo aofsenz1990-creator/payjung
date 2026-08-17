@@ -45,7 +45,7 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
   }))
 
   return (
-    <>
+    <div className="mx-auto max-w-4xl">
       <Link href="/shop" className="text-sm text-brand-400 hover:underline">
         ← กลับหน้าแรก
       </Link>
@@ -90,6 +90,6 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
           บัญชีของฉัน
         </Link>
       </p>
-    </>
+    </div>
   )
 }

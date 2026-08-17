@@ -61,7 +61,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-linear-to-r from-ink-950/85 via-ink-950/45 to-ink-950/85"
         />
-        <div className="relative mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="relative mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-4 py-3">
           <Link href="/shop" className="flex items-center gap-2.5">
             <BrandLogo circle size={56} compactFallback />
             <BrandWordmark subtitle="บริการเติมเกมออนไลน์" />
@@ -101,10 +101,10 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+      <main className="relative z-10 mx-auto w-full max-w-[1440px] flex-1 px-4 py-6">{children}</main>
 
       <footer className="relative z-10 mt-10 border-t border-ink-800/60 bg-ink-900/70 backdrop-blur-md">
-        <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="mx-auto max-w-[1440px] px-4 py-8">
           <h2 className="text-base font-semibold text-white">ช่องทางติดต่อ</h2>
           <ContactBar
             line={settings.contact_line}

@@ -102,7 +102,7 @@ export default async function ShopHome({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
             {games.map((g) => (
               <Link
                 key={g.id}
@@ -115,15 +115,15 @@ export default async function ShopHome({
                     <img
                       src={g.image_url}
                       alt={g.name}
-                      className="size-full object-contain p-3 transition group-hover:scale-105"
+                      className="size-full object-contain p-2 transition group-hover:scale-105"
                     />
                   ) : (
                     <span className="flex size-full items-center justify-center text-4xl">🎮</span>
                   )}
                 </div>
-                <div className="p-3">
-                  <p className="truncate font-medium text-white">{g.name}</p>
-                  <p className="mt-1 text-xs text-mute">
+                <div className="p-2.5">
+                  <p className="truncate text-sm font-medium text-white">{g.name}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-mute">
                     {g.packages > 0 ? (
                       <>
                         {num(g.packages)} แพ็กเกจ · เริ่ม{' '}

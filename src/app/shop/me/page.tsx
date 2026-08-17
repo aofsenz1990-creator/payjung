@@ -53,7 +53,7 @@ export default async function ShopAccountPage() {
   ])
 
   return (
-    <>
+    <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-ink-700 bg-linear-to-r from-brand-600/20 to-grape-600/20 p-5">
         <div>
           <p className="text-sm text-mute">สวัสดี</p>
@@ -186,6 +186,6 @@ export default async function ShopAccountPage() {
           </div>
         )}
       </section>
-    </>
+    </div>
   )
 }
