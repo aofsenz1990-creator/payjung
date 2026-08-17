@@ -64,32 +64,64 @@ export default async function ShopHome({
 
   return (
     <>
-      <section className="mb-8 text-center">
-        <h1 className="text-2xl font-bold text-white sm:text-3xl">เติมเกมกับ Pay Jung</h1>
-        <p className="mt-2 text-sm text-mute">
-          {settings.shop_tagline ?? 'เลือกเกมที่ต้องการเติม แล้วใช้เครดิตในบัญชีของคุณได้เลย'}
-        </p>
+      {/* ส่วนหัว — ดวงไฟเบลอสองดวงวางซ้อนกันคนละสี ทำให้พื้นหลังมีมิติโดยไม่รบกวนตัวหนังสือ */}
+      <section className="relative mb-10 text-center">
+        <div
+          aria-hidden
+          className="glow-orb -top-16 left-1/4 size-56 bg-brand-500/25"
+        />
+        <div
+          aria-hidden
+          className="glow-orb -top-10 right-1/4 size-56 bg-aqua-500/20"
+        />
 
-        <form method="get" className="mx-auto mt-5 flex max-w-md gap-2">
-          <input
-            name="q"
-            defaultValue={search}
-            className="input"
-            placeholder="ค้นหาเกม เช่น Free Fire, RoV"
-            aria-label="ค้นหาเกม"
-          />
-          <button type="submit" className="btn-primary">
-            ค้นหา
-          </button>
-        </form>
+        <div className="relative">
+          <h1 className="neon-title text-3xl font-extrabold tracking-tight sm:text-5xl">
+            เติมเกมกับ Pay Jung
+          </h1>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-mute sm:text-base">
+            {settings.shop_tagline ?? 'เลือกเกมที่ต้องการเติม แล้วใช้เครดิตในบัญชีของคุณได้เลย'}
+          </p>
+
+          {/* จุดขายสามข้อ บอกให้ลูกค้าใหม่รู้ว่าร้านนี้ต่างจากร้านอื่นยังไง */}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
+            <span className="chip bg-brand-500/15 text-brand-400 ring-1 ring-brand-500/25">
+              ⚡ เติมอัตโนมัติ
+            </span>
+            <span className="chip bg-aqua-500/15 text-aqua-400 ring-1 ring-aqua-500/25">
+              🕐 เปิด 24 ชม.
+            </span>
+            <span className="chip bg-grape-500/15 text-grape-400 ring-1 ring-grape-500/25">
+              💎 ราคาพิเศษสำหรับพาร์ทเนอร์
+            </span>
+          </div>
+
+          <form method="get" className="mx-auto mt-6 flex max-w-lg gap-2">
+            <input
+              name="q"
+              defaultValue={search}
+              className="input rounded-full px-5 py-2.5"
+              placeholder="ค้นหาเกม เช่น Free Fire, RoV"
+              aria-label="ค้นหาเกม"
+            />
+            <button type="submit" className="btn-primary rounded-full px-6">
+              ค้นหา
+            </button>
+          </form>
+        </div>
       </section>
 
       <section className="mb-10">
-        <div className="mb-4 flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold text-white">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+            {/* แถบไล่สีเล็ก ๆ หน้าหัวข้อ ทำให้สายตาจับจุดเริ่มต้นของแต่ละส่วนได้ทันที */}
+            <span
+              aria-hidden
+              className="h-5 w-1 rounded-full bg-linear-to-b from-brand-400 to-grape-500"
+            />
             {search ? `ผลการค้นหา "${search}"` : 'เกมทั้งหมด'}
           </h2>
-          <span className="text-xs text-mute">{num(games.length)} เกม</span>
+          <span className="chip bg-ink-800 text-mute">{num(games.length)} เกม</span>
         </div>
 
         {games.length === 0 ? (
@@ -108,35 +140,37 @@ export default async function ShopHome({
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
             {games.map((g) => (
-              <Link
-                key={g.id}
-                href={`/shop/game/${g.id}`}
-                className="group overflow-hidden rounded-2xl border border-ink-700/70 bg-ink-900/70 backdrop-blur-sm transition hover:border-brand-500/60 hover:bg-ink-900/85 hover:shadow-lg hover:shadow-brand-600/20"
-              >
-                <div className="aspect-square overflow-hidden bg-ink-850/60">
+              <Link key={g.id} href={`/shop/game/${g.id}`} className="group game-card">
+                <div className="relative aspect-square overflow-hidden bg-ink-850/60">
                   {g.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={g.image_url}
                       alt={g.name}
-                      className="size-full object-contain p-2 transition group-hover:scale-105"
+                      className="size-full object-contain p-2 transition duration-300 group-hover:scale-110"
                     />
                   ) : (
                     <span className="flex size-full items-center justify-center text-4xl">🎮</span>
                   )}
+                  {/* ไล่สีทับขอบล่างของรูป ให้รูปกลืนเข้ากับส่วนที่เป็นตัวหนังสือ
+                      ไม่งั้นรูปพื้นสว่างจะตัดกับการ์ดพื้นเข้มเป็นเส้นแข็ง ๆ */}
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-linear-to-t from-ink-950/90 to-transparent"
+                  />
                 </div>
                 <div className="p-2.5">
-                  <p className="truncate text-sm font-medium text-white">{g.name}</p>
-                  <p className="mt-1 text-[11px] leading-4 text-mute">
-                    {g.packages > 0 ? (
-                      <>
-                        {num(g.packages)} แพ็กเกจ · เริ่ม{' '}
-                        <span className="text-brand-400">{money(g.min_price ?? 0)}</span> บาท
-                      </>
-                    ) : (
-                      'ยังไม่มีแพ็กเกจ'
-                    )}
+                  <p className="truncate text-sm font-medium text-white transition group-hover:text-brand-400">
+                    {g.name}
                   </p>
+                  {g.packages > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="price-tag">เริ่ม {money(g.min_price ?? 0)}฿</span>
+                      <span className="text-[11px] text-mute">{num(g.packages)} แพ็ก</span>
+                    </div>
+                  ) : (
+                    <p className="mt-1.5 text-[11px] leading-4 text-mute">ยังไม่มีแพ็กเกจ</p>
+                  )}
                 </div>
               </Link>
             ))}
