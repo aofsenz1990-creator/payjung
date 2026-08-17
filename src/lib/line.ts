@@ -52,10 +52,24 @@ export function verifyLineSignature(secret: string, body: string, signature: str
  * ห้าม throw เด็ดขาด — ตัวนี้ถูกเรียกต่อท้ายงานที่สำคัญกว่ามาก (ลูกค้าแจ้งโอนเงิน)
  * ถ้า LINE ล่มแล้วทำให้การแจ้งโอนล้มตาม ลูกค้าจะโอนเงินไปแล้วแต่ระบบไม่บันทึก
  */
+export type LineMessage =
+  | { type: 'text'; text: string }
+  | { type: 'image'; originalContentUrl: string; previewImageUrl: string }
+
 export async function notifyLine(text: string): Promise<boolean> {
+  return notifyLineMessages([{ type: 'text', text: text.slice(0, 4900) }])
+}
+
+/**
+ * ส่งได้หลายข้อความในครั้งเดียว เช่นข้อความ + รูปสลิป
+ *
+ * LINE นับ "หนึ่งครั้งที่กดส่ง" เป็น 1 ข้อความ ไม่ว่าจะแนบไปกี่ชิ้น
+ * ส่งรวมทีเดียวจึงประหยัดโควตาฟรีกว่าแยกส่งทีละอัน (แพ็กฟรีมี 500 ข้อความ/เดือน)
+ */
+export async function notifyLineMessages(messages: LineMessage[]): Promise<boolean> {
   try {
     const { token, target } = await lineConfig()
-    if (!token || !target) return false
+    if (!token || !target || messages.length === 0) return false
 
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
       method: 'POST',
@@ -63,7 +77,7 @@ export async function notifyLine(text: string): Promise<boolean> {
         'content-type': 'application/json',
         authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ to: target, messages: [{ type: 'text', text: text.slice(0, 4900) }] }),
+      body: JSON.stringify({ to: target, messages: messages.slice(0, 5) }),
       // ไม่ให้ค้างนานจนกิน quota เวลาทำงานของ Vercel
       signal: AbortSignal.timeout(8000),
     })

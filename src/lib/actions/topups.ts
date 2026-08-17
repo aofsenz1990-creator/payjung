@@ -4,10 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { q } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
 import { getShopCustomer } from '@/lib/shop'
-import { removeSlip, SlipError, uploadSlip } from '@/lib/storage'
+import { removeSlip, signedSlipUrl, SlipError, uploadSlip } from '@/lib/storage'
 import { clip, customerError, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import { tooMany, tooManyFromIp, TOO_MANY_MESSAGE } from '@/lib/ratelimit'
-import { notifyLine } from '@/lib/line'
+import { notifyLineMessages } from '@/lib/line'
 import type { ActionState } from '@/components/ActionForm'
 
 /** ลูกค้าแจ้งโอนเงินเพื่อขอเติมเครดิต — ต้องแนบสลิปเสมอ */
@@ -50,13 +50,26 @@ export async function requestTopupAction(formData: FormData): Promise<ActionStat
     )
 
     // แจ้งเข้า LINE ให้ร้านรู้ทันที — ลูกค้าโอนเงินไปแล้วและกำลังนั่งรออยู่
-    // ห้ามให้ขั้นนี้ทำให้การแจ้งโอนล้ม ตัว notifyLine จึงกลืน error ไว้เองทั้งหมด
-    await notifyLine(
+    // ห้ามให้ขั้นนี้ทำให้การแจ้งโอนล้ม ตัวส่งจึงกลืน error ไว้เองทั้งหมด
+    //
+    // แนบรูปสลิปไปด้วย จะได้ตรวจจากมือถือได้เลยไม่ต้องเปิดหลังร้าน
+    // LINE เป็นคนไปโหลดรูปเอง จึงต้องใช้ลิงก์ที่เปิดได้จากภายนอก
+    // ตั้งอายุ 7 วัน เพราะถ้าสั้นกว่านั้นรูปในแชทจะกลายเป็นรูปเสียตอนเลื่อนดูย้อนหลัง
+    const slipUrl = await signedSlipUrl(slipPath, 7 * 24 * 3600)
+    const caption =
       `💰 มีลูกค้าแจ้งโอนเงินเข้ามา\n\n` +
-        `ลูกค้า: ${customer.name}\n` +
-        `จำนวน: ${amount.toLocaleString('th-TH')} บาท\n` +
-        (note ? `หมายเหตุ: ${note}\n` : '') +
-        `\nเข้าไปตรวจสลิปและอนุมัติที่เมนู "อนุมัติเติมเครดิต"`
+      `ลูกค้า: ${customer.name}\n` +
+      `จำนวน: ${amount.toLocaleString('th-TH')} บาท\n` +
+      (note ? `หมายเหตุ: ${note}\n` : '') +
+      `\nเข้าไปตรวจสลิปและอนุมัติที่เมนู "อนุมัติเติมเครดิต"`
+
+    await notifyLineMessages(
+      slipUrl
+        ? [
+            { type: 'text', text: caption },
+            { type: 'image', originalContentUrl: slipUrl, previewImageUrl: slipUrl },
+          ]
+        : [{ type: 'text', text: caption }]
     )
   } catch (err) {
     if (slipPath) await removeSlip(slipPath)
