@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { dbTarget, q } from '@/lib/db'
+import { getSession } from '@/lib/auth'
 import { publicSupabaseConfig } from '@/lib/supabase'
 import { todayISO } from '@/lib/format'
 
@@ -31,6 +32,13 @@ function supabaseProjectRef() {
 }
 
 export async function GET(request: NextRequest) {
+  // เฉพาะผู้ดูแลระบบ — หน้านี้บอกรหัสโปรเจกต์ Supabase และที่อยู่ฐานข้อมูล
+  // ซึ่งเป็นข้อมูลที่ใช้ตั้งต้นในการโจมตีได้ ไม่ควรให้ลูกค้าที่ล็อกอินอยู่เห็นด้วย
+  const user = await getSession()
+  if (!user || user.role !== 'admin') {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+
   const target = dbTarget()
   const ref = supabaseProjectRef()
   const base = {

@@ -5,6 +5,15 @@ export function str(fd: FormData, key: string) {
   return typeof v === 'string' ? v.trim() : ''
 }
 
+/**
+ * ตัดข้อความให้ไม่เกินความยาวที่กำหนด
+ * ใช้กับช่องที่ลูกค้าพิมพ์เองบนหน้าเว็บ เพราะช่อง text ของฐานข้อมูลไม่มีเพดานความยาว
+ * ถ้าไม่ตัด มีคนส่งข้อความยาวเป็นล้านตัวอักษรเข้ามาได้ ฐานข้อมูลจะบวมและหน้าหลังร้านจะอืดตาม
+ */
+export function clip(value: string, max: number) {
+  return value.length > max ? value.slice(0, max) : value
+}
+
 export function optStr(fd: FormData, key: string) {
   const v = str(fd, key)
   return v === '' ? null : v
@@ -43,4 +52,20 @@ export function friendlyError(err: unknown, fallback = 'บันทึกไม
   if (/DATABASE_URL|SUPABASE/.test(message)) return message
   if (/violates foreign key/i.test(message)) return 'ลบไม่ได้ เพราะมีข้อมูลอื่นอ้างอิงรายการนี้อยู่'
   return `${fallback} (${message})`
+}
+
+/**
+ * แบบเดียวกันแต่ใช้กับหน้าเว็บลูกค้า
+ *
+ * friendlyError จะพ่วงข้อความ error ดิบ ๆ ออกไปด้วยเพื่อให้พนักงานแก้ปัญหาได้
+ * ซึ่งบอกชื่อตาราง/ชื่อคอลัมน์/โครงสร้างฐานข้อมูลออกไปด้วย
+ * ฝั่งลูกค้าไม่ควรเห็นตรงนั้น เพราะเป็นแผนที่ชั้นดีให้คนที่คิดจะเจาะระบบ
+ */
+export function customerError(err: unknown, fallback = 'ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง') {
+  const message = err instanceof Error ? err.message : String(err)
+  if (/duplicate key|unique constraint/i.test(message)) return 'ข้อมูลนี้ซ้ำกับที่มีอยู่แล้ว'
+  if (/ฐานข้อมูลไม่ตอบ|timeout/i.test(message)) {
+    return 'ระบบตอบช้าผิดปกติ กรุณาลองใหม่อีกครั้ง'
+  }
+  return fallback
 }

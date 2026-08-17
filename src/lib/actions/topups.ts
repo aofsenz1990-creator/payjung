@@ -5,7 +5,8 @@ import { q } from '@/lib/db'
 import { requirePage } from '@/lib/auth'
 import { getShopCustomer } from '@/lib/shop'
 import { removeSlip, SlipError, uploadSlip } from '@/lib/storage'
-import { decimal, friendlyError, int, optStr, str } from '@/lib/form'
+import { clip, customerError, decimal, friendlyError, int, optStr, str } from '@/lib/form'
+import { tooMany, tooManyFromIp, TOO_MANY_MESSAGE } from '@/lib/ratelimit'
 import type { ActionState } from '@/components/ActionForm'
 
 /** ลูกค้าแจ้งโอนเงินเพื่อขอเติมเครดิต — ต้องแนบสลิปเสมอ */
@@ -14,12 +15,19 @@ export async function requestTopupAction(formData: FormData): Promise<ActionStat
   if (!customer) return { error: 'กรุณาเข้าสู่ระบบก่อน' }
 
   const amount = decimal(formData, 'amount')
-  const note = optStr(formData, 'note')
+  const noteRaw = optStr(formData, 'note')
+  const note = noteRaw ? clip(noteRaw, 500) : null
   const slipData = str(formData, 'slip_data')
 
   if (amount <= 0) return { error: 'กรุณากรอกจำนวนเงินที่โอน' }
   if (amount > 200000) return { error: 'จำนวนเงินสูงผิดปกติ กรุณาติดต่อร้านโดยตรง' }
   if (!slipData) return { error: 'กรุณาแนบสลิปการโอนเงิน' }
+
+  // แต่ละครั้งอัปโหลดรูปขึ้น Storage ด้วย ถ้าไม่กันจะโดนยิงจนพื้นที่เก็บเต็ม
+  if (await tooMany(`topup:customer:${customer.id}`, 10, 3600)) {
+    return { error: TOO_MANY_MESSAGE }
+  }
+  if (await tooManyFromIp('topup', 20, 3600)) return { error: TOO_MANY_MESSAGE }
 
   let slipPath: string | null = null
   try {
@@ -42,7 +50,7 @@ export async function requestTopupAction(formData: FormData): Promise<ActionStat
   } catch (err) {
     if (slipPath) await removeSlip(slipPath)
     if (err instanceof SlipError) return { error: err.message }
-    return { error: friendlyError(err, 'แจ้งเติมเครดิตไม่สำเร็จ') }
+    return { error: customerError(err, 'แจ้งเติมเครดิตไม่สำเร็จ') }
   }
 
   revalidatePath('/shop/topup')

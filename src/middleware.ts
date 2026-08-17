@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { sessionCookieOptions } from '@/lib/cookies'
 
 // /shop คือหน้าเว็บสำหรับลูกค้า มีระบบล็อกอินของตัวเองแยกจากหลังร้าน
 // /api/provider-callback คือช่องที่ผู้ให้บริการยิงผลออเดอร์กลับมา ไม่มี session
@@ -40,7 +41,9 @@ export async function middleware(request: NextRequest) {
       setAll(list) {
         for (const { name, value } of list) request.cookies.set(name, value)
         response = NextResponse.next({ request })
-        for (const { name, value, options } of list) response.cookies.set(name, value, options)
+        for (const { name, value, options } of list) {
+          response.cookies.set(name, value, sessionCookieOptions(options ?? {}))
+        }
       },
     },
   })
