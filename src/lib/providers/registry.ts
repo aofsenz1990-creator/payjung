@@ -2,6 +2,7 @@ import 'server-only'
 import { BuymError, addOrder, getAccount, getOrder, getProducts } from './24buym'
 import { OVERTOPUP_SANDBOX_BASE, providerMeta } from './constants'
 import { overtopup } from './overtopup'
+import { providerCallbackUrl } from '../siteUrl'
 import {
   ProviderError,
   type CatalogEntry,
@@ -40,6 +41,11 @@ const buym: ProviderAdapter = {
 
   async placeOrder(config, input) {
     try {
+      // บอกปลายทางว่าให้ยิงผลกลับมาที่ไหนเมื่อเติมเสร็จ
+      // ไม่ส่งก็ยังทำงานได้ แต่สถานะจะอัปเดตเฉพาะตอนมีคนเปิดหน้าหลังร้านค้างไว้
+      // (ลูกค้าที่สั่งตอนตีสองจะค้างเป็น "รอดำเนินการ" จนกว่าจะมีคนเปิดหลังร้าน)
+      const callbackUrl = await providerCallbackUrl()
+
       const res = await addOrder(config.baseUrl, config.secret, {
         UserID: input.account,
         game_id: input.gameId,
@@ -47,6 +53,7 @@ const buym: ProviderAdapter = {
         quantity: input.quantity,
         server_id: input.serverId || '0',
         ref_no: input.ref,
+        ...(callbackUrl ? { callback_api: callbackUrl } : {}),
       })
       if (!res.success) {
         // ปลายทางปฏิเสธตั้งแต่แรก = ยังไม่ได้ตัดพอยต์ ถือว่าไม่สำเร็จอย่างชัดเจน

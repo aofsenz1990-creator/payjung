@@ -17,6 +17,26 @@ export const maxDuration = 15
  * = ได้ของฟรีโดยที่ร้านไม่รู้ตัว
  */
 
+/**
+ * แปลรหัสสถานะของ 24BUYM
+ * -1 = ล้มเหลว (ฝั่งเขาคืนพอยต์ให้ร้านแล้ว เราจึงคืนเครดิตให้ลูกค้าต่อได้เลย)
+ *  0 = อยู่ในคิว, 1 = กำลังเติม, 2 = เติมสำเร็จ
+ */
+function mapBuymCallback(status: string, message: string | null, orderId: string | null) {
+  const detail = message ? ` — ${message}` : ''
+  if (status === '2') {
+    return { state: 'success' as const, message: `24BUYM เติมสำเร็จ${detail}`, orderId }
+  }
+  if (status === '-1') {
+    return {
+      state: 'failed' as const,
+      message: `24BUYM แจ้งว่าเติมไม่สำเร็จ${detail}`,
+      orderId,
+    }
+  }
+  return { state: 'sent' as const, message: `24BUYM กำลังดำเนินการ${detail}`, orderId }
+}
+
 /** เทียบแบบใช้เวลาคงที่ กันการเดาคีย์ทีละตัวจากเวลาที่ตอบกลับ */
 function sameSecret(given: string, expected: string) {
   const a = Buffer.from(given)
@@ -58,17 +78,20 @@ export async function POST(
     return NextResponse.json({ error: 'bad body' }, { status: 400 })
   }
 
-  // v2 ส่ง reference_id / order_id / status / message
-  // (รับชื่อฟิลด์แบบเก่าไว้ด้วย เผื่อผู้ให้บริการรายอื่นใช้คนละชื่อ)
-  const ref = (fields.reference_id ?? fields.reference_no ?? '').trim()
+  // ผู้ให้บริการแต่ละเจ้าตั้งชื่อฟิลด์ไม่เหมือนกัน รับไว้ทุกแบบที่เจอจริง
+  // OverTopup: reference_id / order_id / status(ข้อความ)
+  // 24BUYM:    ref_no / status(ตัวเลข -1,0,1,2) / message  (ไม่ส่ง order_id มาด้วย)
+  const ref = (fields.reference_id ?? fields.reference_no ?? fields.ref_no ?? '').trim()
   const orderNo = (fields.order_id ?? fields.order_no ?? '').trim() || null
   if (!ref) return NextResponse.json({ error: 'missing reference_id' }, { status: 400 })
 
-  const result = mapStatus(
-    fields.status ?? fields.order_status,
-    fields.message || fields.note || null,
-    orderNo
-  )
+  const rawStatus = (fields.status ?? fields.order_status ?? '').trim()
+  const message = fields.message || fields.note || null
+
+  // สถานะเป็นตัวเลข = รูปแบบของ 24BUYM ต้องแปลคนละชุดกับ OverTopup
+  const result = /^-?\d+$/.test(rawStatus)
+    ? mapBuymCallback(rawStatus, message, orderNo)
+    : mapStatus(rawStatus, message, orderNo)
 
   try {
     const outcome = await applyCallback({ ref, orderId: orderNo, result })
