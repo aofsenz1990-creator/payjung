@@ -5,6 +5,7 @@ import { deleteCustomerAction, saveCustomerAction } from '@/lib/actions/catalog'
 import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { CreditPanel, loadCreditCustomers } from '@/components/CreditPanel'
+import { SendMessageForm } from '@/components/SendMessageForm'
 import { Empty, PageHeader, SectionTitle } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,7 @@ type CustomerRow = {
   contact: string | null
   game_uid: string | null
   note: string | null
+  web_enabled: boolean | null
   orders: number
   spent: number
   last_buy: string | null
@@ -33,7 +35,7 @@ export default async function CustomersPage({
 
   const [customers, editing, creditCustomers] = await Promise.all([
     q<CustomerRow>(
-      `select c.id, c.name, c.phone, c.contact, c.game_uid, c.note,
+      `select c.id, c.name, c.phone, c.contact, c.game_uid, c.note, c.web_enabled,
               coalesce(t.orders, 0)::int as orders,
               coalesce(t.spent, 0)::float8 as spent,
               t.last_buy
@@ -210,6 +212,10 @@ export default async function CustomersPage({
                           <Link href={`/customers?edit=${c.id}`} className="btn-ghost btn-sm">
                             แก้ไข
                           </Link>
+                          {/* ส่งข้อความเข้ากล่องข้อความบนหน้าเว็บของลูกค้า */}
+                          {c.web_enabled ? (
+                            <SendMessageForm customerId={c.id} label="ส่งข้อความ" />
+                          ) : null}
                           {isAdmin ? (
                             <form action={deleteCustomerAction}>
                               <input type="hidden" name="id" value={c.id} />

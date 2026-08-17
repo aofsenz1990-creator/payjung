@@ -4,6 +4,7 @@ import { q } from '@/lib/db'
 import { getShopCustomer } from '@/lib/shop'
 import { dateTime, money, num } from '@/lib/format'
 import { SALE_STATUS, type SaleStatus } from '@/lib/constants'
+import { MessageBox, type ShopMessage } from '@/components/MessageBox'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,7 @@ export default async function ShopAccountPage() {
   const customer = await getShopCustomer()
   if (!customer) redirect('/shop/login')
 
-  const [orders, credits] = await Promise.all([
+  const [orders, credits, messageRows] = await Promise.all([
     q<{
       code: string
       sold_at: string
@@ -50,7 +51,39 @@ export default async function ShopAccountPage() {
         order by created_at desc limit 30`,
       [customer.id]
     ),
+    q<{
+      id: number
+      kind: string
+      title: string | null
+      body: string
+      sale_code: string | null
+      created_at: string
+      unread: boolean
+    }>(
+      `select m.id, m.kind, m.title, m.body, s.code as sale_code,
+              m.created_at, (m.read_at is null) as unread
+         from customer_messages m
+         left join sales s on s.id = m.sale_id
+        where m.customer_id = $1
+        order by m.created_at desc limit 50`,
+      [customer.id]
+    ),
   ])
+
+  const messages: ShopMessage[] = messageRows.map((m) => ({
+    ...m,
+    created_at: dateTime(m.created_at),
+  }))
+  const unreadCount = messages.filter((m) => m.unread).length
+
+  // ทำเครื่องหมายว่าอ่านแล้วทันทีที่เปิดหน้านี้ — ข้อความยังอยู่ครบ แค่ไม่ขึ้นป้าย "ใหม่" รอบหน้า
+  // ต้องทำหลังอ่านค่ามาแล้ว ลูกค้าจะได้เห็นป้าย "ใหม่" ในรอบที่เพิ่งเปิดด้วย
+  if (unreadCount > 0) {
+    await q(
+      'update customer_messages set read_at = now() where customer_id = $1 and read_at is null',
+      [customer.id]
+    )
+  }
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -77,6 +110,18 @@ export default async function ShopAccountPage() {
           เลือกเกมที่จะเติม
         </Link>
       </p>
+
+      <section className="mb-8" id="messages">
+        <h2 className="mb-3 text-lg font-semibold text-white">
+          กล่องข้อความจากร้าน
+          {unreadCount > 0 ? (
+            <span className="ml-2 chip bg-brand-500/15 text-brand-400">
+              ใหม่ {num(unreadCount)} ข้อความ
+            </span>
+          ) : null}
+        </h2>
+        <MessageBox messages={messages} />
+      </section>
 
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-semibold text-white">

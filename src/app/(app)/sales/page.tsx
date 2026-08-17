@@ -6,6 +6,7 @@ import { sendToProviderAction, stopDispatchAction } from '@/lib/actions/dispatch
 import { jsonRecord } from '@/lib/json'
 import { dateTime, money, nowLocalInput, num, todayISO } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
+import { SendMessageForm } from '@/components/SendMessageForm'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { SaleForm, type CustomerOption, type GameOption, type ProductOption } from '@/components/SaleForm'
 import {
@@ -58,11 +59,14 @@ export default async function SalesPage() {
       provider_message: string | null
       provider_name: string | null
       provider_fields: unknown
+      customer_id: number | null
+      web_enabled: boolean | null
     }>(
       `select s.id, s.code, s.sold_at, s.item_name, g.name as game, coalesce(c.name, s.customer_name) as customer, s.source,
               s.game_account, s.qty, s.total::float8 as total, s.profit::float8 as profit, s.slip_path,
               s.status, s.payment_method, s.channel, u.display_name as seller,
-              s.provider_state, s.provider_message, s.provider_fields, ap.name as provider_name
+              s.provider_state, s.provider_message, s.provider_fields, ap.name as provider_name,
+              s.customer_id, c.web_enabled
          from sales s
          left join api_providers ap on ap.id = s.provider_id
          left join games g on g.id = s.game_id
@@ -262,6 +266,18 @@ export default async function SalesPage() {
                               รับเงินแล้ว
                             </button>
                           </form>
+                        ) : null}
+                        {/* ส่งโค้ดบัตรเติมเกมให้ลูกค้าอ่านบนหน้าเว็บ ไม่ต้องพิมพ์ส่งทางไลน์ทีละคน */}
+                        {s.customer_id ? (
+                          <SendMessageForm
+                            customerId={s.customer_id}
+                            saleId={s.id}
+                            saleCode={s.code}
+                            label="ส่งโค้ด/ข้อความ"
+                            disabledReason={
+                              s.web_enabled ? undefined : 'ลูกค้ายังไม่มีบัญชีเว็บ'
+                            }
+                          />
                         ) : null}
                         {s.status !== 'cancelled' ? (
                           <form action={cancelSaleAction}>

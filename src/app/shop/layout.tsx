@@ -12,12 +12,28 @@ import {
 import { ContactBar } from '@/components/ContactBar'
 import { shopLogoutAction } from '@/lib/actions/shop'
 import { BrandLogo, BrandWordmark } from '@/components/Brand'
-import { money } from '@/lib/format'
+import { money, num } from '@/lib/format'
+import { q1 } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
   const [settings, customer] = await Promise.all([getSiteSettings(), getShopCustomer()])
+
+  // จำนวนข้อความที่ยังไม่ได้อ่าน — ต้องเด่นตั้งแต่แถบบน เพราะโค้ดบัตรเติมเกมส่งมาทางนี้
+  // ถ้าลูกค้าไม่รู้ว่ามีข้อความ ก็เท่ากับซื้อของแล้วไม่ได้ของ
+  let unread = 0
+  if (customer) {
+    try {
+      const row = await q1<{ n: number }>(
+        'select count(*)::int as n from customer_messages where customer_id = $1 and read_at is null',
+        [customer.id]
+      )
+      unread = row?.n ?? 0
+    } catch {
+      // ตารางยังไม่ถูกสร้าง หรือฐานข้อมูลมีปัญหาชั่วคราว — ไม่ต้องโชว์ตัวเลข ดีกว่าทำหน้าเว็บพัง
+    }
+  }
 
   return (
     <div className="relative flex min-h-screen flex-col">
@@ -69,6 +85,14 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
 
           {customer ? (
             <div className="flex items-center gap-2">
+              {unread > 0 ? (
+                <Link
+                  href="/shop/me#messages"
+                  className="rounded-lg border border-brand-500/60 bg-brand-500/15 px-3 py-1.5 text-sm font-medium text-brand-400"
+                >
+                  ✉ {num(unread)} ข้อความใหม่
+                </Link>
+              ) : null}
               <Link
                 href="/shop/me"
                 className="rounded-lg border border-good/40 bg-good/10 px-3 py-1.5 text-sm"
