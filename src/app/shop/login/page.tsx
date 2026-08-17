@@ -51,6 +51,12 @@ export default async function ShopLoginPage() {
           </SubmitButton>
         </ActionForm>
 
+        <p className="mt-3 text-center text-sm">
+          <Link href="/shop/forgot" className="text-brand-400 underline">
+            ลืมรหัสผ่าน?
+          </Link>
+        </p>
+
         {canRegister ? (
           <Link href="/shop/register" className="btn-ghost mt-4 w-full">
             สมัครบัญชีใหม่

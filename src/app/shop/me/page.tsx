@@ -5,6 +5,7 @@ import { getShopCustomer, isPartner } from '@/lib/shop'
 import { dateTime, money, num } from '@/lib/format'
 import { SALE_STATUS, type SaleStatus } from '@/lib/constants'
 import { MessageBox, type ShopMessage } from '@/components/MessageBox'
+import { AccountSettings } from '@/components/AccountSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,6 +107,14 @@ export default async function ShopAccountPage() {
           <p className="text-3xl font-bold text-good">{money(customer.credit)}</p>
           <p className="text-xs text-mute">บาท</p>
         </div>
+      </div>
+
+      <div className="mb-6">
+        <AccountSettings
+          name={customer.name}
+          phone={customer.phone}
+          gameUid={customer.game_uid}
+        />
       </div>
 
       <p className="mb-6 rounded-xl border border-ink-700/70 bg-ink-850/70 px-4 py-3 text-xs leading-relaxed text-mute backdrop-blur-sm">
