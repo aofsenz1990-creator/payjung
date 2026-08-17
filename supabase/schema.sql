@@ -283,6 +283,22 @@ delete from profiles p
     where p.role = 'staff'
       and exists (select 1 from customers c where c.auth_user_id = p.id);
 
+-- ประวัติที่ร้านเติมเงินเข้าบัญชีผู้ให้บริการ (ต้นทุนที่จ่ายออกไปจริง)
+create table if not exists provider_topups (
+    id serial primary key,
+    provider_id int references api_providers(id) on delete set null,
+    amount numeric(12,2) not null default 0,
+    bonus numeric(12,2) not null default 0,
+    method text,
+    ref text,
+    slip_path text,
+    note text,
+    topped_up_at date not null default (now() at time zone 'Asia/Bangkok')::date,
+    created_by uuid references profiles(id) on delete set null,
+    created_at timestamptz not null default now()
+  );
+create index if not exists provider_topups_date_idx on provider_topups (topped_up_at desc);
+
 -- ราคาที่ขึ้นหน้าเว็บจริง แยกจากราคาที่ตั้งไว้ในหลังร้าน (กดปุ่มเผยแพร่ถึงจะขึ้น)
 alter table products add column if not exists published_sell_price numeric(12,2);
 alter table products add column if not exists published_partner_price numeric(12,2);

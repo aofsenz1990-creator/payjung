@@ -90,8 +90,17 @@ export default async function HistoryPage({
       >
         <AutoRefresh seconds={60} />
         <a className="btn-ghost" href={`/history/export?${filtersToQuery(filters)}`}>
-          ⬇ ดาวน์โหลด CSV
+          ⬇ รายบิล (CSV)
         </a>
+        {/* รายงานสรุปรายเกมพร้อมต้นทุนกำไร ใช้ทำบัญชี/ยื่นภาษี — เฉพาะผู้ดูแลระบบ */}
+        {user.role === 'admin' ? (
+          <a
+            className="btn-primary"
+            href={`/history/export-summary?${filtersToQuery(filters)}`}
+          >
+            ⬇ สรุปรายเกม + กำไร (CSV)
+          </a>
+        ) : null}
       </PageHeader>
 
       {/* ตัวกรอง */}

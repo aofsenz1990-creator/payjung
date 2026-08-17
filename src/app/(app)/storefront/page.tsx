@@ -27,10 +27,11 @@ import {
   refreshImportedAction,
   syncCatalogAction,
 } from '@/lib/actions/catalogSync'
-import { dateOnly, money, num } from '@/lib/format'
+import { dateOnly, money, num, todayISO } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
 import { LineNotifyPanel } from '@/components/LineNotifyPanel'
+import { ProviderTopupPanel, type ProviderTopupRow } from '@/components/ProviderTopupPanel'
 import { headers } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
@@ -192,6 +193,30 @@ export default async function StorefrontPage({
 
   const autoOn = await autoDispatchOn()
 
+  // ประวัติที่ร้านเติมเงินให้ผู้ให้บริการ + ยอดรวมเดือนนี้และปีนี้ (ใช้ทำบัญชี)
+  const [providerTopups, topupSummary] = await Promise.all([
+    q<ProviderTopupRow>(
+      `select t.id, t.provider_id, ap.name as provider_name,
+              t.amount::float8 as amount, t.bonus::float8 as bonus,
+              t.method, t.ref, t.note, t.slip_path, t.topped_up_at
+         from provider_topups t
+         left join api_providers ap on ap.id = t.provider_id
+        order by t.topped_up_at desc, t.id desc
+        limit 50`
+    ),
+    q<{ month: number; year: number }>(
+      `select
+         coalesce(sum(amount) filter (
+           where topped_up_at >= date_trunc('month', (now() at time zone 'Asia/Bangkok')::date)
+         ), 0)::float8 as month,
+         coalesce(sum(amount) filter (
+           where topped_up_at >= date_trunc('year', (now() at time zone 'Asia/Bangkok')::date)
+         ), 0)::float8 as year
+       from provider_topups`
+    ),
+  ])
+  const topupTotals = topupSummary[0] ?? { month: 0, year: 0 }
+
   // ที่อยู่ webhook ของ LINE ต้องเป็นที่อยู่จริงของเว็บ จึงอ่านจาก header ของรีเควสต์
   // (ตอนย้ายโดเมนจะได้ขึ้นค่าใหม่ให้เอง ไม่ต้องมาแก้โค้ด)
   const headerList = await headers()
@@ -296,6 +321,26 @@ export default async function StorefrontPage({
             <span className="ml-1 text-sm font-medium text-mute">รายการ</span>
           </p>
         </div>
+      </div>
+
+      {/* ---------------- ประวัติเติมเงินให้ผู้ให้บริการ ---------------- */}
+      <div className="card mb-6">
+          <SectionTitle
+            right={
+              <span className="text-xs text-mute">
+                เก็บไว้เป็นหลักฐานต้นทุนตอนยื่นภาษี
+              </span>
+            }
+          >
+            ประวัติที่ร้านเติมเงินให้ผู้ให้บริการ
+          </SectionTitle>
+          <ProviderTopupPanel
+            providers={providers.map((p) => ({ id: p.id, name: p.name }))}
+            rows={providerTopups}
+            monthTotal={topupTotals.month}
+            yearTotal={topupTotals.year}
+            today={todayISO()}
+          />
       </div>
 
       {/* ---------------- แจ้งเตือนเข้า LINE ---------------- */}
