@@ -333,6 +333,14 @@ export const SCHEMA_STATEMENTS: string[] = [
   `update products set published_sell_price = sell_price, published_partner_price = partner_price
     where published_sell_price is null`,
 
+  // ช่องที่ลูกค้าต้องกรอกตอนสั่งเติมเกมนี้
+  //
+  // ปกติระบบอ่านจากผู้ให้บริการว่าเกมไหนขออะไร แต่บางเจ้า (เช่น 24BUYM)
+  // ไม่ได้ส่งข้อมูลส่วนนี้มาเลย ทุกเกมจึงขึ้นเป็น "ไอดีเกม / UID" เหมือนกันหมด
+  // ทั้งที่บางเกมต้องใช้ AID หรือให้วางลิงก์ — ช่องนี้ให้ร้านระบุเองได้ว่าเกมนี้ใช้แบบไหน
+  // ว่างไว้ = ใช้ตามที่ผู้ให้บริการบอกเหมือนเดิม
+  `alter table games add column if not exists order_field text`,
+
   // ระดับของลูกค้า: 'normal' = ลูกค้าทั่วไป, 'partner' = พาร์ทเนอร์ที่ได้ราคาพิเศษ
   `alter table customers add column if not exists tier text not null default 'normal'`,
 

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { getShopCustomer, getSiteSettings, isPartner, priceExpr } from '@/lib/shop'
 import { jsonArray } from '@/lib/json'
+import { orderFieldSpec } from '@/lib/orderField'
 import { shopOrderAction } from '@/lib/actions/shop'
 import { BuyForm, type BuyField, type BuyPackage } from '@/components/BuyForm'
 
@@ -20,8 +21,14 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
   const [settings, game, packages] = await Promise.all([
     // คำแนะนำวิธีเอาลิงก์ของแต่ละค่าย ร้านตั้งเองได้ในหน้าจัดการเว็บไซต์
     getSiteSettings(),
-    q1<{ id: number; name: string; image_url: string | null; description: string | null }>(
-      'select id, name, image_url, description from games where id = $1 and is_published and is_active',
+    q1<{
+      id: number
+      name: string
+      image_url: string | null
+      description: string | null
+      order_field: string | null
+    }>(
+      'select id, name, image_url, description, order_field from games where id = $1 and is_published and is_active',
       [gameId]
     ),
     q<Omit<BuyPackage, 'fields'> & { provider_fields: unknown; provider_variant: string | null }>(
@@ -90,6 +97,7 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
             credit={customer?.credit ?? 0}
             signedIn={Boolean(customer)}
             defaultGameUid={customer?.game_uid}
+            orderField={orderFieldSpec(game.order_field)}
             linkHints={{
               oneone: settings.link_hint_oneone ?? null,
               goc: settings.link_hint_goc ?? null,

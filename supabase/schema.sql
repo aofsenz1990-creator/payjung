@@ -305,6 +305,9 @@ alter table products add column if not exists published_partner_price numeric(12
 update products set published_sell_price = sell_price, published_partner_price = partner_price
   where published_sell_price is null;
 
+-- ช่องที่ลูกค้าต้องกรอกตอนสั่งเติมเกมนี้ (ว่าง = ใช้ตามที่ผู้ให้บริการบอก)
+alter table games add column if not exists order_field text;
+
 -- ระดับของลูกค้า: 'normal' = ลูกค้าทั่วไป, 'partner' = พาร์ทเนอร์ที่ได้ราคาพิเศษ
 alter table customers add column if not exists tier text not null default 'normal';
 

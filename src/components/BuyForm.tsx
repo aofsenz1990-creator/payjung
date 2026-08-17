@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ActionForm, SubmitButton, type ActionState } from '@/components/ActionForm'
+import type { OrderFieldSpec } from '@/lib/orderField'
 
 export type BuyPackage = {
   id: number
@@ -114,6 +115,7 @@ export function BuyForm({
   defaultGameUid,
   fields,
   linkHints,
+  orderField,
 }: {
   action: (formData: FormData) => Promise<ActionState>
   packages: BuyPackage[]
@@ -124,6 +126,8 @@ export function BuyForm({
   fields?: BuyField[] | null
   /** คำแนะนำของช่องลิงก์ แยกตามค่าย ตั้งได้จากหลังร้าน */
   linkHints?: LinkHints
+  /** ชนิดช่องที่ร้านระบุเองรายเกม ใช้ตอนผู้ให้บริการไม่ได้บอกมา */
+  orderField?: OrderFieldSpec | null
 }) {
   const [productId, setProductId] = useState<number | null>(packages[0]?.id ?? null)
   const [qty, setQty] = useState(1)
@@ -299,16 +303,22 @@ export function BuyForm({
         ) : (
           <div>
             <label className="label" htmlFor="game_account">
-              ไอดีเกม / UID ที่จะเติม
+              {orderField?.label ?? 'ไอดีเกม / UID ที่จะเติม'}
             </label>
             <input
               id="game_account"
               name="game_account"
               className="input"
-              defaultValue={defaultGameUid ?? ''}
-              placeholder="เช่น 123456789"
+              type={orderField?.type ?? 'text'}
+              // เติมไอดีที่ลูกค้าเคยบันทึกไว้ให้เฉพาะช่องที่เป็นไอดีเกมจริง ๆ
+              // ถ้าเป็นช่องลิงก์แล้วไปเติมเลขไอดีให้ ลูกค้าจะงงและอาจกดสั่งทั้งอย่างนั้น
+              defaultValue={!orderField || orderField.key === 'uid' ? (defaultGameUid ?? '') : ''}
+              placeholder={orderField?.placeholder ?? 'เช่น 123456789'}
               required
             />
+            <p className="mt-1 text-xs leading-relaxed text-mute">
+              {orderField?.hint ?? 'เลขประจำตัวผู้เล่น ดูได้ในหน้าโปรไฟล์ของเกม'}
+            </p>
           </div>
         )}
         <div>

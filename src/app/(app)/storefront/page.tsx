@@ -32,6 +32,7 @@ import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
 import { LineNotifyPanel } from '@/components/LineNotifyPanel'
 import { ProviderTopupPanel, type ProviderTopupRow } from '@/components/ProviderTopupPanel'
+import { ORDER_FIELDS } from '@/lib/orderField'
 import { headers } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
@@ -66,6 +67,7 @@ type GameRow = {
   description: string | null
   is_published: boolean
   sort_order: number
+  order_field: string | null
   recent_sales: number
   published_products: number
   total_products: number
@@ -183,7 +185,7 @@ export default async function StorefrontPage({
       : Promise.resolve(null),
     editGame
       ? q1<GameRow>(
-          'select id, name, image_url, description, is_published, sort_order from games where id = $1',
+          'select id, name, image_url, description, is_published, sort_order, order_field from games where id = $1',
           [Number(editGame)]
         )
       : Promise.resolve(null),
@@ -863,6 +865,31 @@ export default async function StorefrontPage({
                   defaultValue={editingGame.description ?? ''}
                   placeholder="เช่น เติมเพชรฟรีไฟร์ เข้าไวใน 1 นาที"
                 />
+              </div>
+              {/* ผู้ให้บริการบางเจ้าไม่บอกมาว่าเกมนี้ขออะไร ทุกเกมเลยขึ้นเป็น UID เหมือนกันหมด
+                  ตรงนี้ให้ระบุเองรายเกมได้ว่าลูกค้าต้องกรอกอะไรจริง ๆ */}
+              <div>
+                <label className="label" htmlFor="order_field">
+                  ลูกค้าต้องกรอกอะไรตอนสั่งซื้อ
+                </label>
+                <select
+                  id="order_field"
+                  name="order_field"
+                  className="input"
+                  defaultValue={editingGame.order_field ?? ''}
+                >
+                  <option value="">ตามที่ผู้ให้บริการกำหนด (ค่าเริ่มต้น)</option>
+                  {ORDER_FIELDS.map((f) => (
+                    <option key={f.key} value={f.key}>
+                      {f.adminLabel}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs leading-relaxed text-mute">
+                  ใช้ตอนที่ผู้ให้บริการไม่ได้บอกมาว่าเกมนี้ขออะไร (เช่น 24BUYM ไม่ส่งข้อมูลนี้มาเลย)
+                  ทุกเกมจึงขึ้นเป็น &quot;ไอดีเกม / UID&quot; เหมือนกันหมด ·
+                  เลือกให้ตรงแล้วหน้าเว็บจะเปลี่ยนชื่อช่องและคำอธิบายให้เอง
+                </p>
               </div>
               <div>
                 <label className="label" htmlFor="sort_order">

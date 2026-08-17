@@ -9,6 +9,7 @@ import { PROVIDER_KINDS, providerMeta } from '@/lib/providers/constants'
 import { adapterFor, supportsAuto, toConfig } from '@/lib/providers/registry'
 import { ProviderError } from '@/lib/providers/types'
 import { bool, friendlyError, int, optStr, str } from '@/lib/form'
+import { ORDER_FIELD_KEYS } from '@/lib/orderField'
 import type { ActionState } from '@/components/ActionForm'
 
 const AUTH_TYPES = ['bearer', 'apikey', 'basic', 'none']
@@ -151,6 +152,9 @@ export async function saveGameStorefrontAction(formData: FormData): Promise<Acti
   const description = optStr(formData, 'description')
   const sortOrder = int(formData, 'sort_order', 100)
   const isPublished = bool(formData, 'is_published')
+  // รับเฉพาะค่าที่รู้จัก ค่าว่าง = ให้ใช้ตามที่ผู้ให้บริการบอก
+  const orderFieldRaw = str(formData, 'order_field')
+  const orderField = ORDER_FIELD_KEYS.includes(orderFieldRaw) ? orderFieldRaw : null
 
   if (!id) return { error: 'ไม่พบเกมนี้' }
   if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
@@ -159,9 +163,10 @@ export async function saveGameStorefrontAction(formData: FormData): Promise<Acti
 
   try {
     await q(
-      `update games set image_url = $1, description = $2, sort_order = $3, is_published = $4
+      `update games set image_url = $1, description = $2, sort_order = $3, is_published = $4,
+                        order_field = $6
         where id = $5`,
-      [imageUrl, description, sortOrder, isPublished, id]
+      [imageUrl, description, sortOrder, isPublished, id, orderField]
     )
   } catch (err) {
     return { error: friendlyError(err) }
