@@ -3,6 +3,7 @@ import {
   saveLineSettingsAction,
   saveLineTargetAction,
   startLinePairingAction,
+  sendSummaryNowAction,
   testLineNotifyAction,
   unlinkLineAction,
   verifyLineKeysAction,
@@ -189,6 +190,11 @@ export function LineNotifyPanel({
           <ActionForm action={testLineNotifyAction}>
             <SubmitButton className="btn-ghost" pendingLabel="กำลังส่ง...">
               ส่งข้อความทดสอบ
+            </SubmitButton>
+          </ActionForm>
+          <ActionForm action={sendSummaryNowAction}>
+            <SubmitButton className="btn-ghost" pendingLabel="กำลังสรุป...">
+              ส่งสรุปยอดขายวันนี้เลย
             </SubmitButton>
           </ActionForm>
           {linked ? (

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { q } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
 import { lineConfig, notifyLine } from '@/lib/line'
+import { sendDailySummary } from '@/lib/dailySummary'
 import { friendlyError, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
 
@@ -151,6 +152,23 @@ export async function testLineNotifyAction(): Promise<ActionState> {
   return sent
     ? { ok: 'ส่งข้อความทดสอบแล้ว — เช็กใน LINE ได้เลย' }
     : { error: 'ส่งไม่สำเร็จ — ตรวจว่า Channel access token ถูกต้องและยังไม่หมดอายุ' }
+}
+
+/** ส่งสรุปยอดขายของวันนี้เข้า LINE ทันที — ใช้ดูตัวอย่างว่าข้อความหน้าตาเป็นยังไง */
+export async function sendSummaryNowAction(): Promise<ActionState> {
+  await requireAdmin()
+
+  const { target } = await lineConfig()
+  if (!target) return { error: 'ยังไม่ได้ผูกปลายทาง — ตั้งค่าให้ครบก่อน' }
+
+  try {
+    const { sent } = await sendDailySummary()
+    return sent
+      ? { ok: 'ส่งสรุปยอดขายของวันนี้เข้า LINE แล้ว' }
+      : { error: 'ส่งไม่สำเร็จ — ตรวจว่า Channel access token ยังใช้ได้อยู่' }
+  } catch (err) {
+    return { error: friendlyError(err, 'สร้างสรุปไม่สำเร็จ') }
+  }
 }
 
 /** เลิกแจ้งเตือน (ล้างปลายทางทิ้ง) */

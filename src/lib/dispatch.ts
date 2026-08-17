@@ -49,7 +49,7 @@ export async function autoDispatchOn() {
   return (row?.value ?? 'on') !== 'off'
 }
 
-type ProviderRow = {
+export type ProviderRow = {
   id: number
   name: string
   kind: string
