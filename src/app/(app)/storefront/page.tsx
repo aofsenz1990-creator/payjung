@@ -30,6 +30,8 @@ import {
 import { dateOnly, money, num } from '@/lib/format'
 import { ActionForm, ConfirmButton, SubmitButton } from '@/components/ActionForm'
 import { Badge, Empty, PageHeader, SectionTitle } from '@/components/ui'
+import { LineNotifyPanel } from '@/components/LineNotifyPanel'
+import { headers } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
 
@@ -189,6 +191,14 @@ export default async function StorefrontPage({
   const unmapped = products.filter((p) => p.is_published && !p.provider_name).length
 
   const autoOn = await autoDispatchOn()
+
+  // ที่อยู่ webhook ของ LINE ต้องเป็นที่อยู่จริงของเว็บ จึงอ่านจาก header ของรีเควสต์
+  // (ตอนย้ายโดเมนจะได้ขึ้นค่าใหม่ให้เอง ไม่ต้องมาแก้โค้ด)
+  const headerList = await headers()
+  const host = headerList.get('x-forwarded-host') ?? headerList.get('host') ?? ''
+  const proto = headerList.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
+  const lineWebhookUrl = `${proto}://${host}/api/line-webhook`
+  const lineLinked = Boolean(settings.line_target_id && settings.line_channel_token)
   // เจ้าที่เปิดใช้อยู่ ตั้งยอดเตือนไว้ และยอดคงเหลือต่ำกว่าที่ตั้ง
   const lowProviders = providers.filter(
     (p) => p.is_active && p.low_balance > 0 && p.balance != null && p.balance < p.low_balance
@@ -286,6 +296,25 @@ export default async function StorefrontPage({
             <span className="ml-1 text-sm font-medium text-mute">รายการ</span>
           </p>
         </div>
+      </div>
+
+      {/* ---------------- แจ้งเตือนเข้า LINE ---------------- */}
+      <div className="card mb-6">
+        <SectionTitle
+          right={
+            <span className={`text-xs ${lineLinked ? 'text-good' : 'text-mute'}`}>
+              {lineLinked ? 'พร้อมใช้งาน' : 'ยังไม่ได้ตั้งค่า'}
+            </span>
+          }
+        >
+          แจ้งเตือนเข้า LINE เมื่อลูกค้าแจ้งโอนเงิน
+        </SectionTitle>
+        <LineNotifyPanel
+          hasToken={Boolean(settings.line_channel_token)}
+          hasSecret={Boolean(settings.line_channel_secret)}
+          linked={lineLinked}
+          webhookUrl={lineWebhookUrl}
+        />
       </div>
 
       {/* ---------------- ผู้ให้บริการ API ---------------- */}

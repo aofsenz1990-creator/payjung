@@ -5,7 +5,9 @@ import { sessionCookieOptions } from '@/lib/cookies'
 // /shop คือหน้าเว็บสำหรับลูกค้า มีระบบล็อกอินของตัวเองแยกจากหลังร้าน
 // /api/provider-callback คือช่องที่ผู้ให้บริการยิงผลออเดอร์กลับมา ไม่มี session
 // จึงต้องปล่อยผ่าน middleware — ตัวมันเองยืนยันด้วยกุญแจลับใน path อยู่แล้ว
-const PUBLIC_PATHS = ['/login', '/setup', '/shop', '/api/provider-callback']
+// /api/line-webhook คือช่องที่ LINE ยิงเข้ามาเมื่อมีคนทักบัญชีทางการของร้าน
+// ไม่มี session เช่นกัน — ตัวมันยืนยันด้วยลายเซ็นจาก Channel secret ของ LINE
+const PUBLIC_PATHS = ['/login', '/setup', '/shop', '/api/provider-callback', '/api/line-webhook']
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl

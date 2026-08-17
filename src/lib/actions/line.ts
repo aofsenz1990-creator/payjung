@@ -1,0 +1,88 @@
+'use server'
+
+import { randomInt } from 'node:crypto'
+import { revalidatePath } from 'next/cache'
+import { q } from '@/lib/db'
+import { requireAdmin } from '@/lib/auth'
+import { lineConfig, notifyLine } from '@/lib/line'
+import { friendlyError, str } from '@/lib/form'
+import type { ActionState } from '@/components/ActionForm'
+
+/** เขียนค่าลง site_settings ทีละตัว */
+async function setSetting(key: string, value: string) {
+  await q(
+    `insert into site_settings (key, value) values ($1, $2)
+     on conflict (key) do update set value = excluded.value`,
+    [key, value]
+  )
+}
+
+/**
+ * บันทึกคีย์ของ LINE
+ * เว้นช่องว่างไว้ = ใช้ค่าเดิม จะได้ไม่ต้องหาคีย์มาวางใหม่ทุกครั้งที่แก้อย่างอื่น
+ */
+export async function saveLineSettingsAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const token = str(formData, 'line_channel_token')
+  const secret = str(formData, 'line_channel_secret')
+
+  try {
+    if (token) await setSetting('line_channel_token', token)
+    if (secret) await setSetting('line_channel_secret', secret)
+  } catch (err) {
+    return { error: friendlyError(err, 'บันทึกค่า LINE ไม่สำเร็จ') }
+  }
+
+  revalidatePath('/storefront')
+  if (!token && !secret) return { ok: 'ไม่ได้กรอกอะไรมา — ค่าเดิมยังอยู่ครบ' }
+  return { ok: 'บันทึกค่า LINE แล้ว — ขั้นต่อไปกดสร้างรหัสผูกด้านล่าง' }
+}
+
+/** สร้างรหัส 6 หลักสำหรับผูกปลายทางแจ้งเตือน ใช้ได้ 15 นาที */
+export async function startLinePairingAction(): Promise<ActionState> {
+  await requireAdmin()
+
+  const { token, secret } = await lineConfig()
+  if (!token || !secret) {
+    return { error: 'กรุณากรอก Channel access token และ Channel secret ให้ครบก่อน' }
+  }
+
+  try {
+    const code = String(randomInt(100000, 1000000))
+    await setSetting('line_pair_code', code)
+    await setSetting('line_pair_expires', String(Date.now() + 15 * 60 * 1000))
+    revalidatePath('/storefront')
+    return {
+      ok: `รหัสผูกคือ ${code} — เปิดแอป LINE แล้วพิมพ์เลขนี้ทักไปหาบัญชีทางการของร้าน ภายใน 15 นาที`,
+    }
+  } catch (err) {
+    return { error: friendlyError(err, 'สร้างรหัสผูกไม่สำเร็จ') }
+  }
+}
+
+/** ส่งข้อความทดสอบ เพื่อยืนยันว่าตั้งค่าครบจริง */
+export async function testLineNotifyAction(): Promise<ActionState> {
+  await requireAdmin()
+
+  const { target } = await lineConfig()
+  if (!target) return { error: 'ยังไม่ได้ผูกปลายทาง — กดสร้างรหัสผูกแล้วทักไปหา OA ก่อน' }
+
+  const sent = await notifyLine(
+    '🔔 ทดสอบการแจ้งเตือนจากร้าน Pay Jung\nถ้าเห็นข้อความนี้แปลว่าตั้งค่าเรียบร้อยแล้ว'
+  )
+  return sent
+    ? { ok: 'ส่งข้อความทดสอบแล้ว — เช็กใน LINE ได้เลย' }
+    : { error: 'ส่งไม่สำเร็จ — ตรวจว่า Channel access token ถูกต้องและยังไม่หมดอายุ' }
+}
+
+/** เลิกแจ้งเตือน (ล้างปลายทางทิ้ง) */
+export async function unlinkLineAction(): Promise<ActionState> {
+  await requireAdmin()
+  try {
+    await q(`update site_settings set value = '' where key = 'line_target_id'`)
+    revalidatePath('/storefront')
+    return { ok: 'ยกเลิกการแจ้งเตือนทาง LINE แล้ว' }
+  } catch (err) {
+    return { error: friendlyError(err) }
+  }
+}
