@@ -333,6 +333,13 @@ export const SCHEMA_STATEMENTS: string[] = [
   `update products set published_sell_price = sell_price, published_partner_price = partner_price
     where published_sell_price is null`,
 
+  // เครดิตที่แถมให้ตอนซื้อบิลนี้ — เก็บไว้กับบิลเพื่อให้ "ยึดคืนได้ตรงจำนวน" ตอนคืนเงิน
+  //
+  // ถ้าไม่เก็บไว้แล้วคืนเงินโดยไม่ยึดเครดิตคืน จะกลายเป็นช่องปั๊มเครดิตฟรี:
+  // สั่งซื้อด้วยไอดีมั่ว ๆ → ปลายทางเติมไม่สำเร็จ → ระบบคืนเงินให้อัตโนมัติ
+  // → ได้เงินคืนครบแต่เครดิตที่แถมยังอยู่ → ทำซ้ำไปเรื่อย ๆ
+  `alter table sales add column if not exists points_earned bigint not null default 0`,
+
   // ระบบ "เครดิต" (แต้ม) แยกจาก "ยอดเงิน" (บาท) ที่ใช้ซื้อของ
   //
   // ลูกค้าได้เครดิตจากการแลกโค้ด แล้วกดแลกเครดิตเป็นยอดเงินเองทีหลัง

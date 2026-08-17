@@ -10,6 +10,8 @@ export const dynamic = 'force-dynamic'
 
 const KIND_LABEL: Record<string, string> = {
   redeem: 'แลกโค้ดเครดิต',
+  earn: 'เครดิตจากการซื้อ',
+  revoke: 'ยึดคืน (บิลถูกคืนเงิน)',
   exchange: 'แลกเป็นยอดเงิน',
   adjust: 'ร้านปรับให้',
 }

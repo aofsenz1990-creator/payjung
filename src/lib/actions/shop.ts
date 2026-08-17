@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin, requirePage } from '@/lib/auth'
 import {
+  earnPointsPerBaht,
   getShopCustomer,
   getSiteSettings,
   isPartner,
@@ -386,25 +387,41 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
       }
     }
 
+    // เครดิตที่แถมให้ตามยอดซื้อ ปัดลงเป็นจำนวนเต็มเสมอ แต้มไม่มีเศษ
+    const earned = Math.floor(total * earnPointsPerBaht(await getSiteSettings()))
+
     const code = `WEB-${Date.now().toString(36).toUpperCase()}`
-    const rows = await q<{ sale_id: number; code: string; balance_after: number }>(
+    const rows = await q<{
+      sale_id: number
+      code: string
+      balance_after: number
+      points_after: number
+    }>(
       `with cust as (
-         update customers set credit = credit - $1
+         update customers
+            set credit = credit - $1,
+                points = points + $14
           where id = $2 and credit >= $1
-         returning id, credit
+         returning id, credit, points
        ),
        s as (
          insert into sales (code, sold_at, customer_id, game_id, product_id, item_name,
                             game_account, qty, unit_price, unit_cost, total, cost_total, profit,
-                            payment_method, status, channel, source, customer_name, provider_fields)
+                            payment_method, status, channel, source, customer_name, provider_fields,
+                            points_earned)
          select $3, now(), cust.id, $4, $5, $6, $7, $8, $9, $10, $1, $11, $1 - $11,
-                'เครดิตร้าน', 'pending', 'web', 'เว็บไซต์', $12, $13::jsonb
+                'เครดิตร้าน', 'pending', 'web', 'เว็บไซต์', $12, $13::jsonb, $14
            from cust
          returning id, code, product_id, qty, unit_cost
        ),
        tx as (
          insert into credit_transactions (customer_id, kind, amount, balance_after, note, sale_id)
          select cust.id, 'purchase', -$1, cust.credit, $6, s.id from cust, s
+       ),
+       ptx as (
+         insert into point_transactions (customer_id, kind, points, balance_after, note)
+         select cust.id, 'earn', $14, cust.points, 'เครดิตจากการซื้อ ' || s.code
+           from cust, s where $14 > 0
        ),
        upd as (
          update products set stock_qty = products.stock_qty - s.qty
@@ -416,7 +433,8 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
          select s.product_id, 'out', s.qty, s.unit_cost, 'ลูกค้าสั่งซื้อผ่านหน้าเว็บ', s.id
            from s join products p on p.id = s.product_id where p.track_stock
        )
-       select s.id as sale_id, s.code, cust.credit::float8 as balance_after from s, cust`,
+       select s.id as sale_id, s.code, cust.credit::float8 as balance_after,
+              cust.points::float8 as points_after from s, cust`,
       [
         total,
         customer.id,
@@ -431,6 +449,7 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
         costTotal,
         customer.name,
         fieldValues ? JSON.stringify(fieldValues) : null,
+        earned,
       ]
     )
 
@@ -459,7 +478,10 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
     return {
       ok:
         `สั่งซื้อสำเร็จ เลขที่ ${rows[0].code} — ${handoff} ` +
-        `เครดิตคงเหลือ ${rows[0].balance_after.toLocaleString('th-TH')} บาท`,
+        `ยอดเงินคงเหลือ ${rows[0].balance_after.toLocaleString('th-TH')} บาท` +
+        (earned > 0
+          ? ` · ได้รับ ${earned.toLocaleString('th-TH')} เครดิต (รวมเป็น ${rows[0].points_after.toLocaleString('th-TH')})`
+          : ''),
     }
   } catch (err) {
     return { error: customerError(err, 'สั่งซื้อไม่สำเร็จ') }

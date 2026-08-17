@@ -179,18 +179,29 @@ async function refundFailed(saleId: number, reason: string) {
           and not exists (
             select 1 from credit_transactions t where t.sale_id = sales.id and t.kind = 'refund'
           )
-       returning id, customer_id, product_id, qty, unit_cost, total
+       returning id, customer_id, product_id, qty, unit_cost, total, points_earned
      ),
      cust as (
-       update customers set credit = customers.credit + s.total
+       -- คืนเงินแล้วต้องยึดเครดิตที่แถมไปคืนด้วย ไม่งั้นจะกลายเป็นช่องปั๊มเครดิตฟรี
+       -- (สั่งด้วยไอดีมั่ว → เติมไม่สำเร็จ → ได้เงินคืนครบแต่เครดิตยังอยู่ → ทำซ้ำ)
+       -- greatest กันยอดติดลบ เผื่อลูกค้าใช้เครดิตไปแล้วก่อนบิลจะถูกคืน
+       update customers
+          set credit = customers.credit + s.total,
+              points = greatest(customers.points - s.points_earned, 0)
          from s where customers.id = s.customer_id
-       returning customers.id, customers.credit
+       returning customers.id, customers.credit, customers.points
      ),
      tx as (
        insert into credit_transactions (customer_id, kind, amount, balance_after, note, sale_id)
        select cust.id, 'refund', s.total, cust.credit,
               'คืนเครดิตอัตโนมัติ — ผู้ให้บริการเติมไม่สำเร็จ', s.id
          from cust, s
+     ),
+     ptx as (
+       insert into point_transactions (customer_id, kind, points, balance_after, note)
+       select cust.id, 'revoke', -s.points_earned, cust.points,
+              'ยึดเครดิตคืนจากบิลที่เติมไม่สำเร็จ'
+         from cust, s where s.points_earned > 0
      ),
      upd as (
        update products set stock_qty = products.stock_qty + s.qty

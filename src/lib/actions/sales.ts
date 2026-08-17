@@ -219,16 +219,24 @@ export async function refundSaleAction(formData: FormData): Promise<ActionState>
             and not exists (
               select 1 from credit_transactions t where t.sale_id = sales.id and t.kind = 'refund'
             )
-         returning id, code, customer_id, product_id, qty, unit_cost, total
+         returning id, code, customer_id, product_id, qty, unit_cost, total, points_earned
        ),
        cust as (
-         update customers set credit = customers.credit + s.total
+         -- ยึดเครดิตที่แถมไปตอนซื้อคืนด้วย ไม่งั้นคืนเงินแล้วลูกค้ายังได้เครดิตฟรี
+         update customers
+            set credit = customers.credit + s.total,
+                points = greatest(customers.points - s.points_earned, 0)
            from s where customers.id = s.customer_id
-         returning customers.id, customers.credit
+         returning customers.id, customers.credit, customers.points
        ),
        tx as (
          insert into credit_transactions (customer_id, kind, amount, balance_after, note, sale_id)
          select cust.id, 'refund', s.total, cust.credit, $2, s.id from cust, s
+       ),
+       ptx as (
+         insert into point_transactions (customer_id, kind, points, balance_after, note)
+         select cust.id, 'revoke', -s.points_earned, cust.points, 'ยึดเครดิตคืนจากบิลที่คืนเงิน'
+           from cust, s where s.points_earned > 0
        ),
        upd as (
          update products set stock_qty = products.stock_qty + s.qty

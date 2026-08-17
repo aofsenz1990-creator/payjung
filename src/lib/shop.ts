@@ -39,8 +39,13 @@ export const SITE_KEYS = [
   { key: 'shop_tagline', label: 'ข้อความใต้ชื่อร้าน', placeholder: 'เติมเกมไว ราคาถูก บริการ 24 ชม.' },
   {
     key: 'points_per_baht',
-    label: 'กี่เครดิตเท่ากับ 1 บาท',
+    label: 'กี่เครดิตเท่ากับ 1 บาท (ตอนแลกเป็นยอดเงิน)',
     placeholder: '100 (ค่าเริ่มต้น — 100 เครดิต = 1 บาท)',
+  },
+  {
+    key: 'earn_points_per_baht',
+    label: 'ซื้อ 1 บาท ได้กี่เครดิต (แถมอัตโนมัติ)',
+    placeholder: '1 (ค่าเริ่มต้น — ซื้อ 100 บาท ได้ 100 เครดิต) · ใส่ 0 = ปิดการแถม',
   },
 
   // เกมที่เติมด้วยลิงก์ แต่ละค่ายเอาลิงก์มาจากคนละที่
@@ -151,6 +156,17 @@ export function facebookLink(value?: string | null) {
 export function pointsPerBaht(settings: SiteSettings) {
   const n = Number(settings.points_per_baht)
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 100
+}
+
+/**
+ * ซื้อ 1 บาท ได้กี่เครดิต — ค่าเริ่มต้น 1 (ซื้อ 100 บาท ได้ 100 เครดิต)
+ * ใส่ 0 = ปิดการแถมเครดิต · กันค่าติดลบไว้ ไม่งั้นซื้อของแล้วเครดิตจะหาย
+ */
+export function earnPointsPerBaht(settings: SiteSettings) {
+  const raw = settings.earn_points_per_baht
+  if (raw === undefined || raw === '') return 1
+  const n = Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : 1
 }
 
 /** เปิดให้ลูกค้าสมัครเองไหม — ไม่เคยตั้งค่า = เปิดไว้ */
