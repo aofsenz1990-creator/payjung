@@ -45,7 +45,7 @@ export const SITE_KEYS = [
   {
     key: 'earn_points_per_baht',
     label: 'ซื้อ 1 บาท ได้กี่เครดิต (แถมอัตโนมัติ)',
-    placeholder: '1 (ค่าเริ่มต้น — ซื้อ 100 บาท ได้ 100 เครดิต) · ใส่ 0 = ปิดการแถม',
+    placeholder: '0.1 (ค่าเริ่มต้น — ซื้อ 100 บาท ได้ 10 เครดิต) · ใส่ 0 = ปิดการแถม',
   },
 
   // เกมที่เติมด้วยลิงก์ แต่ละค่ายเอาลิงก์มาจากคนละที่
@@ -164,9 +164,9 @@ export function pointsPerBaht(settings: SiteSettings) {
  */
 export function earnPointsPerBaht(settings: SiteSettings) {
   const raw = settings.earn_points_per_baht
-  if (raw === undefined || raw === '') return 1
+  if (raw === undefined || raw === '') return 0.1
   const n = Number(raw)
-  return Number.isFinite(n) && n >= 0 ? n : 1
+  return Number.isFinite(n) && n >= 0 ? n : 0.1
 }
 
 /** เปิดให้ลูกค้าสมัครเองไหม — ไม่เคยตั้งค่า = เปิดไว้ */

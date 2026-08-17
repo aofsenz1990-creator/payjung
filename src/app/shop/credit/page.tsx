@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { q } from '@/lib/db'
-import { getShopCustomer, getSiteSettings, pointsPerBaht } from '@/lib/shop'
+import { earnPointsPerBaht, getShopCustomer, getSiteSettings, pointsPerBaht } from '@/lib/shop'
 import { redeemCreditCodeAction, exchangePointsAction } from '@/lib/actions/creditCodes'
 import { ActionForm, SubmitButton } from '@/components/ActionForm'
 import { dateTime, money, num } from '@/lib/format'
@@ -22,6 +22,7 @@ export default async function ShopCreditPage() {
 
   const settings = await getSiteSettings()
   const rate = pointsPerBaht(settings)
+  const earnRate = earnPointsPerBaht(settings)
 
   const history = await q<{
     created_at: string
@@ -49,6 +50,18 @@ export default async function ShopCreditPage() {
       <p className="mt-1 text-sm text-mute">
         แลกโค้ดเพื่อรับเครดิต แล้วแลกเครดิตเป็นยอดเงินไว้ซื้อของในร้าน
       </p>
+
+      {/* บอกกติกาด้วยตัวเลขกลม ๆ ที่คนอ่านแล้วเข้าใจทันที ไม่ใช่ "0.1 เครดิตต่อบาท" */}
+      <div className="mt-4 flex flex-wrap gap-2 text-xs">
+        {earnRate > 0 ? (
+          <span className="chip bg-brand-500/15 text-brand-400 ring-1 ring-brand-500/25">
+            🛒 ซื้อครบ 100 บาท ได้ {num(100 * earnRate)} เครดิต
+          </span>
+        ) : null}
+        <span className="chip bg-grape-500/15 text-grape-400 ring-1 ring-grape-500/25">
+          💱 {num(100)} เครดิต = {money(100 / rate)} บาท
+        </span>
+      </div>
 
       {/* ยอดสองก้อน วางคู่กันให้เห็นความต่างชัด ๆ ว่าอันไหนใช้ซื้อของได้ */}
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
