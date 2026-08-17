@@ -9,7 +9,8 @@ import { SlipError, uploadImage } from '@/lib/storage'
 import { autoDispatchOn, dispatchSale, markForDispatch } from '@/lib/dispatch'
 import { jsonArray } from '@/lib/json'
 import { supabaseAdmin, supabaseServer } from '@/lib/supabase'
-import { bool, decimal, friendlyError, int, optStr, str } from '@/lib/form'
+import { bool, customerError, decimal, friendlyError, int, optStr, str } from '@/lib/form'
+import { tooMany, tooManyFromIp, TOO_MANY_MESSAGE } from '@/lib/ratelimit'
 import type { ActionState } from '@/components/ActionForm'
 
 /* ------------------------------ เครดิตลูกค้า ------------------------------ */
@@ -211,6 +212,12 @@ export async function shopLoginAction(formData: FormData): Promise<ActionState> 
   const password = str(formData, 'password')
   if (!email || !password) return { error: 'กรุณากรอกอีเมลและรหัสผ่าน' }
 
+  // กันเดารหัสผ่านของลูกค้า — บัญชีลูกค้ามีเครดิตอยู่ในนั้น ถ้าถูกเดาได้คือเสียเงินจริง
+  if (await tooManyFromIp('shop-login', 10, 300)) return { error: TOO_MANY_MESSAGE }
+  if (await tooMany(`shop-login:email:${email.toLowerCase()}`, 8, 900)) {
+    return { error: TOO_MANY_MESSAGE }
+  }
+
   try {
     const supabase = await supabaseServer()
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
@@ -225,7 +232,7 @@ export async function shopLoginAction(formData: FormData): Promise<ActionState> 
       return { error: 'บัญชีนี้ยังไม่ได้เปิดใช้งานสำหรับหน้าเว็บ กรุณาติดต่อร้าน' }
     }
   } catch (err) {
-    return { error: friendlyError(err, 'เข้าสู่ระบบไม่สำเร็จ') }
+    return { error: customerError(err, 'เข้าสู่ระบบไม่สำเร็จ') }
   }
 
   redirect('/shop/me')
@@ -250,6 +257,10 @@ export async function shopRegisterAction(formData: FormData): Promise<ActionStat
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'กรุณากรอกอีเมลให้ถูกต้อง' }
   if (password.length < 8) return { error: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร' }
   if (password !== confirm) return { error: 'รหัสผ่านสองช่องไม่ตรงกัน' }
+
+  // การสมัครสร้างบัญชีด้วยสิทธิ์ service role จึงไม่ผ่านตัวกันสแปมของ Supabase
+  // ต้องกันเองตรงนี้ ไม่งั้นโดนยิงสมัครเป็นพัน ๆ บัญชีจนรายชื่อลูกค้าเละ
+  if (await tooManyFromIp('shop-register', 3, 3600)) return { error: TOO_MANY_MESSAGE }
 
   // ยังไม่ได้ถามชื่อตอนสมัคร ใช้ชื่อหน้าอีเมลไปก่อน ร้านแก้ทีหลังได้ที่เมนูรายชื่อลูกค้า
   const name = email.split('@')[0]
@@ -280,7 +291,7 @@ export async function shopRegisterAction(formData: FormData): Promise<ActionStat
 
     revalidatePath('/customers')
   } catch (err) {
-    return { error: friendlyError(err, 'สมัครไม่สำเร็จ') }
+    return { error: customerError(err, 'สมัครไม่สำเร็จ') }
   }
 
   redirect('/shop/me')
@@ -304,6 +315,11 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
   const qty = Math.max(int(formData, 'qty', 1), 1)
 
   if (!productId) return { error: 'ไม่พบแพ็กเกจที่เลือก' }
+
+  // กันกดสั่งรัว ๆ (เผลอกดซ้ำ หรือสคริปต์ยิงหลายรอบพร้อมกันเพื่อหวังให้ตัดเครดิตพลาด)
+  if (await tooMany(`shop-order:customer:${customer.id}`, 20, 60)) {
+    return { error: TOO_MANY_MESSAGE }
+  }
 
   try {
     const product = await q1<{
@@ -433,6 +449,6 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
         `เครดิตคงเหลือ ${rows[0].balance_after.toLocaleString('th-TH')} บาท`,
     }
   } catch (err) {
-    return { error: friendlyError(err, 'สั่งซื้อไม่สำเร็จ') }
+    return { error: customerError(err, 'สั่งซื้อไม่สำเร็จ') }
   }
 }

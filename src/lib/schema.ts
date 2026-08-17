@@ -298,8 +298,18 @@ export const SCHEMA_STATEMENTS: string[] = [
     where p.role = 'staff'
       and exists (select 1 from customers c where c.auth_user_id = p.id)`,
 
+  // ตัวนับสำหรับกันยิงรัว ๆ (ล็อกอินผิดซ้ำ / สมัครรัว / แจ้งโอนรัว)
+  // เก็บในฐานข้อมูลเพราะ Vercel รันหลาย instance ตัวแปรในหน่วยความจำนับข้ามกันไม่ได้
+  `create table if not exists rate_limits (
+    bucket text primary key,
+    hits int not null default 0,
+    window_start timestamptz not null default now()
+  )`,
+  `create index if not exists rate_limits_window_idx on rate_limits (window_start)`,
+
   // ตารางทั้งหมดถูกอ่าน/เขียนผ่านเซิร์ฟเวอร์ของแอปด้วย connection string โดยตรงเท่านั้น
   // เปิด RLS ไว้โดยไม่สร้าง policy เพื่อกันไม่ให้ anon key ของ Supabase แตะข้อมูลได้เลย
+  // ต้องครบทุกตาราง — ตารางที่ลืมเปิดจะอ่าน/แก้ได้จากอินเทอร์เน็ตด้วย anon key ที่เป็นคีย์สาธารณะ
   `alter table profiles enable row level security`,
   `alter table games enable row level security`,
   `alter table products enable row level security`,
@@ -307,6 +317,49 @@ export const SCHEMA_STATEMENTS: string[] = [
   `alter table sales enable row level security`,
   `alter table stock_movements enable row level security`,
   `alter table expenses enable row level security`,
+
+  // ที่เหลือเปิดให้ครบทุกตารางในคราวเดียว รวมถึงตารางที่จะเพิ่มในอนาคตด้วย
+  // (เขียนเป็นลูปแทนการไล่ชื่อทีละตาราง เพราะการ "ลืมเพิ่มชื่อ" คือช่องโหว่ที่เกิดมาแล้วรอบหนึ่ง)
+  // ครอบ exception ไว้ทุกตาราง ถ้าตารางไหนติดขัดจะข้ามไปตัวเดียว ไม่ทำให้อัปเดตทั้งชุดล้ม
+  `do $$
+   declare t record;
+   begin
+     for t in select tablename from pg_tables where schemaname = 'public' loop
+       begin
+         execute format('alter table public.%I enable row level security', t.tablename);
+       exception when others then
+         null;
+       end;
+     end loop;
+   end $$`,
+
+  // ชั้นที่สอง: ถอนสิทธิ์ของ role สาธารณะ (anon = ยังไม่ล็อกอิน, authenticated = ล็อกอินแล้ว)
+  // ออกจากทุกตารางในสคีมา public ไปเลย รวมถึงตารางที่จะสร้างในอนาคตด้วย
+  // ทำไมต้องมีทั้งสองชั้น: RLS กันได้ก็จริง แต่ถ้าวันหลังเพิ่มตารางแล้วลืมเปิด RLS
+  // ชั้นนี้จะยังกันไว้ให้ แอปไม่กระทบเพราะต่อฐานข้อมูลด้วย role เจ้าของตารางโดยตรง
+  `do $$
+   begin
+     begin
+       if exists (select 1 from pg_roles where rolname = 'anon') then
+         execute 'revoke all on all tables in schema public from anon';
+         execute 'revoke all on all sequences in schema public from anon';
+         execute 'revoke usage on schema public from anon';
+         execute 'alter default privileges in schema public revoke all on tables from anon';
+         execute 'alter default privileges in schema public revoke all on sequences from anon';
+       end if;
+       if exists (select 1 from pg_roles where rolname = 'authenticated') then
+         execute 'revoke all on all tables in schema public from authenticated';
+         execute 'revoke all on all sequences in schema public from authenticated';
+         execute 'revoke usage on schema public from authenticated';
+         execute 'alter default privileges in schema public revoke all on tables from authenticated';
+         execute 'alter default privileges in schema public revoke all on sequences from authenticated';
+       end if;
+     exception when others then
+       -- ถอนสิทธิ์ไม่ได้ (เช่นฐานข้อมูลที่ไม่ใช่ Supabase หรือ role ไม่ใช่เจ้าของ)
+       -- ข้ามไป ไม่ให้การอัปเดตโครงสร้างทั้งชุดล้มตาม เพราะ RLS ด้านบนกันไว้อยู่แล้ว
+       null;
+     end;
+   end $$`,
 ]
 
 // เกมยอดนิยมที่ใส่ให้ตอนตั้งค่าครั้งแรก เพื่อไม่ต้องเริ่มจากหน้าว่าง

@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { sessionCookieOptions } from './cookies'
 
 export class SupabaseConfigError extends Error {}
 
@@ -36,7 +37,9 @@ export async function supabaseServer() {
       },
       setAll(list) {
         try {
-          for (const { name, value, options } of list) jar.set(name, value, options)
+          for (const { name, value, options } of list) {
+            jar.set(name, value, sessionCookieOptions(options ?? {}))
+          }
         } catch {
           // เรียกจาก Server Component ที่เขียน cookie ไม่ได้ — middleware จะรีเฟรช token ให้เอง
         }

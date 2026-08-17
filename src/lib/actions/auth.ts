@@ -6,7 +6,18 @@ import { countUsers } from '@/lib/auth'
 import { supabaseAdmin, supabaseServer } from '@/lib/supabase'
 import { SEED_GAMES } from '@/lib/schema'
 import { str, friendlyError } from '@/lib/form'
+import { tooMany, tooManyFromIp, TOO_MANY_MESSAGE } from '@/lib/ratelimit'
 import type { ActionState } from '@/components/ActionForm'
+
+/**
+ * ปลายทางหลังล็อกอิน — รับเฉพาะ path ภายในเว็บเราเท่านั้น
+ * ต้องกัน "//example.com" ด้วย เพราะขึ้นต้นด้วย / เหมือนกัน แต่เบราว์เซอร์อ่านเป็นลิงก์ออกนอกเว็บ
+ * (ใช้หลอกให้คนกดลิงก์ล็อกอินของร้านแล้วเด้งไปหน้าปลอมได้)
+ */
+function safeNext(next: string) {
+  if (!next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return '/'
+  return next
+}
 
 /** แปลงข้อความ error ของ Supabase Auth เป็นภาษาไทย */
 function authError(message: string) {
@@ -26,6 +37,12 @@ export async function loginAction(formData: FormData): Promise<ActionState> {
 
   if (!email || !password) return { error: 'กรุณากรอกอีเมลและรหัสผ่าน' }
 
+  // กันเดารหัสผ่าน — นับทั้งตามไอพี (คนเดียวลองหลายบัญชี) และตามอีเมล (หลายไอพีรุมบัญชีเดียว)
+  if (await tooManyFromIp('login', 10, 300)) return { error: TOO_MANY_MESSAGE }
+  if (await tooMany(`login:email:${email.toLowerCase()}`, 8, 900)) {
+    return { error: TOO_MANY_MESSAGE }
+  }
+
   try {
     const supabase = await supabaseServer()
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
@@ -43,7 +60,7 @@ export async function loginAction(formData: FormData): Promise<ActionState> {
     return { error: friendlyError(err, 'เข้าสู่ระบบไม่สำเร็จ') }
   }
 
-  redirect(next && next.startsWith('/') ? next : '/')
+  redirect(next ? safeNext(next) : '/')
 }
 
 export async function logoutAction() {
@@ -62,6 +79,9 @@ export async function setupAction(formData: FormData): Promise<ActionState> {
   if (!email.includes('@')) return { error: 'กรุณากรอกอีเมลให้ถูกต้อง' }
   if (password.length < 8) return { error: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร' }
   if (password !== confirm) return { error: 'รหัสผ่านสองช่องไม่ตรงกัน' }
+
+  // หน้าตั้งค่าครั้งแรกเปิดสาธารณะ (ตอนนั้นยังไม่มีใครล็อกอินได้) จึงต้องกันยิงรัวไว้ด้วย
+  if (await tooManyFromIp('setup', 5, 3600)) return { error: TOO_MANY_MESSAGE }
 
   try {
     if ((await countUsers()) > 0) {
