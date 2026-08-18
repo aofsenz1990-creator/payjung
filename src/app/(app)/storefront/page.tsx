@@ -160,11 +160,19 @@ export default async function StorefrontPage({
     game?: string
     cq?: string
     cp?: string
+    pq?: string
     tab?: string
   }>
 }) {
   await requireAdmin()
-  const { provider: editProvider, game: editGame, cq, cp, tab: tabParam } = await searchParams
+  const {
+    provider: editProvider,
+    game: editGame,
+    cq,
+    cp,
+    pq,
+    tab: tabParam,
+  } = await searchParams
 
   // หน้านี้ยาวมาก แบ่งเป็นแท็บให้เลือกดูทีละส่วน
   // ถ้ากำลังแก้ไขอะไรอยู่ ให้เด้งไปแท็บนั้นเอง ไม่งั้นกดแก้ไขแล้วจะหาฟอร์มไม่เจอ
@@ -172,7 +180,9 @@ export default async function StorefrontPage({
     ? 'providers'
     : editGame
       ? 'games'
-      : cq || cp
+      : pq
+        ? 'products'
+        : cq || cp
         ? 'catalog'
         : TABS.some((t) => t.key === tabParam)
           ? (tabParam as string)
@@ -317,6 +327,22 @@ export default async function StorefrontPage({
   const publishedGames = games.filter((g) => g.is_published).length
   const publishedProducts = products.filter((p) => p.is_published).length
   const unmapped = products.filter((p) => p.is_published && !p.provider_name).length
+
+  /**
+   * ช่องค้นหาแพ็กเกจ — ร้านมีเป็นพันรายการ เลื่อนหาเองไม่ไหว
+   * กรองในหน่วยความจำ ไม่ยิงฐานข้อมูลใหม่ เพราะดึงมาครบอยู่แล้วและตัวเลขสรุปด้านบน
+   * ต้องนับจากของทั้งหมดเสมอ (ถ้ากรองที่ SQL ตัวเลขสรุปจะเพี้ยนตามคำค้น)
+   * ค้นได้ทั้งชื่อเกม ชื่อแพ็กเกจ รหัสสินค้าฝั่งผู้ให้บริการ และชื่อผู้ให้บริการ
+   */
+  const productSearch = (pq ?? '').trim()
+  const productNeedle = productSearch.toLowerCase()
+  const shownProducts = productNeedle
+    ? products.filter((p) =>
+        `${p.game} ${p.name} ${p.provider_sku ?? ''} ${p.provider_name ?? ''}`
+          .toLowerCase()
+          .includes(productNeedle)
+      )
+    : products
 
   const autoOn = await autoDispatchOn()
 
@@ -1257,8 +1283,39 @@ export default async function StorefrontPage({
             </div>
           </div>
         ) : null}
+        {/* ค้นหาแพ็กเกจ — พิมพ์ชื่อเกม ชื่อแพ็ก รหัสสินค้า หรือชื่อผู้ให้บริการก็ได้ */}
+        {products.length > 0 ? (
+          <form method="get" className="mb-4 flex flex-wrap gap-2">
+            <input type="hidden" name="tab" value="products" />
+            <input
+              name="pq"
+              className="input flex-1"
+              defaultValue={productSearch}
+              placeholder="ค้นหา: ชื่อเกม, ชื่อแพ็กเกจ, รหัสสินค้า หรือชื่อผู้ให้บริการ (เช่น JCR)"
+              aria-label="ค้นหาแพ็กเกจ"
+            />
+            <button type="submit" className="btn-ghost">
+              ค้นหา
+            </button>
+            {productSearch ? (
+              <Link href="/storefront?tab=products" className="btn-ghost">
+                ล้าง
+              </Link>
+            ) : null}
+            {productSearch ? (
+              <span className="w-full text-xs text-mute">
+                พบ {num(shownProducts.length)} รายการ จากทั้งหมด {num(products.length)} ·
+                ปุ่มเปิด/ซ่อนทั้งหมดด้านบนยังคงมีผลกับ<b className="text-slate-200">ทุกแพ็กเกจ</b>
+                ไม่ใช่เฉพาะที่ค้นเจอ
+              </span>
+            ) : null}
+          </form>
+        ) : null}
+
         {products.length === 0 ? (
           <Empty>ยังไม่มีแพ็กเกจ</Empty>
+        ) : shownProducts.length === 0 ? (
+          <Empty>ไม่พบแพ็กเกจที่ตรงกับ &ldquo;{productSearch}&rdquo;</Empty>
         ) : (
           <div className="table-wrap">
             <table className="tbl">
@@ -1274,7 +1331,7 @@ export default async function StorefrontPage({
                 </tr>
               </thead>
               <tbody>
-                {products.map((p) => (
+                {shownProducts.map((p) => (
                   <tr key={p.id}>
                     <td className="text-slate-300">{p.game}</td>
                     <td className="font-medium text-white">{p.name}</td>
