@@ -46,13 +46,24 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
   const vip = bool(formData, 'vip')
 
   try {
-    // สินค้าที่เพิ่งดึงมาไม่นาน — ส่งไปให้ตัวเชื่อมข้าม จะได้เอาเวลาไปดึงส่วนที่ยังขาด
-    // เกินสองชั่วโมงถือว่าเก่าแล้ว ดึงใหม่ทั้งหมดเพื่อให้ราคาตรงกับปลายทาง
-    const fresh = await q<{ game_id: string }>(
-      `select distinct game_id from provider_catalog
-        where provider_id = $1 and synced_at > now() - interval '2 hours'`,
-      [providerId]
-    )
+    /**
+     * สินค้าที่เพิ่งดึงมาไม่นาน — ส่งไปให้ตัวเชื่อมข้าม จะได้เอาเวลาไปดึงส่วนที่ยังขาด
+     * เกินสองชั่วโมงถือว่าเก่าแล้ว ดึงใหม่ทั้งหมดเพื่อให้ราคาตรงกับปลายทาง
+     *
+     * ข้ามเฉพาะตัวที่ได้ "ช่องกรอกของลูกค้า" มาแล้วเท่านั้น
+     * ตัวที่ยังไม่มีต้องดึงใหม่เสมอ ไม่งั้นสินค้าที่เคยดึงตอนโค้ดยังอ่านฟอร์มไม่เป็น
+     * จะถูกข้ามตลอดไป แล้วลูกค้าจะเจอแค่ช่องไอดีเกมช่องเดียวไม่มีวันหาย
+     */
+    const forceAll = bool(formData, 'full')
+    const fresh = forceAll
+      ? []
+      : await q<{ game_id: string }>(
+          `select distinct game_id from provider_catalog
+            where provider_id = $1
+              and synced_at > now() - interval '2 hours'
+              and fields is not null`,
+          [providerId]
+        )
     const have = new Set(fresh.map((r) => r.game_id))
 
     // จับเวลาแยกสองช่วง (ยิง API กับ บันทึกลงฐานข้อมูล) แล้วรายงานกลับไปด้วย

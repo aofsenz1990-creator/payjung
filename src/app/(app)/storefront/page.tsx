@@ -797,6 +797,15 @@ export default async function StorefrontPage({
                 />
                 ร้านเราเป็นลูกค้าระดับ VIP (เฉพาะ OverTopup — ราคาทุนจะต่างจากระดับทั่วไป)
               </label>
+              {/* ปกติจะข้ามสินค้าที่เพิ่งดึงไปเพื่อประหยัดเวลา ติ๊กนี่เมื่อต้องการดึงใหม่หมดจริง ๆ */}
+              <label className="mt-2 flex items-center gap-2 text-xs text-slate-200">
+                <input
+                  type="checkbox"
+                  name="full"
+                  className="size-4 rounded border-ink-600 bg-ink-850"
+                />
+                ดึงใหม่ทั้งหมด ไม่ข้ามของที่เพิ่งดึงไป (ช้ากว่า แต่ได้ข้อมูลล่าสุดแน่นอน)
+              </label>
             </ActionForm>
 
             {/* อัปเดตของที่นำเข้าไปแล้ว โดยไม่แตะราคาขายที่ร้านตั้งเอง */}
