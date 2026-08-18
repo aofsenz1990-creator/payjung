@@ -45,7 +45,10 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
   const vip = bool(formData, 'vip')
 
   try {
-    const entries = await adapter.fetchCatalog(toConfig(provider), { vip })
+    // ตัวเชื่อมบางเจ้าคืนหมายเหตุมาด้วยว่ามีอะไรที่ยังดึงมาไม่ครบ — ต้องเอาไปบอกคนกด
+    const result = await adapter.fetchCatalog(toConfig(provider), { vip })
+    const entries = Array.isArray(result) ? result : result.entries
+    const note = Array.isArray(result) ? null : result.note
 
     type Row = [
       number, string, string, string, string | null,
@@ -100,7 +103,8 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
         `ดึงรายการสำเร็จ — ${games} เกม รวม ${rows.length} รายการสินค้า` +
         (provider.kind === 'overtopup'
           ? ` (ราคาระดับ ${vip ? 'VIP' : 'ทั่วไป'} — ถ้าไม่ตรงกับที่ถูกตัดจริง ให้ดึงใหม่อีกระดับ)`
-          : ''),
+          : '') +
+        (note ? ` · ⚠️ ${note}` : ''),
     }
   } catch (err) {
     if (err instanceof ProviderError) return { error: err.message }

@@ -133,6 +133,13 @@ export type CatalogEntry = {
   fields?: ProviderField[] | null
 }
 
+/**
+ * ผลของการดึงรายการสินค้า
+ * `note` ไว้บอกสิ่งที่ "ไม่ได้ดึงมา" เช่นโดนตัดเพราะหมดเวลา หรือข้ามเพราะปลายทางไม่บอกราคา
+ * ถ้าไม่บอก คนกดจะเข้าใจว่าได้ครบทั้งที่ไม่ครบ แล้วไปงงตอนหาแพ็กเกจไม่เจอ
+ */
+export type CatalogResult = { entries: CatalogEntry[]; note?: string | null }
+
 export type ProviderAdapter = {
   kind: string
   /** ยอดคงเหลือของร้านเราที่ปลายทาง */
@@ -147,6 +154,10 @@ export type ProviderAdapter = {
   /**
    * ดึงรายการสินค้าทั้งหมดมาเก็บไว้ให้เลือกจับคู่
    * ไม่ใส่ก็ได้ — เจ้าที่ไม่มีจะต้องกรอกรหัสสินค้าเองที่หน้าแพ็กเกจ
+   * คืนเป็น array เฉย ๆ ก็ได้ ถ้ามีเรื่องต้องเตือนค่อยคืนเป็น CatalogResult
    */
-  fetchCatalog?(config: ProviderConfig, opts: { vip: boolean }): Promise<CatalogEntry[]>
+  fetchCatalog?(
+    config: ProviderConfig,
+    opts: { vip: boolean }
+  ): Promise<CatalogEntry[] | CatalogResult>
 }

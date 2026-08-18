@@ -307,6 +307,27 @@ export default async function StorefrontPage({
     ])
 
   /**
+   * เกมที่ผู้ให้บริการแยกเป็นหลายสินค้า (คนละ game_id แต่ชื่อเดียวกัน)
+   * เช่น JCR แยก Lineage2M เป็น "โปรโมชั่นที่ 1/2/3" ซึ่งแต่ละชุดมีแพ็กเกจคนละชุดกัน
+   * ถ้าไม่บอกไว้ คนจะติ๊กนำเข้าแค่แถวเดียวแล้วนึกว่าครบ — ที่จริงได้แพ็กเกจมาไม่ครบ
+   */
+  const catalogSets = new Map<string, { index: number; total: number }>()
+  {
+    const totals = new Map<string, number>()
+    for (const g of catalog) {
+      const key = gameKey(g.game_name)
+      totals.set(key, (totals.get(key) ?? 0) + 1)
+    }
+    const seen = new Map<string, number>()
+    for (const g of catalog) {
+      const key = gameKey(g.game_name)
+      const index = (seen.get(key) ?? 0) + 1
+      seen.set(key, index)
+      catalogSets.set(`${g.provider_id}-${g.game_id}`, { index, total: totals.get(key) ?? 1 })
+    }
+  }
+
+  /**
    * ราคาเริ่มต้นของแต่ละเกม แยกตามผู้ให้บริการ — เก็บเฉพาะราคาที่ถูกที่สุดของเจ้านั้น
    * (เจ้าหนึ่งอาจมีชื่อเกมเดียวกันหลายรายการ เช่นแยกภูมิภาค)
    */
@@ -968,6 +989,17 @@ export default async function StorefrontPage({
                             game_id {g.game_id}
                             {g.servers > 1 ? ` · ${num(g.servers)} เซิร์ฟเวอร์` : ''}
                           </span>
+                          {/* ชื่อซ้ำ = ผู้ให้บริการแยกเป็นหลายชุด (โปรโมชั่น/รอบเติม)
+                              แต่ละชุดมีแพ็กเกจคนละชุด ต้องนำเข้าให้ครบถึงจะได้ของครบ */}
+                          {(catalogSets.get(`${g.provider_id}-${g.game_id}`)?.total ?? 1) > 1 ? (
+                            <span className="mt-1 inline-block">
+                              <Badge tone="warn">
+                                ชุดที่ {catalogSets.get(`${g.provider_id}-${g.game_id}`)?.index} จาก{' '}
+                                {catalogSets.get(`${g.provider_id}-${g.game_id}`)?.total} —
+                                ต้องนำเข้าให้ครบทุกชุด
+                              </Badge>
+                            </span>
+                          ) : null}
                         </td>
                         <td className="text-right">{num(g.packs)}</td>
                         <td className="text-right">

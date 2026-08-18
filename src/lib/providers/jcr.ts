@@ -189,6 +189,43 @@ function pickNumber(source: unknown, keys: string[]): number | null {
   return null
 }
 
+/** ชื่อคีย์ราคาที่ผู้ให้บริการนิยมใช้ — ต้องเดาเผื่อไว้เพราะเอกสารไม่มีตัวอย่างคำตอบ */
+const PRICE_KEYS = [
+  'price',
+  'resellerPrice',
+  'reseller_price',
+  'agentPrice',
+  'agent_price',
+  'salePrice',
+  'sale_price',
+  'netPrice',
+  'net_price',
+  'basePrice',
+  'base_price',
+  'price_baht',
+  'cost',
+  'amount',
+  'unitPrice',
+  'unit_price',
+]
+
+/**
+ * ราคาทุนของแพ็กเกจหนึ่ง
+ * บางเจ้าห่อราคาไว้ในก้อน เช่น price: { amount: 51, currency: 'THB' } จึงต้องเปิดดูข้างในด้วย
+ */
+function packPrice(pack: Json): number | null {
+  const direct = pickNumber(pack, PRICE_KEYS)
+  if (direct !== null) return direct
+  for (const key of PRICE_KEYS) {
+    const nested = pack[key]
+    if (nested && typeof nested === 'object') {
+      const inner = pickNumber(nested, ['amount', 'value', 'thb', 'baht', ...PRICE_KEYS])
+      if (inner !== null) return inner
+    }
+  }
+  return null
+}
+
 /**
  * ช่องที่ลูกค้าต้องกรอกของสินค้านั้น (uid / เซิร์ฟเวอร์ / ภูมิภาค ฯลฯ)
  * ชื่อคีย์ต้องตรงกับที่ JCR ใช้ เพราะจะถูกส่งกลับไปเป็น userInput ตอนสั่งซื้อ
@@ -468,7 +505,13 @@ export const jcr: ProviderAdapter = {
   /**
    * ดึงรายการสินค้าทั้งหมด
    * เจ้านี้ต้องยิงถามแพ็กเกจทีละสินค้า จึงยิงพร้อมกันทีละหลายเส้นและมีเวลาจำกัด
-   * ถ้าสินค้าเยอะจนดึงไม่ทันในเวลาที่ Vercel ให้ จะได้เท่าที่ทัน แล้วกดดึงซ้ำได้
+   *
+   * สินค้าที่ดึงไม่ครบจะถูกนับไว้แล้วรายงานกลับไปให้คนกดเห็น ไม่เงียบหาย
+   * เพราะ "ได้ไม่ครบแต่ไม่มีใครรู้" อันตรายกว่า "ดึงไม่สำเร็จ" — คนจะไปตามหาแพ็กเกจที่ไม่มีวันเจอ
+   *
+   * หมายเหตุเรื่องเกมที่มีหลายโปรโมชั่น (เช่น Lineage2M):
+   * ฝั่ง JCR แยกเป็นคนละสินค้า (คนละ productId) แต่ใช้ชื่อเดียวกัน
+   * ที่นี่จึงได้มาหลายชุดชื่อซ้ำกัน ซึ่งถูกแล้ว — ต้องนำเข้าให้ครบทุกชุดถึงจะได้แพ็กเกจครบ
    */
   async fetchCatalog(config) {
     const products = asArray(await api(config, 'products'), 'products')
@@ -479,6 +522,10 @@ export const jcr: ProviderAdapter = {
     const out: CatalogEntry[] = []
     const deadline = Date.now() + CATALOG_BUDGET_MS
     let cursor = 0
+    /** แพ็กเกจที่ปลายทางไม่บอกราคา — ข้ามไปเพราะตั้งราคาขายให้ไม่ได้ */
+    let noPrice = 0
+    /** สินค้าที่ยิงถามแพ็กเกจแล้วปลายทางไม่ตอบ */
+    let failed = 0
 
     const worker = async () => {
       while (cursor < products.length && Date.now() < deadline) {
@@ -495,6 +542,7 @@ export const jcr: ProviderAdapter = {
           )
         } catch {
           // สินค้าตัวนี้ดึงไม่ได้ (เช่นถูกปิดอยู่) — ข้ามไป อย่าให้ทั้งรายการพัง
+          failed++
           continue
         }
 
@@ -505,18 +553,13 @@ export const jcr: ProviderAdapter = {
           const packageId = pickString(pack, ['id', 'packageId', 'package_id', 'code'])
           if (!packageId) continue
 
-          const price = pickNumber(pack, [
-            'price',
-            'resellerPrice',
-            'reseller_price',
-            'cost',
-            'amount',
-            'unitPrice',
-            'unit_price',
-          ])
+          const price = packPrice(pack)
           // ราคาทุนต้องรู้ก่อนถึงจะตั้งราคาขายอัตโนมัติได้
           // แพ็กเกจที่ปลายทางไม่บอกราคา (หรือราคา 0) ข้ามไป ไม่งั้นจะกลายเป็นสินค้าราคา 0 บนหน้าเว็บ
-          if (price === null || price <= 0) continue
+          if (price === null || price <= 0) {
+            noPrice++
+            continue
+          }
 
           const packFields = parseFields(pack.fields ?? pack.userInput ?? pack.inputs)
           const fields = packFields.length > 0 ? packFields : productFields
@@ -550,6 +593,17 @@ export const jcr: ProviderAdapter = {
         'ดึงรายการจาก JCR ได้ แต่ไม่มีแพ็กเกจที่ระบุราคาไว้เลย — ตรวจสอบสิทธิ์ราคาตัวแทนกับทีมงาน JCR'
       )
     }
-    return out
+
+    // สิ่งที่ยังไม่ได้ดึงมา ต้องบอกให้รู้ ไม่ใช่ปล่อยให้เข้าใจว่าครบ
+    const left = products.length - cursor
+    const warnings = [
+      left > 0
+        ? `ดึงไม่ทัน ${left} สินค้า (หมดเวลา ${CATALOG_BUDGET_MS / 1000} วินาที) — กดดึงซ้ำอีกครั้ง`
+        : null,
+      failed > 0 ? `${failed} สินค้าที่ปลายทางไม่ตอบ` : null,
+      noPrice > 0 ? `ข้าม ${noPrice} แพ็กเกจที่ JCR ไม่ได้บอกราคา` : null,
+    ].filter(Boolean)
+
+    return { entries: out, note: warnings.length > 0 ? warnings.join(' · ') : null }
   },
 }
