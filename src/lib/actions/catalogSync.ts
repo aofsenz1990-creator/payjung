@@ -55,8 +55,13 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
     )
     const have = new Set(fresh.map((r) => r.game_id))
 
+    // จับเวลาแยกสองช่วง (ยิง API กับ บันทึกลงฐานข้อมูล) แล้วรายงานกลับไปด้วย
+    // เวลาที่ช้าอยู่ตรงไหนต้องดูออกจากหน้าจอ ไม่ใช่ต้องเดา
+    const startedAt = Date.now()
+
     // ตัวเชื่อมบางเจ้าคืนหมายเหตุมาด้วยว่ามีอะไรที่ยังดึงมาไม่ครบ — ต้องเอาไปบอกคนกด
     const result = await adapter.fetchCatalog(toConfig(provider), { vip, have })
+    const fetchMs = Date.now() - startedAt
     const entries = Array.isArray(result) ? result : result.entries
     const note = Array.isArray(result) ? null : result.note
     // ดึงมาไม่ครบ = ห้ามล้างของเดิมทิ้ง ไม่งั้นกดซ้ำเท่าไรก็วนอยู่ที่เดิม ไม่มีวันครบ
@@ -90,13 +95,19 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
       return { error: 'ปลายทางไม่ได้ส่งรายการสินค้ามาเลย' }
     }
 
-    // ได้มาครบทั้งร้าน = ล้างของเก่าแล้วใส่ชุดใหม่ทั้งหมด จะได้ตรงกับปลายทางเสมอ
-    // ได้มาไม่ครบ = เก็บของเดิมไว้ แล้วทับเฉพาะที่เพิ่งดึงมา (กดซ้ำเพื่อสะสมให้ครบ)
-    if (!partial) {
-      await q('delete from provider_catalog where provider_id = $1', [providerId])
-    }
+    /**
+     * เขียนทับของเดิมก่อน แล้วค่อยลบของที่ปลายทางไม่มีแล้วทีหลัง
+     *
+     * เดิมลบทั้งหมดก่อนแล้วค่อยใส่ชุดใหม่ ซึ่งถ้าฟังก์ชันถูกตัดกลางคัน (เจ้าที่รายการใหญ่มาก
+     * ใช้เวลานานจนเสี่ยง) จะเหลือรายการแหว่งหรือไม่เหลือเลย ลูกค้าจะหาของไม่เจอทันที
+     * แบบนี้ระหว่างบันทึกยังมีของเดิมให้ใช้ตลอด และถ้าโดนตัดกลางคันก็แค่ "ยังไม่ทันอัปเดต"
+     */
+    const clock = await q1<{ now: string }>('select now() as now')
+    const writeFrom = clock?.now ?? null
 
-    const CHUNK = 400
+    // ยัดทีละก้อนใหญ่ขึ้น (800 × 11 ช่อง = 8,800 ตัวแปร ยังห่างเพดาน 65,535 ของ Postgres)
+    // ฐานข้อมูลต่อได้ทีละคำสั่ง การลดจำนวนรอบไป-กลับจึงช่วยได้ตรง ๆ
+    const CHUNK = 800
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK)
       const values = chunk
@@ -126,6 +137,15 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
       )
     }
 
+    // ดึงมาครบทั้งร้านแล้ว = อะไรที่ไม่ได้ถูกเขียนทับในรอบนี้ แปลว่าปลายทางเลิกขายแล้ว ลบทิ้งได้
+    // ดึงมาไม่ครบ ห้ามลบเด็ดขาด เพราะของที่ยังไม่ได้ดึงในรอบนี้ก็เข้าเงื่อนไขนี้เหมือนกัน
+    if (!partial && writeFrom) {
+      await q('delete from provider_catalog where provider_id = $1 and synced_at < $2', [
+        providerId,
+        writeFrom,
+      ])
+    }
+
     // รายงานจากของที่เก็บไว้จริงทั้งหมด ไม่ใช่แค่รอบนี้ — ตอนกดซ้ำสะสมจะได้เห็นว่าคืบไปถึงไหน
     const stored = await q1<{ games: number; packs: number }>(
       `select count(distinct game_id)::int as games, count(*)::int as packs
@@ -137,7 +157,9 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
     return {
       ok:
         `ดึงรายการสำเร็จ — รอบนี้ได้ ${rows.length} รายการ · ` +
-        `รวมที่เก็บไว้ ${games} เกม ${stored?.packs ?? rows.length} รายการสินค้า` +
+        `รวมที่เก็บไว้ ${games} เกม ${stored?.packs ?? rows.length} รายการสินค้า · ` +
+        `ใช้เวลา ${(fetchMs / 1000).toFixed(1)} วิ (ยิง API) + ` +
+        `${((Date.now() - startedAt - fetchMs) / 1000).toFixed(1)} วิ (บันทึก)` +
         (provider.kind === 'overtopup'
           ? ` (ราคาระดับ ${vip ? 'VIP' : 'ทั่วไป'} — ถ้าไม่ตรงกับที่ถูกตัดจริง ให้ดึงใหม่อีกระดับ)`
           : '') +
