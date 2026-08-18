@@ -22,9 +22,11 @@ import {
  *  - แพ็กเกจแบบ "ระบุจำนวนเอง" (dynamic) ต้องขอราคาที่ /quote ก่อน แล้วแนบ quoteId ไปตอนสั่ง
  *  - externalRef คือเลขอ้างอิงของเรา ใช้ตามออเดอร์กลับได้เมื่อยิงไปแล้วขาดการติดต่อ
  *
- * ⚠️ เอกสารที่ได้มาบอกแค่ "ยิงยังไง" ไม่ได้บอกว่า "ตอบกลับหน้าตาแบบไหน"
- * โค้ดนี้จึงอ่านค่าแบบยืดหยุ่น (รองรับทั้งห่อด้วย data และส่งมาตรง ๆ / ชื่อคีย์หลายแบบ)
- * ถ้าปลายทางใช้ชื่อคีย์ที่ยังไม่ครอบคลุม ให้เพิ่มชื่อในรายการ pick* ด้านล่างได้เลย
+ * เขียนตามเอกสาร API ฉบับเต็มของ JCR แล้ว (ไม่ใช่การเดาจาก Postman collection อีกต่อไป)
+ * ยังอ่านค่าแบบยืดหยุ่นไว้เผื่อเขาปรับชื่อคีย์ในอนาคต — เพิ่มชื่อในรายการ pick* ได้เลย
+ *
+ * เพดานการยิงตามเอกสาร: อ่าน (GET) 120 ครั้ง/นาที · เขียน (POST) 60 ครั้ง/นาที
+ * เกินแล้วได้ 429 พร้อม Retry-After
  */
 
 /** ที่อยู่ API ทุกเส้นขึ้นต้นด้วยนี้ */
@@ -52,8 +54,12 @@ const CATALOG_CONCURRENCY = 3
  */
 const CATALOG_BUDGET_MS = 30_000
 
-/** เว้นระยะระหว่างการยิงแต่ละครั้งอย่างน้อยเท่านี้ (ราว 2.8 ครั้งต่อวินาที) */
-const CATALOG_GAP_MS = 360
+/**
+ * เว้นระยะระหว่างการยิงแต่ละครั้งอย่างน้อยเท่านี้
+ * เอกสารกำหนดเพดานอ่านไว้ 120 ครั้ง/นาที = 2 ครั้ง/วินาที
+ * ตั้ง 520ms (~115 ครั้ง/นาที) เผื่อขอบไว้นิดหน่อย จะได้ไม่ไปเบียดเพดานจนโดนกัน
+ */
+const CATALOG_GAP_MS = 520
 
 /** ลองใหม่กี่ครั้งเมื่อเส้นนั้นพลาดแบบที่ลองใหม่แล้วมีโอกาสสำเร็จ */
 const CATALOG_RETRIES = 3
@@ -87,7 +93,33 @@ const ERROR_HINT: Record<string, string> = {
   invalid_quote: 'ใบเสนอราคาใช้ไม่ได้ — ระบบจะขอราคาใหม่ให้ในรอบถัดไป',
   validation_error: 'ข้อมูลที่ส่งไปไม่ครบหรือผิดรูปแบบ — ตรวจช่องที่ลูกค้ากรอกกับรหัสแพ็กเกจ',
   rate_limited: 'ยิงถี่เกินไป ระบบจะลองใหม่ให้เอง',
+  rate_limit_exceeded: 'ยิงถี่เกินเพดานของ JCR (อ่าน 120 ครั้ง/นาที) ระบบจะรอตามที่เขาบอกแล้วลองใหม่',
   http_429: 'ปลายทางกันไว้เพราะยิงถี่เกินไป ระบบจะลองใหม่ให้เอง',
+  // รหัสตามเอกสารฉบับเต็ม — เขียนให้คนหลังร้านรู้ว่าต้องไปทำอะไรต่อ
+  api_key_expired: 'คีย์หมดอายุแล้ว — ออกคีย์ใหม่ที่ Reseller Portal > API Keys',
+  reseller_not_active: 'บัญชีตัวแทนถูกระงับอยู่ — ติดต่อทีมงาน JCR',
+  reseller_deleted: 'บัญชีตัวแทนถูกลบแล้ว — ติดต่อทีมงาน JCR',
+  ip_not_allowed:
+    'ไอพีของเซิร์ฟเวอร์เราไม่อยู่ในรายการที่อนุญาต — ปิดการจำกัดไอพี หรือเพิ่มไอพีของ Vercel ' +
+    'ที่ JCR > Settings > IP restrictions',
+  ip_blocked: 'ไอพีถูกบล็อกชั่วคราวเพราะยืนยันตัวตนผิดหลายครั้ง — รอสักครู่แล้วลองใหม่',
+  ip_permanently_blocked: 'ไอพีถูกบล็อกถาวร — ติดต่อทีมงาน JCR',
+  insufficient_scope: 'คีย์นี้ไม่มีสิทธิ์เรียกเส้นนี้ — ขอเพิ่มสิทธิ์ (scope) กับทีมงาน JCR',
+  insufficient_credit: 'เครดิตของร้านที่ JCR ไม่พอสำหรับยอดรวมของบิลนี้ — เติมเงินก่อน',
+  stock_sold_out: 'แพ็กเกจนี้ของหมดที่ฝั่ง JCR',
+  package_not_active: 'แพ็กเกจนี้ถูกปิดขายที่ JCR — กดดึงรายการใหม่',
+  product_not_active: 'เกมนี้ถูกปิดขายที่ JCR — กดดึงรายการใหม่',
+  provider_not_active: 'ผู้ให้บริการต้นทางของ JCR ปิดอยู่ — รอแล้วลองใหม่',
+  package_max_exceeded: 'จำนวนที่สั่งเกินเพดานต่อออเดอร์ของแพ็กเกจนี้ — ให้ลูกค้าแยกสั่งทีละน้อยลง',
+  invalid_user_input: 'ข้อมูลที่ลูกค้ากรอกไม่ตรงกับที่ JCR กำหนด — กดดึงรายการใหม่เพื่ออัปเดตช่องกรอก',
+  quote_required: 'แพ็กเกจนี้ต้องขอราคาก่อนสั่ง — ระบบจะขอให้เองในรอบถัดไป',
+  quote_not_found: 'ใบเสนอราคาไม่ถูกต้อง — ระบบจะขอใหม่ให้ในรอบถัดไป',
+  quote_package_mismatch: 'ใบเสนอราคาไม่ตรงกับแพ็กเกจที่สั่ง — ระบบจะขอใหม่ให้ในรอบถัดไป',
+  quote_input_mismatch: 'ใบเสนอราคาไม่ตรงกับข้อมูลที่ลูกค้ากรอก — ระบบจะขอใหม่ให้ในรอบถัดไป',
+  package_not_dynamic: 'แพ็กเกจนี้เป็นราคาคงที่ ไม่ต้องขอราคาก่อน — กดดึงรายการใหม่เพื่ออัปเดตชนิด',
+  compute_failed: 'สคริปต์คิดราคาของ JCR ทำงานผิดพลาด — แจ้งทีมงาน JCR',
+  unsupported_content_type: 'ส่งข้อมูลผิดรูปแบบ (ต้องเป็น multipart/form-data) — เป็นบั๊กของระบบเรา',
+  idempotency_in_progress: 'คำสั่งเดิมกำลังทำงานอยู่ — รอผลแล้วค่อยตามสถานะ ห้ามสั่งซ้ำ',
   http_404: 'ปลายทางไม่มีเส้นทางนี้ หรือสินค้าตัวนี้ถูกปิดอยู่',
   http_403: 'คีย์นี้ไม่มีสิทธิ์เข้าถึงรายการนี้ — ติดต่อทีมงาน JCR',
 }
@@ -112,6 +144,11 @@ async function api(
     json?: unknown
     form?: FormData
     timeoutMs?: number
+    /**
+     * กุญแจกันตัดเงินซ้ำ — เอกสาร JCR แนะนำให้ส่งทุกครั้งที่สั่งซื้อ
+     * ยิงเส้นเดิมซ้ำด้วยกุญแจเดิมจะได้ผลลัพธ์เดิม ไม่กลายเป็นออเดอร์ใหม่
+     */
+    idempotencyKey?: string
     /** ขอเนื้อหาดิบ ไม่ต้องแปลงเป็น JSON (ใช้กับเส้นที่ตอบเป็น HTML) */
     raw?: boolean
   }
@@ -128,6 +165,7 @@ async function api(
         Accept: 'application/json',
         // multipart ห้ามตั้ง Content-Type เอง ต้องปล่อยให้ fetch ใส่ boundary ให้
         ...(init?.json ? { 'Content-Type': 'application/json' } : {}),
+        ...(init?.idempotencyKey ? { 'Idempotency-Key': init.idempotencyKey } : {}),
       },
       body: init?.form ?? (init?.json ? JSON.stringify(init.json) : undefined),
       cache: 'no-store',
@@ -297,6 +335,18 @@ function packPrice(pack: Json): number | null {
  * ช่องที่ลูกค้าต้องกรอกของสินค้านั้น (uid / เซิร์ฟเวอร์ / ภูมิภาค ฯลฯ)
  * ชื่อคีย์ต้องตรงกับที่ JCR ใช้ เพราะจะถูกส่งกลับไปเป็น userInput ตอนสั่งซื้อ
  */
+/**
+ * ชนิดช่องกรอกที่ JCR ใช้: text, tel, number, select, image, password
+ * ช่องแบบ image ต้องแนบไฟล์รูป (ส่งเป็น multipart แยกส่วน) ซึ่งหน้าเว็บลูกค้าเรายังไม่รองรับ
+ * แพ็กเกจที่มีช่องแบบนี้จึงสั่งอัตโนมัติไม่ได้ ต้องคัดออกตั้งแต่ตอนดึงรายการ
+ */
+function needsFileUpload(fields: unknown): boolean {
+  const raw = Array.isArray(fields) ? fields : []
+  return raw.some(
+    (f) => f && typeof f === 'object' && String((f as Json).type ?? '').toLowerCase() === 'image'
+  )
+}
+
 function parseFields(source: unknown): ProviderField[] {
   const raw = Array.isArray(source) ? source : []
   const out: ProviderField[] = []
@@ -426,6 +476,11 @@ export function parseHtmlForm(html: string): ProviderField[] {
 
 /** แพ็กเกจแบบ "ระบุจำนวนเอง" ต้องขอราคาก่อนสั่ง จึงต้องแยกให้ออกตั้งแต่ตอนดึงรายการ */
 function isDynamic(pack: Json, product: Json): boolean {
+  // เอกสาร: priceMode = "fixed" | "dynamic" และ requiresQuote บอกตรง ๆ ว่าต้องขอราคาก่อนไหม
+  if (typeof pack.requiresQuote === 'boolean') return pack.requiresQuote
+  const mode = (pickString(pack, ['priceMode', 'price_mode']) ?? '').toLowerCase()
+  if (mode) return mode === 'dynamic'
+
   for (const flag of [pack.dynamic, pack.isDynamic, pack.is_dynamic, product.dynamic]) {
     if (typeof flag === 'boolean') return flag
   }
@@ -499,7 +554,18 @@ export function mapStatus(record: Json, fallbackId: string | null) {
     return { state: 'failed' as const, message: `JCR แจ้งว่าไม่สำเร็จ${detail}`, orderId }
   }
   if (
-    ['issue', 'problem', 'on_hold', 'onhold', 'hold', 'manual', 'review', 'partial'].includes(status)
+    [
+      // เอกสาร: คืนเงินบางส่วน = บางชิ้นเข้า บางชิ้นไม่เข้า ต้องให้คนดูว่าจะคืนลูกค้าเท่าไร
+      'partially_refunded',
+      'issue',
+      'problem',
+      'on_hold',
+      'onhold',
+      'hold',
+      'manual',
+      'review',
+      'partial',
+    ].includes(status)
   ) {
     // จบแล้วแต่สรุปไม่ได้ว่าของเข้าหรือไม่ — ต้องให้คนตรวจ ห้ามคืนเงินอัตโนมัติ
     return {
@@ -531,7 +597,9 @@ async function createQuote(
   }
   return {
     quoteId,
-    price: pickNumber(quote, ['total', 'totalPrice', 'total_price', 'price', 'amount', 'cost']),
+    // เอกสาร: finalPrice = ราคาที่ถูกตัดจริงต่อหน่วย (cost คือทุนก่อนบวกมาร์จิ้น ห้ามเอามาเทียบ)
+    price: pickNumber(quote, ['finalPrice', 'final_price', 'total', 'price', 'amount']),
+    validUntil: pickString(quote, ['validUntil', 'valid_until']),
   }
 }
 
@@ -561,7 +629,8 @@ export const jcr: ProviderAdapter = {
     return {
       balance,
       unit: 'บาท',
-      account: pickString(me, ['name', 'username', 'shopName', 'shop_name', 'email']),
+      // เอกสาร: /me คืน { resellerId, companyName, contactEmail, status, credit }
+      account: pickString(me, ['companyName', 'name', 'username', 'shopName', 'contactEmail']),
     }
   },
 
@@ -606,7 +675,13 @@ export const jcr: ProviderAdapter = {
     form.append('items', JSON.stringify([item]))
     form.append('externalRef', input.ref)
 
-    const body = await callLive(config, 'orders', { method: 'POST', form })
+    // ใช้เลขอ้างอิงของบิลเป็นกุญแจกันซ้ำด้วย — ถ้าเน็ตสะดุดแล้วระบบยิงซ้ำ
+    // จะได้ผลลัพธ์เดิมกลับมา ไม่กลายเป็นสองออเดอร์ที่ตัดเงินสองรอบ
+    const body = await callLive(config, 'orders', {
+      method: 'POST',
+      form,
+      idempotencyKey: `payjung-${input.ref}`,
+    })
     const record = orderRecord(body)
     const orderId = orderIdOf(record)
 
@@ -639,12 +714,25 @@ export const jcr: ProviderAdapter = {
     }
 
     // ยังไม่รู้เลขออเดอร์ (ยิงไปแล้วขาดการติดต่อ) — ไล่หาจากรายการล่าสุดด้วยเลขอ้างอิงของเรา
+    // เอกสาร: เส้นนี้ใช้ cursor ไม่ใช่เลขหน้า และบอกว่าหมดรายการแล้วด้วย hasMore / nextCursor
     let reachedEnd = false
-    for (let page = 1; page <= LIST_MAX_PAGES; page++) {
-      const list = asArray(await callLive(config, `orders?page=${page}&limit=${LIST_LIMIT}`), 'orders')
+    let cursor: string | null = null
+    for (let round = 1; round <= LIST_MAX_PAGES; round++) {
+      const body = await callLive(
+        config,
+        `orders?limit=${LIST_LIMIT}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+      )
+      const list = asArray(body, 'orders')
       const found = list.find((row) => refOf(row) === order.ref)
       if (found) return mapStatus(found, null)
-      if (list.length < LIST_LIMIT) {
+
+      // pagination อยู่ระดับบนสุดคู่กับ data — อ่านตรง ๆ ห้ามใช้ unwrap เพราะมันจะไล่ลง data ไปก่อน
+      const page = (body && typeof body === 'object' ? (body as Json).pagination : null) as
+        | Json
+        | null
+      const hasMore = page && typeof page === 'object' ? page.hasMore !== false : false
+      cursor = pickString(page, ['nextCursor', 'next_cursor'])
+      if (!hasMore || !cursor) {
         reachedEnd = true
         break
       }
@@ -697,8 +785,14 @@ export const jcr: ProviderAdapter = {
     let cursor = 0
     /** สินค้าที่ดึงแพ็กเกจมาได้จริงในรอบนี้ */
     let handled = 0
-    /** สินค้าที่ได้ช่องกรอกมาจากแบบฟอร์ม HTML แทน JSON */
+    /** แพ็กเกจที่ได้ช่องกรอกครบจาก inputFields ตามเอกสาร */
+    let fromSchema = 0
+    /** สินค้าที่ต้องถอยไปอ่านช่องกรอกจากแบบฟอร์ม HTML */
     let fromForm = 0
+    /** แพ็กเกจที่ปลายทางปิดขายอยู่ */
+    let unavailable = 0
+    /** แพ็กเกจที่ต้องแนบรูป ซึ่งหน้าเว็บลูกค้ายังทำไม่ได้ */
+    let needsFile = 0
     /** แพ็กเกจที่ปลายทางไม่บอกราคา — ข้ามไปเพราะตั้งราคาขายให้ไม่ได้ */
     let noPrice = 0
     /** เหตุผลที่สินค้าแต่ละตัวดึงไม่สำเร็จ — เก็บไว้รายงาน ไม่ใช่แค่นับจำนวน */
@@ -768,26 +862,26 @@ export const jcr: ProviderAdapter = {
         }
         handled++
 
-        // ช่องที่ต้องกรอกมักผูกกับตัวสินค้า แต่บางแพ็กเกจอาจกำหนดเพิ่มเอง
-        let productFields = parseFields(
-          product.fields ?? product.userInput ?? product.inputs ?? product.form_fields
-        )
-        // JSON ไม่ได้บอกมา — ไปอ่านจากแบบฟอร์มที่เขาเปิดให้ดึง (?format=html) แทน
-        if (productFields.length === 0) {
-          try {
-            productFields = await formFieldsOf(productId)
-          } catch (err) {
-            // หมดเวลาแล้ว — หยุดเส้นนี้ ไม่ใช่โยนทิ้งทั้งรอบ
-            // ของที่เก็บมาได้ก่อนหน้านี้ต้องได้บันทึก ไม่งั้นกดซ้ำกี่รอบก็ไม่คืบ
-            if (err instanceof OutOfTime) return
-            throw err
-          }
-          if (productFields.length > 0) fromForm++
-        }
+        // เผื่อไว้เฉย ๆ — ตามเอกสารช่องกรอกอยู่ที่ระดับแพ็กเกจ (inputFields) ไม่ใช่ระดับสินค้า
+        const productFields = parseFields(product.fields ?? product.inputFields)
+        /** แบบฟอร์ม HTML ของสินค้านี้ ยิงเอาตอนจำเป็นแล้วใช้ซ้ำ (null = ยังไม่เคยยิง) */
+        let lazyForm: ProviderField[] | null = null
 
         for (const pack of packages) {
           const packageId = pickString(pack, ['id', 'packageId', 'package_id', 'code'])
           if (!packageId) continue
+
+          // เอกสาร: available = false แปลว่าตอนนี้สั่งไม่ได้ ไม่ต้องเอามาขาย
+          if (pack.available === false) {
+            unavailable++
+            continue
+          }
+
+          // ช่องแบบแนบรูปยังทำไม่ได้บนหน้าเว็บลูกค้า — เอามาขายแล้วสั่งไม่ผ่านแน่นอน
+          if (needsFileUpload(pack.inputFields ?? pack.fields)) {
+            needsFile++
+            continue
+          }
 
           const price = packPrice(pack)
           // ราคาทุนต้องรู้ก่อนถึงจะตั้งราคาขายอัตโนมัติได้
@@ -797,8 +891,26 @@ export const jcr: ProviderAdapter = {
             continue
           }
 
-          const packFields = parseFields(pack.fields ?? pack.userInput ?? pack.inputs)
-          const fields = packFields.length > 0 ? packFields : productFields
+          // เอกสาร: inputFields บอกครบว่าลูกค้าต้องกรอกอะไร ชื่อช่องอยู่ในคีย์ name
+          // และช่องแบบเลือกได้จะมี options มาด้วย — เอามาใช้ตรง ๆ ได้เลย
+          const packFields = parseFields(pack.inputFields ?? pack.fields ?? pack.userInput)
+          let fields = packFields.length > 0 ? packFields : productFields
+          if (packFields.length > 0) fromSchema++
+
+          // ไม่มี inputFields มาด้วย (แพ็กเกจเก่า หรือเขาปรับรูปแบบ) — ถอยไปอ่านจากแบบฟอร์ม
+          // ที่เขาเปิดให้ดึง (?format=html) ยิงครั้งเดียวต่อสินค้าแล้วใช้ซ้ำกับทุกแพ็กเกจ
+          if (fields.length === 0) {
+            if (lazyForm === null) {
+              try {
+                lazyForm = await formFieldsOf(productId)
+              } catch (err) {
+                if (err instanceof OutOfTime) return
+                throw err
+              }
+              if (lazyForm.length > 0) fromForm++
+            }
+            fields = lazyForm
+          }
           const dynamic = isDynamic(pack, product)
 
           out.push({
@@ -858,7 +970,10 @@ export const jcr: ProviderAdapter = {
           (topReason ? ` — ส่วนใหญ่เพราะ: ${topReason.slice(0, 140)}` : '')
         : null,
       noPrice > 0 ? `ข้าม ${noPrice} แพ็กเกจที่ JCR ไม่ได้บอกราคา` : null,
-      fromForm > 0 ? `อ่านช่องกรอกของลูกค้าจากแบบฟอร์มของ JCR ได้ ${fromForm} สินค้า` : null,
+      fromSchema > 0 ? `ได้ช่องกรอกของลูกค้าครบ ${fromSchema} แพ็กเกจ` : null,
+      fromForm > 0 ? `อ่านช่องกรอกจากแบบฟอร์มของ JCR อีก ${fromForm} สินค้า` : null,
+      unavailable > 0 ? `ข้าม ${unavailable} แพ็กเกจที่ JCR ปิดขายอยู่` : null,
+      needsFile > 0 ? `ข้าม ${needsFile} แพ็กเกจที่ต้องแนบรูป (หน้าเว็บลูกค้ายังทำไม่ได้)` : null,
       partial ? '👉 กด "ดึงรายการเกมทั้งหมด" ซ้ำอีกครั้ง ระบบจะไปต่อจากที่ค้างไว้' : null,
     ].filter(Boolean)
 
