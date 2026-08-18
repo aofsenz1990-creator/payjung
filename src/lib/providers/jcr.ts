@@ -1,5 +1,6 @@
 import 'server-only'
 import { JCR_DEFAULT_BASE } from './constants'
+import { INTERACTIVE_MAX_WAIT_MS, OutOfTime, limited, pacerFor, retryAfterMs } from './http'
 import {
   ProviderError,
   type CatalogEntry,
@@ -56,54 +57,6 @@ const CATALOG_GAP_MS = 360
 
 /** ลองใหม่กี่ครั้งเมื่อเส้นนั้นพลาดแบบที่ลองใหม่แล้วมีโอกาสสำเร็จ */
 const CATALOG_RETRIES = 3
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-/**
- * ตัวคุมจังหวะการยิงที่ทุกเส้นใช้ร่วมกัน
- * จองคิวเวลาไว้ล่วงหน้าทีละคน จึงไม่มีทางยิงพร้อมกันเป็นกระจุก
- * และเมื่อโดนกัน ให้ทุกเส้นหยุดพร้อมกันตามเวลาที่ปลายทางบอกมา
- * (ถ้าหยุดแค่เส้นที่โดน เส้นที่เหลือจะยิงต่อจนโดนกันทั้งหมดอยู่ดี)
- */
-class Pacer {
-  private nextAt = 0
-  constructor(
-    private readonly gap: number,
-    private readonly deadline: number
-  ) {}
-
-  /**
-   * จองคิวยิงครั้งถัดไป
-   * @returns false = คิวที่ได้เลยเวลาที่มีแล้ว ให้หยุดรอบนี้ อย่ารอต่อ
-   *          (สำคัญมาก — ถ้าปลายทางสั่งให้รอ 60 วินาที แล้วเรานอนรอตามนั้น
-   *           ทั้งฟังก์ชันจะโดนตัดก่อน แล้วของที่ดึงมาได้จะหายไปทั้งหมด)
-   */
-  async take() {
-    const now = Date.now()
-    const at = Math.max(now, this.nextAt)
-    if (at >= this.deadline) return false
-    this.nextAt = at + this.gap
-    if (at > now) await sleep(at - now)
-    return true
-  }
-
-  /** ปลายทางสั่งให้พัก — เลื่อนคิวของทุกเส้นออกไป */
-  pause(ms: number) {
-    this.nextAt = Math.max(this.nextAt, Date.now() + ms)
-  }
-}
-
-/** หมดเวลาของรอบนี้ — ไม่ใช่ความผิดพลาดของสินค้าตัวนั้น จึงไม่นับเป็นรายการที่ดึงไม่สำเร็จ */
-class OutOfTime extends Error {}
-
-/** อ่าน Retry-After ที่ปลายทางส่งมา รองรับทั้งแบบจำนวนวินาทีและแบบวันที่ */
-function retryAfterMs(header: string | null): number | null {
-  if (!header) return null
-  const seconds = Number(header.trim())
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
-  const at = Date.parse(header)
-  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null
-}
 
 type Json = Record<string, unknown>
 
@@ -210,6 +163,26 @@ async function api(
   }
 
   return data
+}
+
+/**
+ * ตัวคุมจังหวะประจำร้านของเราที่ JCR
+ * ใช้ตัวเดียวกันทั้งตอนดึงรายการและตอนสั่งออเดอร์ ไม่งั้นสองงานนี้จะแย่งโควตากันเอง
+ */
+function pacerOf(config: ProviderConfig) {
+  return pacerFor(`jcr:${config.id}`, CATALOG_GAP_MS)
+}
+
+/**
+ * เรียก API แบบที่มีคนรออยู่ (ลูกค้ากดซื้อ / พนักงานเปิดหน้าจอ)
+ * เว้นจังหวะให้เหมือนกัน แต่ถ้าโดนกันแล้วต้องรอนาน ให้ยอมแพ้เร็ว ๆ
+ * เครื่องยนต์ส่งออเดอร์จะเอาเข้าคิวส่งใหม่ให้เอง ดีกว่าปล่อยให้หน้าเว็บค้าง
+ */
+function callLive(config: ProviderConfig, path: string, init?: Parameters<typeof api>[2]) {
+  return limited(pacerOf(config), () => api(config, path, init), {
+    attempts: 2,
+    maxWaitMs: INTERACTIVE_MAX_WAIT_MS,
+  })
 }
 
 /** ปลายทางไม่รู้จักสิ่งที่ถาม (ใช้แยกว่า "ออเดอร์ไม่เคยเข้าไป" ออกจากข้อผิดพลาดอื่น) */
@@ -434,7 +407,7 @@ async function createQuote(
   packageId: string,
   userInput: Record<string, string>
 ) {
-  const body = await api(config, 'quote', { method: 'POST', json: { packageId, userInput } })
+  const body = await callLive(config, 'quote', { method: 'POST', json: { packageId, userInput } })
   const quote = unwrap(body, 'quote')
   const quoteId = pickString(quote, ['quoteId', 'quote_id', 'id', 'token'])
   if (!quoteId) {
@@ -455,8 +428,8 @@ export const jcr: ProviderAdapter = {
     // ยิงพร้อมกันสองเส้น: ยอดเงิน กับ ชื่อบัญชี — ชื่อบัญชีไว้ยืนยันว่าต่อถูกร้าน
     // ถ้า /me พังก็ไม่เป็นไร ยอดเงินสำคัญกว่า
     const [balanceRes, meRes] = await Promise.allSettled([
-      api(config, 'balance'),
-      api(config, 'me'),
+      callLive(config, 'balance'),
+      callLive(config, 'me'),
     ])
     if (balanceRes.status === 'rejected') throw balanceRes.reason
 
@@ -519,7 +492,7 @@ export const jcr: ProviderAdapter = {
     form.append('items', JSON.stringify([item]))
     form.append('externalRef', input.ref)
 
-    const body = await api(config, 'orders', { method: 'POST', form })
+    const body = await callLive(config, 'orders', { method: 'POST', form })
     const record = orderRecord(body)
     const orderId = orderIdOf(record)
 
@@ -539,7 +512,7 @@ export const jcr: ProviderAdapter = {
     // รู้เลขออเดอร์แล้วถามตรง ๆ ได้เลย
     if (order.orderId) {
       try {
-        const record = orderRecord(await api(config, `orders/${encodeURIComponent(order.orderId)}`))
+        const record = orderRecord(await callLive(config, `orders/${encodeURIComponent(order.orderId)}`))
         if (!record) {
           return { state: 'unknown', message: 'JCR ตอบกลับโดยไม่มีข้อมูลออเดอร์ — ตรวจสอบเองก่อน' }
         }
@@ -554,7 +527,7 @@ export const jcr: ProviderAdapter = {
     // ยังไม่รู้เลขออเดอร์ (ยิงไปแล้วขาดการติดต่อ) — ไล่หาจากรายการล่าสุดด้วยเลขอ้างอิงของเรา
     let reachedEnd = false
     for (let page = 1; page <= LIST_MAX_PAGES; page++) {
-      const list = asArray(await api(config, `orders?page=${page}&limit=${LIST_LIMIT}`), 'orders')
+      const list = asArray(await callLive(config, `orders?page=${page}&limit=${LIST_LIMIT}`), 'orders')
       const found = list.find((row) => refOf(row) === order.ref)
       if (found) return mapStatus(found, null)
       if (list.length < LIST_LIMIT) {
@@ -588,7 +561,7 @@ export const jcr: ProviderAdapter = {
    * ที่นี่จึงได้มาหลายชุดชื่อซ้ำกัน ซึ่งถูกแล้ว — ต้องนำเข้าให้ครบทุกชุดถึงจะได้แพ็กเกจครบ
    */
   async fetchCatalog(config, opts) {
-    const all = asArray(await api(config, 'products'), 'products')
+    const all = asArray(await callLive(config, 'products'), 'products')
     if (all.length === 0) {
       throw new ProviderError('JCR ไม่ได้ส่งรายการสินค้ามาเลย — ตรวจสอบสิทธิ์ของคีย์กับทีมงาน JCR')
     }
@@ -606,7 +579,7 @@ export const jcr: ProviderAdapter = {
 
     const out: CatalogEntry[] = []
     const deadline = Date.now() + CATALOG_BUDGET_MS
-    const pacer = new Pacer(CATALOG_GAP_MS, deadline)
+    const pacer = pacerOf(config)
     let cursor = 0
     /** สินค้าที่ดึงแพ็กเกจมาได้จริงในรอบนี้ */
     let handled = 0
@@ -620,30 +593,19 @@ export const jcr: ProviderAdapter = {
      * ตอนดึงทั้งร้านจะยิงเป็นร้อยเส้นรวด ผู้ให้บริการมักกันไว้ชั่วคราว
      * ถ้ายอมแพ้ตั้งแต่ครั้งแรก จะได้ของมาไม่ครบทั้งที่ปลายทางไม่ได้เสียอะไรเลย
      */
-    const packagesOf = async (productId: string): Promise<Json[]> => {
-      for (let attempt = 1; ; attempt++) {
-        if (!(await pacer.take())) throw new OutOfTime()
-        try {
-          return asArray(
+    const packagesOf = (productId: string): Promise<Json[]> =>
+      limited(
+        pacer,
+        async () =>
+          asArray(
             await api(config, `products/${encodeURIComponent(productId)}/packages`, {
               // เหลือเวลาเท่าไรก็ให้เส้นนี้ได้เท่านั้น จะได้ไม่ลากยาวจนทั้งฟังก์ชันโดนตัด
               timeoutMs: deadline - Date.now(),
             }),
             'packages'
-          )
-        } catch (err) {
-          const canRetry = err instanceof ProviderError && err.retryable
-          if (!canRetry) throw err
-          // ปลายทางบอกเวลามาก็รอตามนั้น ไม่ได้บอกก็ถอยห่างขึ้นเรื่อย ๆ
-          const wait = (err as ProviderError).retryAfterMs ?? 500 * attempt
-          // ให้ทุกเส้นพักพร้อมกัน ไม่งั้นเส้นอื่นจะยิงต่อจนโดนกันตามไปด้วย
-          pacer.pause(wait)
-          // รอไม่ไหวในรอบนี้ — จบรอบแล้วเก็บของที่ได้มา ดีกว่าโดนตัดจนไม่เหลืออะไร
-          if (Date.now() + wait >= deadline) throw new OutOfTime()
-          if (attempt >= CATALOG_RETRIES) throw err
-        }
-      }
-    }
+          ),
+        { attempts: CATALOG_RETRIES, deadline }
+      )
 
     const worker = async () => {
       while (cursor < products.length && Date.now() < deadline) {

@@ -1,5 +1,6 @@
 import 'server-only'
 import { OVERTOPUP_DEFAULT_BASE } from './constants'
+import { INTERACTIVE_MAX_WAIT_MS, limited, pacerFor, retryAfterMs } from './http'
 import { ProviderError, type CatalogEntry, type ProviderAdapter } from './types'
 
 /**
@@ -53,8 +54,36 @@ const ERROR_HINT: Record<string, string> = {
 
 type ApiError = { status?: string; code?: string; message?: string }
 
-/** เรียก API — ใส่ Bearer token ให้ทุกครั้ง และแปลง error ของ OverTopup เป็นชนิดกลาง */
-async function api<T>(
+/**
+ * เว้นระยะระหว่างการยิงอย่างน้อยเท่านี้ — OverTopup กันการยิงถี่ไว้ (RATE_LIMIT_EXCEEDED)
+ * ตอนตามสถานะออเดอร์หลายบิลพร้อมกัน จะยิงติด ๆ กันจนโดนกันได้ง่าย
+ */
+const GAP_MS = 250
+
+/** ตัวคุมจังหวะประจำบัญชี ใช้ร่วมกันทั้งตอนสั่ง ตามสถานะ และดึงรายการ */
+function pacerOf(key: string) {
+  return pacerFor(`overtopup:${key.slice(-6)}`, GAP_MS)
+}
+
+/**
+ * เรียก API — เว้นจังหวะให้ก่อน แล้วลองใหม่สั้น ๆ ถ้าโดนกัน
+ * ทุกเส้นของเจ้านี้มีคนรออยู่หน้าจอ จึงยอมแพ้เร็วแล้วให้เครื่องยนต์เอาเข้าคิวใหม่
+ * ดีกว่าค้างหน้าเว็บลูกค้าไว้เป็นนาที
+ */
+function api<T>(
+  baseUrl: string | null | undefined,
+  key: string,
+  path: string,
+  init?: { method?: 'GET' | 'POST'; body?: unknown }
+): Promise<T> {
+  return limited(pacerOf(key), () => rawApi<T>(baseUrl, key, path, init), {
+    attempts: 2,
+    maxWaitMs: INTERACTIVE_MAX_WAIT_MS,
+  })
+}
+
+/** ยิงจริงหนึ่งครั้ง — ใส่ Bearer token ให้ทุกครั้ง และแปลง error ของ OverTopup เป็นชนิดกลาง */
+async function rawApi<T>(
   baseUrl: string | null | undefined,
   key: string,
   path: string,
@@ -92,7 +121,18 @@ async function api<T>(
   } catch {
     throw new ProviderError(
       `OverTopup ตอบกลับไม่ใช่ JSON (HTTP ${res.status}) — ${text.slice(0, 120)}`,
-      res.status >= 500
+      res.status >= 500 || res.status === 429,
+      retryAfterMs(res.headers.get('retry-after'))
+    )
+  }
+
+  // ปลายทางตอบรหัสไม่สำเร็จแต่ไม่ได้ใส่ code มาในเนื้อหา (เช่นโดนกันที่ชั้นหน้าเว็บ)
+  // ถ้าไม่ดักไว้ จะถูกมองว่าสำเร็จแล้วอ่านค่าไม่เจอ กลายเป็นบั๊กที่ตามยาก
+  if (!res.ok) {
+    throw new ProviderError(
+      `OverTopup ตอบ HTTP ${res.status}`,
+      res.status >= 500 || res.status === 429,
+      retryAfterMs(res.headers.get('retry-after'))
     )
   }
 
@@ -103,7 +143,10 @@ async function api<T>(
     const detail = parts.filter(Boolean).join(' · ')
     throw new ProviderError(
       detail ? `${detail} (${code})` : `OverTopup แจ้งข้อผิดพลาด: ${code}`,
-      RETRYABLE.has(code)
+      // 429 = โดนกันเพราะยิงถี่ ลองใหม่ได้เสมอแม้ปลายทางไม่ได้ส่งรหัสมาให้
+      RETRYABLE.has(code) || res.status === 429,
+      // ปลายทางบอกเองว่าให้รอเท่าไร ใช้ค่านั้นแทนการเดา
+      retryAfterMs(res.headers.get('retry-after'))
     )
   }
 

@@ -14,9 +14,11 @@ import {
 /** แปลง error เฉพาะของ 24BUYM ให้เป็นชนิดกลางที่เครื่องยนต์ส่งออเดอร์เข้าใจ */
 function wrapBuym(err: unknown): never {
   if (err instanceof BuymError) {
-    // ปลายทางไม่ตอบ/หมดเวลา = ลองใหม่ได้ ส่วนคีย์ผิดหรือข้อมูลผิด = ลองกี่ครั้งก็เหมือนเดิม
-    const retryable = /ต่อ API ไม่ได้|ไม่ตอบ|HTTP 5\d\d|ไม่ใช่ JSON/.test(err.message)
-    throw new ProviderError(err.message, retryable)
+    // ปลายทางไม่ตอบ/หมดเวลา/โดนกัน = ลองใหม่ได้ ส่วนคีย์ผิดหรือข้อมูลผิด = ลองกี่ครั้งก็เหมือนเดิม
+    // ตัว error บอกมาเองได้แล้ว เหลือกรณีเก่าที่ดูจากข้อความไว้เป็นตาข่ายรองรับ
+    const retryable =
+      err.retryable || /ต่อ API ไม่ได้|ไม่ตอบ|HTTP 5\d\d|ไม่ใช่ JSON/.test(err.message)
+    throw new ProviderError(err.message, retryable, err.retryAfterMs)
   }
   throw err
 }

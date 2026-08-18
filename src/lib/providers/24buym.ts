@@ -10,6 +10,7 @@ import 'server-only'
 
 export { BUYM_DEFAULT_BASE } from './constants'
 import { BUYM_DEFAULT_BASE } from './constants'
+import { INTERACTIVE_MAX_WAIT_MS, limited, pacerFor, retryAfterMs } from './http'
 
 /** รหัสสถานะออเดอร์ตามเอกสาร */
 export const BUYM_STATUS = {
@@ -49,14 +50,49 @@ export type BuymOrder = {
   create_at: string
 }
 
-export class BuymError extends Error {}
+/**
+ * ข้อผิดพลาดของ 24BUYM
+ * มีสองค่านี้ติดมาด้วยเพื่อให้ตัวคุมจังหวะของกลาง (providers/http.ts) อ่านได้เหมือนเจ้าอื่น
+ */
+export class BuymError extends Error {
+  readonly retryable: boolean
+  readonly retryAfterMs: number | null
+  constructor(message: string, retryable = false, retryAfterMs: number | null = null) {
+    super(message)
+    this.retryable = retryable
+    this.retryAfterMs = retryAfterMs
+  }
+}
 
 function endpoint(baseUrl: string | null | undefined, path: string, key: string) {
   const base = (baseUrl || BUYM_DEFAULT_BASE).replace(/\/+$/, '')
   return `${base}/${path}/${encodeURIComponent(key)}`
 }
 
-async function call<T>(url: string, init?: RequestInit): Promise<T> {
+/**
+ * เว้นระยะระหว่างการยิงอย่างน้อยเท่านี้
+ * เจ้านี้ไม่ได้ประกาศเพดานไว้ในเอกสาร แต่ทุกเจ้ากันการยิงถี่กันทั้งนั้น
+ * เผื่อไว้ก่อนดีกว่าไปเจอตอนลูกค้ากดซื้อพร้อมกันหลายคน
+ */
+const GAP_MS = 250
+
+/** ตัวคุมจังหวะประจำบัญชี — คีย์เดียวกันคือบัญชีเดียวกัน ต้องเข้าคิวร่วมกัน */
+function pacerOf(key: string) {
+  return pacerFor(`24buym:${key.slice(-6)}`, GAP_MS)
+}
+
+/** ยิงผ่านตัวคุมจังหวะ พร้อมลองใหม่สั้น ๆ ถ้าโดนกัน (ทุกเส้นของเจ้านี้มีคนรออยู่หน้าจอ) */
+function call<T>(url: string, init?: RequestInit): Promise<T> {
+  // คีย์อยู่ท้าย path ของ URL — ใช้แยกคิวรายบัญชีได้โดยไม่ต้องส่งคีย์เข้ามาซ้ำ
+  // ต้องตัด query ทิ้งก่อน (getOrder มี ?order_id=... ต่อท้าย) ไม่งั้นจะได้คิวคนละอันกับเส้นอื่น
+  const key = url.split('?')[0].split('/').pop() ?? ''
+  return limited(pacerOf(key), () => rawCall<T>(url, init), {
+    attempts: 2,
+    maxWaitMs: INTERACTIVE_MAX_WAIT_MS,
+  })
+}
+
+async function rawCall<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response
   try {
     res = await fetch(url, {
@@ -70,7 +106,8 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
     throw new BuymError(
       /timeout|abort/i.test(reason)
         ? 'ต่อ API ไม่ได้ภายใน 20 วินาที (ปลายทางไม่ตอบ)'
-        : `ต่อ API ไม่ได้: ${reason}`
+        : `ต่อ API ไม่ได้: ${reason}`,
+      true
     )
   }
 
@@ -80,7 +117,9 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
     data = JSON.parse(text)
   } catch {
     throw new BuymError(
-      `ปลายทางตอบกลับไม่ใช่ JSON (HTTP ${res.status}) — ${text.slice(0, 120)}`
+      `ปลายทางตอบกลับไม่ใช่ JSON (HTTP ${res.status}) — ${text.slice(0, 120)}`,
+      res.status >= 500 || res.status === 429,
+      retryAfterMs(res.headers.get('retry-after'))
     )
   }
 
@@ -89,7 +128,12 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const msg = (data as { message?: string })?.message
-    throw new BuymError(`ปลายทางตอบ HTTP ${res.status}${msg ? ` — ${msg}` : ''}`)
+    // 429 = โดนกันเพราะยิงถี่ / 5xx = ปลายทางล่มชั่วคราว ทั้งสองอย่างลองใหม่แล้วมีโอกาสผ่าน
+    throw new BuymError(
+      `ปลายทางตอบ HTTP ${res.status}${msg ? ` — ${msg}` : ''}`,
+      res.status >= 500 || res.status === 429,
+      retryAfterMs(res.headers.get('retry-after'))
+    )
   }
   return data as T
 }

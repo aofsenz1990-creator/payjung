@@ -5,6 +5,7 @@ import { q, q1 } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
 import { BuymError } from '@/lib/providers/24buym'
 import { adapterFor, toConfig } from '@/lib/providers/registry'
+import { OutOfTime } from '@/lib/providers/http'
 import { ProviderError } from '@/lib/providers/types'
 import { bool, decimal, friendlyError, int, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
@@ -143,6 +144,10 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
         (note ? ` · ⚠️ ${note}` : ''),
     }
   } catch (err) {
+    // หมดเวลาของรอบ ไม่ใช่ความผิดพลาด — บอกให้กดซ้ำเพื่อไปต่อ
+    if (err instanceof OutOfTime) {
+      return { error: 'ดึงไม่ทันในเวลาที่มี — กดดึงซ้ำอีกครั้ง ระบบจะไปต่อจากที่ค้างไว้' }
+    }
     if (err instanceof ProviderError) return { error: err.message }
     if (err instanceof BuymError) return { error: err.message }
     return { error: friendlyError(err, 'ดึงรายการสินค้าไม่สำเร็จ') }
