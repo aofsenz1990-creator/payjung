@@ -107,7 +107,14 @@ function endpoint(baseUrl: string | null | undefined, path: string) {
 async function api(
   config: ProviderConfig,
   path: string,
-  init?: { method?: 'GET' | 'POST'; json?: unknown; form?: FormData; timeoutMs?: number }
+  init?: {
+    method?: 'GET' | 'POST'
+    json?: unknown
+    form?: FormData
+    timeoutMs?: number
+    /** ขอเนื้อหาดิบ ไม่ต้องแปลงเป็น JSON (ใช้กับเส้นที่ตอบเป็น HTML) */
+    raw?: boolean
+  }
 ): Promise<unknown> {
   // ตอนดึงทั้งร้านจะบีบเวลาต่อเส้นให้สั้นลงตามเวลาที่เหลือ
   // ไม่งั้นเส้นสุดท้ายที่เริ่มตอนใกล้หมดเวลาจะลากยาวจนทั้งฟังก์ชันถูกตัด
@@ -137,6 +144,19 @@ async function api(
   }
 
   const text = await res.text()
+
+  // เส้นที่ตอบเป็น HTML (แบบฟอร์มกรอกข้อมูลของลูกค้า) — คืนข้อความดิบไปให้ตัวแยกวิเคราะห์
+  if (init?.raw) {
+    if (!res.ok) {
+      throw new ProviderError(
+        `JCR ตอบ HTTP ${res.status} ตอนขอแบบฟอร์ม`,
+        res.status >= 500 || res.status === 429,
+        retryAfterMs(res.headers.get('retry-after'))
+      )
+    }
+    return text
+  }
+
   let data: unknown = null
   if (text.trim()) {
     try {
@@ -308,6 +328,100 @@ function parseFields(source: unknown): ProviderField[] {
     })
   }
   return out
+}
+
+/** อ่านค่าของแอตทริบิวต์หนึ่งจากข้อความแอตทริบิวต์ของแท็ก */
+function attrOf(attrs: string, name: string): string | null {
+  const quoted = attrs.match(new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, 'i'))
+  if (quoted) return quoted[1].trim()
+  const bare = attrs.match(new RegExp(`\\b${name}\\s*=\\s*([^\\s>]+)`, 'i'))
+  return bare ? bare[1].trim() : null
+}
+
+/** แปลง HTML เป็นข้อความล้วน ๆ สำหรับใช้เป็นป้ายกำกับ */
+function plainText(html: string) {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** หาป้ายกำกับของช่องนั้น — เอา <label> ที่อยู่ใกล้ที่สุดก่อนหน้าช่อง */
+function labelNear(html: string, index: number, attrs: string, key: string) {
+  const before = html.slice(Math.max(0, index - 400), index)
+  const labels = [...before.matchAll(/<label\b[^>]*>([\s\S]*?)<\/label>/gi)]
+  const last = labels.length > 0 ? plainText(labels[labels.length - 1][1]) : ''
+  // ตัดเครื่องหมายบังคับกรอกกับทวิภาคท้ายป้ายออก ให้อ่านสะอาด
+  const cleaned = last.replace(/[*:：]\s*$/, '').trim()
+  return cleaned || attrOf(attrs, 'aria-label') || attrOf(attrs, 'placeholder') || key
+}
+
+/**
+ * แปลงแบบฟอร์ม HTML ของ JCR เป็นช่องกรอกของหน้าเว็บเรา
+ *
+ * เจ้านี้ไม่ได้ส่งรายการช่องกรอกมาเป็น JSON แต่มีเส้น ?format=html ที่ส่งฟอร์มมาให้
+ * ชื่อช่อง (name) ที่ได้จากฟอร์มคือคีย์เดียวกับที่ต้องส่งกลับไปใน userInput ตอนสั่งซื้อ
+ * จึงเอามาใช้ตรง ๆ ได้ และหน้าเว็บลูกค้าจะได้ช่องกรอกตรงกับที่ JCR ต้องการเป๊ะ
+ * (เช่น Lineage2M ต้องกรอก Role ID และเลือก Server ไม่ใช่แค่ UID ช่องเดียว)
+ */
+export function parseHtmlForm(html: string): ProviderField[] {
+  // เก็บตำแหน่งในหน้าไว้ด้วย แล้วค่อยเรียงทีหลัง
+  // ลูกค้าต้องเห็นช่องเรียงเหมือนหน้าเว็บของ JCR (Role ID ก่อน แล้วค่อย Server)
+  // ไม่ใช่เรียงตามชนิดของช่องซึ่งไม่มีความหมายอะไรกับคนกรอก
+  const found: Array<{ at: number; field: ProviderField }> = []
+  const seen = new Set<string>()
+
+  const push = (
+    at: number,
+    key: string,
+    label: string,
+    options?: Array<{ value: string; label: string }>
+  ) => {
+    if (!key || seen.has(key)) return
+    seen.add(key)
+    found.push({
+      at,
+      field: { key, label, options: options && options.length > 0 ? options : undefined },
+    })
+  }
+
+  // ช่องแบบเลือกจากรายการ เช่น Server / Region — ต้องได้ตัวเลือกมาครบ ไม่งั้นลูกค้าพิมพ์มั่ว
+  for (const m of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/gi)) {
+    const [, attrs, inner] = m
+    const key = attrOf(attrs, 'name')
+    if (!key) continue
+    const options = [...inner.matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option>/gi)]
+      .map((o) => ({ value: attrOf(o[1], 'value') ?? '', label: plainText(o[2]) }))
+      // ตัวเลือกว่างคือบรรทัด "กรุณาเลือก" ของเขา หน้าเว็บเราใส่ให้เองอยู่แล้ว
+      .filter((o) => o.value !== '')
+    push(m.index ?? 0, key, labelNear(html, m.index ?? 0, attrs, key), options)
+  }
+
+  // ช่องพิมพ์เอง เช่น Role ID / UID
+  const SKIP_TYPES = new Set(['hidden', 'submit', 'button', 'reset', 'image', 'file'])
+  for (const m of html.matchAll(/<input\b([^>]*)>/gi)) {
+    const attrs = m[1]
+    const key = attrOf(attrs, 'name')
+    const type = (attrOf(attrs, 'type') ?? 'text').toLowerCase()
+    if (!key || SKIP_TYPES.has(type)) continue
+    // จำนวนแพ็กเป็นของหน้าเว็บเราเอง ไม่ต้องให้ลูกค้ากรอกซ้ำ
+    if (/^(qty|quantity|amount_pack|jumnuan)$/i.test(key)) continue
+    push(m.index ?? 0, key, labelNear(html, m.index ?? 0, attrs, key))
+  }
+
+  for (const m of html.matchAll(/<textarea\b([^>]*)>/gi)) {
+    const attrs = m[1]
+    const key = attrOf(attrs, 'name')
+    if (!key) continue
+    push(m.index ?? 0, key, labelNear(html, m.index ?? 0, attrs, key))
+  }
+
+  return found.sort((a, b) => a.at - b.at).map((f) => f.field)
 }
 
 /** แพ็กเกจแบบ "ระบุจำนวนเอง" ต้องขอราคาก่อนสั่ง จึงต้องแยกให้ออกตั้งแต่ตอนดึงรายการ */
@@ -583,6 +697,8 @@ export const jcr: ProviderAdapter = {
     let cursor = 0
     /** สินค้าที่ดึงแพ็กเกจมาได้จริงในรอบนี้ */
     let handled = 0
+    /** สินค้าที่ได้ช่องกรอกมาจากแบบฟอร์ม HTML แทน JSON */
+    let fromForm = 0
     /** แพ็กเกจที่ปลายทางไม่บอกราคา — ข้ามไปเพราะตั้งราคาขายให้ไม่ได้ */
     let noPrice = 0
     /** เหตุผลที่สินค้าแต่ละตัวดึงไม่สำเร็จ — เก็บไว้รายงาน ไม่ใช่แค่นับจำนวน */
@@ -607,6 +723,31 @@ export const jcr: ProviderAdapter = {
         { attempts: CATALOG_RETRIES, deadline }
       )
 
+    /**
+     * ขอแบบฟอร์มกรอกข้อมูลของสินค้านั้นมาแปลงเป็นช่องกรอกของหน้าเว็บเรา
+     * ใช้เมื่อคำตอบ JSON ไม่ได้บอกช่องกรอกมาด้วย ซึ่งเป็นกรณีปกติของเจ้านี้
+     * ยอมยิงเพิ่มอีกหนึ่งเส้นต่อสินค้า เพราะถ้าไม่รู้ว่าต้องกรอกอะไร
+     * ลูกค้าจะกรอกได้แค่ UID แล้วออเดอร์ถูกปฏิเสธ (หรือเติมผิดเซิร์ฟเวอร์)
+     */
+    const formFieldsOf = async (productId: string): Promise<ProviderField[]> => {
+      try {
+        const html = await limited(
+          pacer,
+          () =>
+            api(config, `products/${encodeURIComponent(productId)}/packages?format=html`, {
+              raw: true,
+              timeoutMs: deadline - Date.now(),
+            }),
+          { attempts: 2, deadline }
+        )
+        return typeof html === 'string' ? parseHtmlForm(html) : []
+      } catch (err) {
+        // หมดเวลาต้องหยุดทั้งรอบ ส่วนพลาดอย่างอื่นถือว่าสินค้านี้ไม่มีฟอร์ม แล้วไปต่อ
+        if (err instanceof OutOfTime) throw err
+        return []
+      }
+    }
+
     const worker = async () => {
       while (cursor < products.length && Date.now() < deadline) {
         const product = products[cursor++]
@@ -628,7 +769,14 @@ export const jcr: ProviderAdapter = {
         handled++
 
         // ช่องที่ต้องกรอกมักผูกกับตัวสินค้า แต่บางแพ็กเกจอาจกำหนดเพิ่มเอง
-        const productFields = parseFields(product.fields ?? product.userInput ?? product.inputs)
+        let productFields = parseFields(
+          product.fields ?? product.userInput ?? product.inputs ?? product.form_fields
+        )
+        // JSON ไม่ได้บอกมา — ไปอ่านจากแบบฟอร์มที่เขาเปิดให้ดึง (?format=html) แทน
+        if (productFields.length === 0) {
+          productFields = await formFieldsOf(productId)
+          if (productFields.length > 0) fromForm++
+        }
 
         for (const pack of packages) {
           const packageId = pickString(pack, ['id', 'packageId', 'package_id', 'code'])
@@ -696,6 +844,7 @@ export const jcr: ProviderAdapter = {
           (topReason ? ` — ส่วนใหญ่เพราะ: ${topReason.slice(0, 140)}` : '')
         : null,
       noPrice > 0 ? `ข้าม ${noPrice} แพ็กเกจที่ JCR ไม่ได้บอกราคา` : null,
+      fromForm > 0 ? `อ่านช่องกรอกของลูกค้าจากแบบฟอร์มของ JCR ได้ ${fromForm} สินค้า` : null,
       partial ? '👉 กด "ดึงรายการเกมทั้งหมด" ซ้ำอีกครั้ง ระบบจะไปต่อจากที่ค้างไว้' : null,
     ].filter(Boolean)
 
