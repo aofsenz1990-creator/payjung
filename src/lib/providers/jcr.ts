@@ -43,7 +43,13 @@ const LIST_MAX_PAGES = 4
  * เร็วกว่าเพราะไม่ต้องเสียเที่ยวยิงทิ้ง และไม่ทำให้ปลายทางเดือดร้อน
  */
 const CATALOG_CONCURRENCY = 3
-const CATALOG_BUDGET_MS = 45_000
+/**
+ * งบเวลาทั้งหมดของการดึงหนึ่งรอบ
+ * ต้องเผื่อให้ Vercel มีเวลาเหลือไปบันทึกลงฐานข้อมูลด้วย (เพดานทั้งฟังก์ชันคือ 60 วินาที)
+ * ถ้าลากยาวจนโดนตัดกลางคัน หน้าเว็บจะขึ้น "An unexpected response was received from the server"
+ * ซึ่งแย่กว่าดึงได้ไม่ครบ เพราะของที่ดึงมาได้แล้วก็ไม่ได้ถูกบันทึกด้วย
+ */
+const CATALOG_BUDGET_MS = 30_000
 
 /** เว้นระยะระหว่างการยิงแต่ละครั้งอย่างน้อยเท่านี้ (ราว 2.8 ครั้งต่อวินาที) */
 const CATALOG_GAP_MS = 360
@@ -61,13 +67,24 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
  */
 class Pacer {
   private nextAt = 0
-  constructor(private readonly gap: number) {}
+  constructor(
+    private readonly gap: number,
+    private readonly deadline: number
+  ) {}
 
+  /**
+   * จองคิวยิงครั้งถัดไป
+   * @returns false = คิวที่ได้เลยเวลาที่มีแล้ว ให้หยุดรอบนี้ อย่ารอต่อ
+   *          (สำคัญมาก — ถ้าปลายทางสั่งให้รอ 60 วินาที แล้วเรานอนรอตามนั้น
+   *           ทั้งฟังก์ชันจะโดนตัดก่อน แล้วของที่ดึงมาได้จะหายไปทั้งหมด)
+   */
   async take() {
     const now = Date.now()
     const at = Math.max(now, this.nextAt)
+    if (at >= this.deadline) return false
     this.nextAt = at + this.gap
     if (at > now) await sleep(at - now)
+    return true
   }
 
   /** ปลายทางสั่งให้พัก — เลื่อนคิวของทุกเส้นออกไป */
@@ -75,6 +92,9 @@ class Pacer {
     this.nextAt = Math.max(this.nextAt, Date.now() + ms)
   }
 }
+
+/** หมดเวลาของรอบนี้ — ไม่ใช่ความผิดพลาดของสินค้าตัวนั้น จึงไม่นับเป็นรายการที่ดึงไม่สำเร็จ */
+class OutOfTime extends Error {}
 
 /** อ่าน Retry-After ที่ปลายทางส่งมา รองรับทั้งแบบจำนวนวินาทีและแบบวันที่ */
 function retryAfterMs(header: string | null): number | null {
@@ -134,8 +154,11 @@ function endpoint(baseUrl: string | null | undefined, path: string) {
 async function api(
   config: ProviderConfig,
   path: string,
-  init?: { method?: 'GET' | 'POST'; json?: unknown; form?: FormData }
+  init?: { method?: 'GET' | 'POST'; json?: unknown; form?: FormData; timeoutMs?: number }
 ): Promise<unknown> {
+  // ตอนดึงทั้งร้านจะบีบเวลาต่อเส้นให้สั้นลงตามเวลาที่เหลือ
+  // ไม่งั้นเส้นสุดท้ายที่เริ่มตอนใกล้หมดเวลาจะลากยาวจนทั้งฟังก์ชันถูกตัด
+  const timeout = Math.max(2_000, Math.min(TIMEOUT_MS, init?.timeoutMs ?? TIMEOUT_MS))
   let res: Response
   try {
     res = await fetch(endpoint(config.baseUrl, path), {
@@ -148,13 +171,13 @@ async function api(
       },
       body: init?.form ?? (init?.json ? JSON.stringify(init.json) : undefined),
       cache: 'no-store',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeout),
     })
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
     throw new ProviderError(
       /timeout|abort/i.test(reason)
-        ? `ต่อ JCR ไม่ได้ภายใน ${TIMEOUT_MS / 1000} วินาที (ปลายทางไม่ตอบ)`
+        ? `ต่อ JCR ไม่ได้ภายใน ${Math.round(timeout / 1000)} วินาที (ปลายทางไม่ตอบ)`
         : `ต่อ JCR ไม่ได้: ${reason}`,
       true
     )
@@ -583,8 +606,10 @@ export const jcr: ProviderAdapter = {
 
     const out: CatalogEntry[] = []
     const deadline = Date.now() + CATALOG_BUDGET_MS
-    const pacer = new Pacer(CATALOG_GAP_MS)
+    const pacer = new Pacer(CATALOG_GAP_MS, deadline)
     let cursor = 0
+    /** สินค้าที่ดึงแพ็กเกจมาได้จริงในรอบนี้ */
+    let handled = 0
     /** แพ็กเกจที่ปลายทางไม่บอกราคา — ข้ามไปเพราะตั้งราคาขายให้ไม่ได้ */
     let noPrice = 0
     /** เหตุผลที่สินค้าแต่ละตัวดึงไม่สำเร็จ — เก็บไว้รายงาน ไม่ใช่แค่นับจำนวน */
@@ -597,10 +622,13 @@ export const jcr: ProviderAdapter = {
      */
     const packagesOf = async (productId: string): Promise<Json[]> => {
       for (let attempt = 1; ; attempt++) {
-        await pacer.take()
+        if (!(await pacer.take())) throw new OutOfTime()
         try {
           return asArray(
-            await api(config, `products/${encodeURIComponent(productId)}/packages`),
+            await api(config, `products/${encodeURIComponent(productId)}/packages`, {
+              // เหลือเวลาเท่าไรก็ให้เส้นนี้ได้เท่านั้น จะได้ไม่ลากยาวจนทั้งฟังก์ชันโดนตัด
+              timeoutMs: deadline - Date.now(),
+            }),
             'packages'
           )
         } catch (err) {
@@ -610,7 +638,9 @@ export const jcr: ProviderAdapter = {
           const wait = (err as ProviderError).retryAfterMs ?? 500 * attempt
           // ให้ทุกเส้นพักพร้อมกัน ไม่งั้นเส้นอื่นจะยิงต่อจนโดนกันตามไปด้วย
           pacer.pause(wait)
-          if (attempt >= CATALOG_RETRIES || Date.now() + wait > deadline) throw err
+          // รอไม่ไหวในรอบนี้ — จบรอบแล้วเก็บของที่ได้มา ดีกว่าโดนตัดจนไม่เหลืออะไร
+          if (Date.now() + wait >= deadline) throw new OutOfTime()
+          if (attempt >= CATALOG_RETRIES) throw err
         }
       }
     }
@@ -626,11 +656,14 @@ export const jcr: ProviderAdapter = {
         try {
           packages = await packagesOf(productId)
         } catch (err) {
+          // หมดเวลาของรอบนี้ — หยุดเส้นนี้ทันที ที่เหลือไปต่อรอบหน้า
+          if (err instanceof OutOfTime) return
           // สินค้าตัวนี้ดึงไม่ได้ (เช่นถูกปิดอยู่) — ข้ามไป อย่าให้ทั้งรายการพัง
           // แต่ต้องจำเหตุผลไว้ ไม่งั้นคนกดจะไม่มีทางรู้ว่าทำไมของหาย
           failures.push(err instanceof Error ? err.message : String(err))
           continue
         }
+        handled++
 
         // ช่องที่ต้องกรอกมักผูกกับตัวสินค้า แต่บางแพ็กเกจอาจกำหนดเพิ่มเอง
         const productFields = parseFields(product.fields ?? product.userInput ?? product.inputs)
@@ -675,7 +708,7 @@ export const jcr: ProviderAdapter = {
     )
 
     // ยังเหลือสินค้าที่ไม่ได้แตะเลยในรอบนี้ (หมดเวลา) หรือแตะแล้วแต่ไม่สำเร็จ
-    const left = products.length - cursor
+    const left = products.length - handled - failures.length
     // นับ "ที่ข้ามเพราะดึงไว้แล้ว" เป็นไม่ครบด้วย — รอบนี้ไม่ได้ดึงของพวกนั้นมา
     // ถ้าบอกว่าครบ ฝั่งที่บันทึกจะล้างของเดิมทิ้งแล้วใส่เฉพาะรอบนี้ = ของที่สะสมมาหายหมด
     const partial = left > 0 || failures.length > 0 || skipped > 0
