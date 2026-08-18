@@ -62,6 +62,22 @@ export const ORDER_FIELDS: OrderFieldSpec[] = [
     type: 'url',
   },
   {
+    key: 'riot_id',
+    adminLabel: 'Riot ID (ชื่อ#แท็ก)',
+    label: 'Riot ID',
+    placeholder: 'เช่น PlayerName#TH1',
+    hint: 'ใส่ให้ครบทั้งชื่อและแท็กหลัง # ดูได้ที่หน้าโปรไฟล์ในเกมหรือหน้าเว็บ Riot',
+    type: 'text',
+  },
+  {
+    key: 'roleid',
+    adminLabel: 'Role ID',
+    label: 'Role ID',
+    placeholder: 'คัดลอกจากในเกมมาวาง',
+    hint: 'รหัสตัวละคร คัดลอกมาวางให้ครบทุกตัวอักษร ห้ามพิมพ์เอง',
+    type: 'text',
+  },
+  {
     key: 'player_name',
     adminLabel: 'ชื่อตัวละคร',
     label: 'ชื่อตัวละคร',
