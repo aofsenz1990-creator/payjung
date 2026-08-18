@@ -27,6 +27,7 @@ import { ProviderForm } from '@/components/ProviderForm'
 import {
   importGamesAction,
   refreshImportedAction,
+  refreshSellingPricesAction,
   syncCatalogAction,
 } from '@/lib/actions/catalogSync'
 import { dateOnly, money, num, todayISO } from '@/lib/format'
@@ -847,6 +848,37 @@ export default async function StorefrontPage({
                     🔄 อัปเดตแพ็กเกจที่นำเข้าแล้ว
                   </SubmitButton>
                 </div>
+              </ActionForm>
+
+              {/* ทางลัดที่ควรใช้เป็นประจำ — ดึงราคาเฉพาะของที่ขายอยู่จริง แล้วอัปเดตให้เลยในปุ่มเดียว
+                  เร็วกว่าดึงทั้งร้านมาก เพราะข้ามเกมที่เราไม่ได้ขาย ซึ่งเป็นส่วนใหญ่ของรายการ */}
+              <ActionForm action={refreshSellingPricesAction} className="mt-3">
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    name="provider_id"
+                    className="input w-auto flex-1"
+                    required
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      — เลือกผู้ให้บริการ —
+                    </option>
+                    {providers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <SubmitButton className="btn-primary" pendingLabel="กำลังดึงราคา...">
+                    ⚡ ดึงราคาเฉพาะที่เปิดขาย
+                  </SubmitButton>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-mute">
+                  ดึงราคาล่าสุด<b className="text-slate-200">เฉพาะเกมที่ร้านเปิดขายอยู่</b>{' '}
+                  แล้วอัปเดตต้นทุนให้ในปุ่มเดียว (ทำงานเท่ากับกดสองปุ่มด้านบน) ·
+                  เร็วกว่าและไม่ไปเบียดเพดานการยิงของผู้ให้บริการ ·{' '}
+                  <b className="text-good">ถ้าราคาทุนเปลี่ยน ระบบจะแจ้งเข้า LINE ให้ด้วย</b>
+                </p>
               </ActionForm>
               <p className="mt-2 text-xs leading-relaxed text-mute">
                 ซิงก์ <b className="text-slate-200">ต้นทุน</b> และ{' '}

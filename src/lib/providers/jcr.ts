@@ -768,16 +768,24 @@ export const jcr: ProviderAdapter = {
       throw new ProviderError('JCR ไม่ได้ส่งรายการสินค้ามาเลย — ตรวจสอบสิทธิ์ของคีย์กับทีมงาน JCR')
     }
 
+    const idOf = (p: Json) => pickString(p, ['id', 'productId', 'product_id', 'code'])
+
+    // ขอมาเฉพาะบางสินค้า (ปกติคือเกมที่ร้านเปิดขายจริง) — เจ้านี้ยิงทีละสินค้า
+    // การตัดให้เหลือเท่าที่ใช้จริงจึงเร็วขึ้นมาก และไม่ต้องไปเบียดเพดานการยิงโดยเปล่าประโยชน์
+    const only = opts?.only
+    const wanted = only ? all.filter((p) => { const id = idOf(p); return id !== null && only.has(id) }) : all
+
     // สินค้าที่เพิ่งดึงไปแล้วในรอบก่อน ข้ามไปก่อน จะได้เอาเวลาที่มีไปดึงส่วนที่ยังขาด
     // (ทั้งร้านมีสองร้อยกว่าสินค้า ยิงทีเดียวไม่ทันในเวลาที่ Vercel ให้ ต้องกดซ้ำสะสม)
-    const have = opts?.have
+    // แต่ถ้าเจาะจงมาแล้วว่าเอาตัวไหน ต้องดึงใหม่ทุกตัวเสมอ เพราะคนกดต้องการราคาล่าสุด
+    const have = only ? undefined : opts?.have
     const products = have
-      ? all.filter((p) => {
-          const id = pickString(p, ['id', 'productId', 'product_id', 'code'])
+      ? wanted.filter((p) => {
+          const id = idOf(p)
           return !id || !have.has(id)
         })
-      : all
-    const skipped = all.length - products.length
+      : wanted
+    const skipped = wanted.length - products.length
 
     const out: CatalogEntry[] = []
     const deadline = Date.now() + CATALOG_BUDGET_MS

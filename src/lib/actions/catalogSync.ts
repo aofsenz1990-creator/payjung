@@ -7,8 +7,78 @@ import { BuymError } from '@/lib/providers/24buym'
 import { adapterFor, toConfig } from '@/lib/providers/registry'
 import { OutOfTime } from '@/lib/providers/http'
 import { ProviderError } from '@/lib/providers/types'
+import { notifyLine } from '@/lib/line'
 import { bool, decimal, friendlyError, int, str } from '@/lib/form'
 import type { ActionState } from '@/components/ActionForm'
+
+type CatalogEntryRow = {
+  gameId: string
+  gameName: string
+  serverId: string
+  serverName: string | null
+  sku: string
+  packName: string
+  packDesc: string
+  price: number
+  fields?: unknown
+  productType?: string | null
+}
+
+/**
+ * บันทึกรายการที่ดึงมาลงตารางกลาง (เขียนทับของเดิมที่รหัสตรงกัน)
+ * ใช้ร่วมกันทั้งตอนดึงทั้งร้านและตอนดึงเฉพาะที่เปิดขาย
+ */
+async function saveCatalog(providerId: number, entries: CatalogEntryRow[]) {
+  type Row = [
+    number, string, string, string, string | null,
+    string, string, string, number, string | null, string | null,
+  ]
+  const rows: Row[] = entries.map((e) => [
+    providerId,
+    e.gameId,
+    e.gameName,
+    e.serverId,
+    e.serverName,
+    e.sku,
+    e.packName,
+    e.packDesc,
+    e.price,
+    // แยกให้ชัดระหว่าง [] (ถามแล้ว ไม่มีช่องกรอกจริง ๆ) กับ null (ยังไม่รู้ ต้องไปถามใหม่)
+    e.fields ? JSON.stringify(e.fields) : null,
+    e.productType ?? null,
+  ])
+
+  const CHUNK = 800
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK)
+    const values = chunk
+      .map((_, n) => {
+        const b = n * 11
+        return (
+          `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},` +
+          `$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10}::jsonb,$${b + 11})`
+        )
+      })
+      .join(',')
+    await q(
+      `insert into provider_catalog
+         (provider_id, game_id, game_name, server_id, server_name, pack_code, pack_name,
+          pack_desc, pack_price, fields, product_type)
+       values ${values}
+       on conflict (provider_id, game_id, server_id, pack_code) do update
+          set game_name = excluded.game_name,
+              server_name = excluded.server_name,
+              pack_name = excluded.pack_name,
+              pack_desc = excluded.pack_desc,
+              pack_price = excluded.pack_price,
+              fields = excluded.fields,
+              product_type = excluded.product_type,
+              synced_at = now()`,
+      chunk.flat()
+    )
+  }
+  return rows.length
+}
 
 /**
  * ดึงรายการเกม/เซิร์ฟเวอร์/แพ็กเกจทั้งหมดจากผู้ให้บริการมาเก็บไว้
@@ -311,6 +381,233 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
   }
 }
 
+
+type AppliedChanges = {
+  updated: number
+  /** ตัวอย่างต้นทุนที่เปลี่ยน (มากสุดก่อน) ไว้รายงานให้เห็นว่ากระทบอะไร */
+  changes: Array<{ name: string; old_cost: number; new_cost: number }>
+  /** แพ็กที่ตอนนี้ขายต่ำกว่าทุน — เกิดกับแพ็กที่ตั้งราคาเองแล้วปลายทางขึ้นราคา */
+  losing: Array<{ name: string; cost_price: number; sell_price: number }>
+  summary: string
+}
+
+/**
+ * เอาราคา/ช่องกรอกล่าสุดในตารางกลาง ไปใส่แพ็กเกจที่ร้านนำเข้าไปแล้ว
+ *
+ * กฎสำคัญ: **ห้ามทับราคาขายที่ตั้งไว้เอง**
+ *  - แพ็กที่ตั้งกำไรเป็น % ไว้ → คิดราคาขายใหม่จากต้นทุนใหม่ กำไรคงเดิม
+ *  - แพ็กที่พิมพ์ราคาขายเอง   → ราคาขายไม่ขยับเลย อัปเดตแค่ต้นทุน
+ *    (ต้นทุนที่ถูกต้องทำให้กำไรที่แสดงตรงความจริง และกันขายต่ำกว่าทุนโดยไม่รู้ตัว)
+ *
+ * ไม่แตะ ชื่อ รูป สถานะเปิดขาย สต๊อก หรือลำดับการแสดง — ของพวกนี้ร้านตั้งเอง
+ */
+async function applyCatalogToProducts(providerId: number): Promise<AppliedChanges> {
+  // ดูก่อนว่าต้นทุนของแพ็กไหนเปลี่ยนบ้าง จะได้รายงานให้เห็นว่ากระทบอะไร
+  const changes = await q<{ name: string; old_cost: number; new_cost: number }>(
+    `select p.name, p.cost_price::float8 as old_cost, c.pack_price::float8 as new_cost
+       from products p
+       join provider_catalog c
+         on c.provider_id = p.provider_id
+        and c.game_id = p.provider_game_id
+        and c.server_id = p.provider_server_id
+        and c.pack_code = p.provider_sku
+      where p.provider_id = $1 and p.cost_price is distinct from c.pack_price
+      order by abs(c.pack_price - p.cost_price) desc
+      limit 5`,
+    [providerId]
+  )
+
+  const updated = await q<{ id: number }>(
+    `update products p
+        set cost_price = c.pack_price,
+            provider_fields = c.fields,
+            provider_variant = c.game_name,
+            provider_product_type = coalesce(c.product_type, p.provider_product_type),
+            sell_price = case when p.markup_percent is not null
+                              then ceil(c.pack_price * (1 + p.markup_percent / 100))
+                              else p.sell_price end,
+            partner_price = case when p.partner_markup_percent is not null
+                                 then ceil(c.pack_price * (1 + p.partner_markup_percent / 100))
+                                 else p.partner_price end
+       from provider_catalog c
+      where c.provider_id = p.provider_id
+        and c.game_id = p.provider_game_id
+        and c.server_id = p.provider_server_id
+        and c.pack_code = p.provider_sku
+        and p.provider_id = $1
+        -- ต้องเช็กทุกคอลัมน์ที่คำสั่งนี้เขียน ไม่งั้นแถวที่ต่างกันเฉพาะคอลัมน์
+        -- ที่ไม่ได้เช็กจะถูกข้ามไป แล้วกู้ข้อมูลที่หายไม่ได้
+        and (p.cost_price is distinct from c.pack_price
+             or p.provider_fields is distinct from c.fields
+             or p.provider_variant is distinct from c.game_name
+             or p.provider_product_type is distinct from c.product_type)
+     returning p.id`,
+    [providerId]
+  )
+
+  // เตือนแพ็กที่ตอนนี้ขายต่ำกว่าทุน — เกิดได้กับแพ็กที่ตั้งราคาเองแล้วปลายทางขึ้นราคา
+  const losing = await q<{ name: string; cost_price: number; sell_price: number }>(
+    `select name, cost_price::float8 as cost_price, sell_price::float8 as sell_price
+       from products
+      where provider_id = $1 and is_active and sell_price < cost_price
+      order by (cost_price - sell_price) desc
+      limit 5`,
+    [providerId]
+  )
+
+  const detail = changes
+    .map(
+      (c) =>
+        `${c.name} ${c.old_cost.toLocaleString('th-TH')}→${c.new_cost.toLocaleString('th-TH')}`
+    )
+    .join(' · ')
+
+  const warn =
+    losing.length > 0
+      ? ` ⚠ ขายต่ำกว่าทุน ${losing.length} แพ็ก: ` +
+        losing.map((l) => `${l.name} (ทุน ${l.cost_price} ขาย ${l.sell_price})`).join(' · ') +
+        ' — ไปแก้ราคาขายด่วน'
+      : ''
+
+  return {
+    updated: updated.length,
+    changes,
+    losing,
+    summary:
+      updated.length === 0
+        ? 'ข้อมูลตรงกับผู้ให้บริการอยู่แล้ว'
+        : `อัปเดต ${updated.length} แพ็กเกจ — ราคาขายที่ตั้งเองไม่ถูกแตะ ` +
+          `ส่วนแพ็กที่ตั้งกำไรเป็น % ไว้คิดราคาใหม่ให้แล้ว` +
+          (detail ? ` · ต้นทุนที่เปลี่ยน: ${detail}` : '') +
+          warn,
+  }
+}
+
+/**
+ * ดึงราคาเฉพาะสินค้าที่ร้าน "เปิดขายอยู่จริง" แล้วอัปเดตให้ในคำสั่งเดียว
+ *
+ * ต่างจากปุ่มดึงทั้งร้านตรงที่ไม่ไปแตะเกมที่เราไม่ได้ขาย — ซึ่งเป็นส่วนใหญ่ของรายการ
+ * (JCR มีสองร้อยกว่าสินค้า แต่ร้านอาจเปิดขายจริงแค่สิบกว่าเกม)
+ * ผลคือเร็วกว่ามาก ไม่ไปเบียดเพดานการยิงของปลายทาง และกดบ่อยได้โดยไม่เจ็บ
+ *
+ * ทำสองอย่างรวดเดียว: ดึงราคาใหม่ + เอาไปใส่แพ็กเกจของเรา
+ * จะได้ไม่ต้องกดสองปุ่มแล้วลืมกดปุ่มที่สอง
+ */
+export async function refreshSellingPricesAction(formData: FormData): Promise<ActionState> {
+  await requireAdmin()
+  const providerId = int(formData, 'provider_id')
+  if (!providerId) return { error: 'กรุณาเลือกผู้ให้บริการ' }
+
+  const provider = await q1<{
+    id: number
+    name: string
+    base_url: string | null
+    username: string | null
+    api_key: string | null
+    kind: string
+    sandbox: boolean
+  }>(
+    'select id, name, base_url, username, api_key, kind, sandbox from api_providers where id = $1',
+    [providerId]
+  )
+  if (!provider) return { error: 'ไม่พบผู้ให้บริการนี้' }
+  if (!provider.api_key) return { error: `"${provider.name}" ยังไม่ได้ตั้งคีย์/รหัสผ่าน` }
+
+  const adapter = adapterFor(provider.kind)
+  if (!adapter.fetchCatalog) {
+    return { error: `"${provider.name}" ยังไม่รองรับการดึงรายการอัตโนมัติ` }
+  }
+
+  try {
+    // เกมที่ผูกกับเจ้านี้และยังเปิดขายอยู่ (ปิดขายไปแล้วไม่ต้องเสียเวลาดึง)
+    const selling = await q<{ game_id: string }>(
+      `select distinct provider_game_id as game_id
+         from products
+        where provider_id = $1 and is_active and provider_game_id is not null`,
+      [providerId]
+    )
+    if (selling.length === 0) {
+      return { error: `ยังไม่มีแพ็กเกจของ "${provider.name}" ที่เปิดขายอยู่ — กดดึงทั้งร้านแล้วนำเข้าก่อน` }
+    }
+    const only = new Set(selling.map((r) => r.game_id))
+
+    const startedAt = Date.now()
+    const result = await adapter.fetchCatalog(toConfig(provider), { only })
+    const fetchMs = Date.now() - startedAt
+    const all = Array.isArray(result) ? result : result.entries
+    const note = Array.isArray(result) ? null : result.note
+
+    // เจ้าที่ยิงครั้งเดียวได้ทั้งร้าน (24BUYM/OverTopup) จะไม่สนใจ only มาก่อน จึงกรองซ้ำที่นี่
+    const entries = all.filter((e) => only.has(e.gameId))
+    if (entries.length === 0) {
+      return {
+        error:
+          'ปลายทางไม่ได้ส่งราคาของเกมที่เปิดขายอยู่กลับมาเลย — ' +
+          'อาจถูกปิดขายที่ฝั่งผู้ให้บริการแล้ว ลองกดดึงทั้งร้านเพื่อตรวจสอบ',
+      }
+    }
+
+    await saveCatalog(providerId, entries)
+    const applied = await applyCatalogToProducts(providerId)
+    const saveMs = Date.now() - startedAt - fetchMs
+
+    revalidatePath('/storefront')
+    revalidatePath('/games')
+    revalidatePath('/shop')
+
+    const head =
+      `ดึงราคาเฉพาะที่เปิดขายของ "${provider.name}" แล้ว — ` +
+      `${only.size} เกม ${entries.length} แพ็กเกจ · ` +
+      `ใช้เวลา ${(fetchMs / 1000).toFixed(1)} + ${(saveMs / 1000).toFixed(1)} วินาที`
+
+    if (applied.updated === 0) {
+      return { ok: `${head} · ราคาตรงกับปลายทางอยู่แล้ว ไม่มีอะไรเปลี่ยน${note ? ` · ⚠️ ${note}` : ''}` }
+    }
+
+    // ราคาทุนเปลี่ยน = เรื่องเงิน ต้องแจ้งเข้า LINE ด้วย ไม่ใช่ขึ้นแค่บนหน้าจอคนที่กด
+    void notifyPriceChange(provider.name, applied)
+
+    return { ok: `${head} · ${applied.summary}${note ? ` · ⚠️ ${note}` : ''}` }
+  } catch (err) {
+    if (err instanceof OutOfTime) {
+      return { error: 'ดึงไม่ทันในเวลาที่มี — กดซ้ำอีกครั้ง ระบบจะไปต่อจากที่ค้างไว้' }
+    }
+    if (err instanceof ProviderError) return { error: err.message }
+    if (err instanceof BuymError) return { error: err.message }
+    return { error: friendlyError(err, 'ดึงราคาไม่สำเร็จ') }
+  }
+}
+
+/**
+ * ส่งแจ้งเตือนเข้า LINE เมื่อผู้ให้บริการเปลี่ยนราคา
+ *
+ * เรื่องนี้ต้องรู้ทันทีแม้ไม่ได้นั่งอยู่หน้าจอ เพราะทุนขึ้นแปลว่ากำไรหด
+ * และแพ็กที่ตั้งราคาขายเองไว้อาจกลายเป็นขายต่ำกว่าทุนตั้งแต่วินาทีนั้น
+ * ส่งแบบไม่รอผล (void) และกลืน error — แจ้งเตือนไม่ควรทำให้การอัปเดตราคาล้ม
+ */
+async function notifyPriceChange(providerName: string, applied: AppliedChanges) {
+  if (applied.changes.length === 0 && applied.losing.length === 0) return
+  try {
+    const lines = [
+      `💰 ${providerName} เปลี่ยนราคาทุน ${applied.updated} แพ็กเกจ`,
+      ...applied.changes.map((c) => {
+        const arrow = c.new_cost > c.old_cost ? '▲' : '▼'
+        return `${arrow} ${c.name}: ${c.old_cost.toLocaleString('th-TH')} → ${c.new_cost.toLocaleString('th-TH')} บาท`
+      }),
+    ]
+    if (applied.losing.length > 0) {
+      lines.push('', `⚠️ ขายต่ำกว่าทุน ${applied.losing.length} แพ็ก ต้องรีบแก้ราคาขาย:`)
+      for (const l of applied.losing) {
+        lines.push(`• ${l.name} — ทุน ${l.cost_price} ขาย ${l.sell_price}`)
+      }
+    }
+    lines.push('', 'อย่าลืมกด "อัปเดตราคาขึ้นหน้าเว็บ" ให้ลูกค้าเห็นราคาใหม่')
+    await notifyLine(lines.join('\n'))
+  } catch {
+    // แจ้งเตือนไม่สำเร็จไม่ใช่เรื่องคอขาดบาดตาย ข้อมูลราคาอัปเดตไปแล้ว
+  }
+}
+
 /**
  * อัปเดตแพ็กเกจที่นำเข้าไปแล้วให้ตรงกับข้อมูลล่าสุดของผู้ให้บริการ
  *
@@ -326,90 +623,26 @@ export async function refreshImportedAction(formData: FormData): Promise<ActionS
   const providerId = int(formData, 'provider_id')
   if (!providerId) return { error: 'กรุณาเลือกผู้ให้บริการ' }
 
+  const row = await q1<{ name: string }>('select name from api_providers where id = $1', [
+    providerId,
+  ])
+  const providerName = row?.name ?? 'ผู้ให้บริการ'
+
   try {
-    // ดูก่อนว่าต้นทุนของแพ็กไหนเปลี่ยนบ้าง จะได้รายงานให้เห็นว่ากระทบอะไร
-    const changes = await q<{ name: string; old_cost: number; new_cost: number }>(
-      `select p.name, p.cost_price::float8 as old_cost, c.pack_price::float8 as new_cost
-         from products p
-         join provider_catalog c
-           on c.provider_id = p.provider_id
-          and c.game_id = p.provider_game_id
-          and c.server_id = p.provider_server_id
-          and c.pack_code = p.provider_sku
-        where p.provider_id = $1 and p.cost_price is distinct from c.pack_price
-        order by abs(c.pack_price - p.cost_price) desc
-        limit 5`,
-      [providerId]
-    )
-
-    const updated = await q<{ id: number }>(
-      `update products p
-          set cost_price = c.pack_price,
-              provider_fields = c.fields,
-              provider_variant = c.game_name,
-              provider_product_type = coalesce(c.product_type, p.provider_product_type),
-              -- ตั้ง % ไว้ = คิดราคาขายใหม่ให้กำไรเท่าเดิม
-              -- ตั้งราคาเอง = ไม่แตะราคาขายเด็ดขาด
-              sell_price = case when p.markup_percent is not null
-                                then ceil(c.pack_price * (1 + p.markup_percent / 100))
-                                else p.sell_price end,
-              -- ราคาพาร์ทเนอร์คิดใหม่ด้วยหลักเดียวกัน ไม่งั้นต้นทุนขึ้นแล้วราคาพาร์ทเนอร์
-              -- ค้างที่ของเดิม กลายเป็นขายต่ำกว่าทุนให้พาร์ทเนอร์โดยไม่รู้ตัว
-              partner_price = case when p.partner_markup_percent is not null
-                                   then ceil(c.pack_price * (1 + p.partner_markup_percent / 100))
-                                   else p.partner_price end
-         from provider_catalog c
-        where c.provider_id = p.provider_id
-          and c.game_id = p.provider_game_id
-          and c.server_id = p.provider_server_id
-          and c.pack_code = p.provider_sku
-          and p.provider_id = $1
-          -- ต้องเช็กทุกคอลัมน์ที่คำสั่งนี้เขียน ไม่งั้นแถวที่ต่างกันเฉพาะคอลัมน์
-          -- ที่ไม่ได้เช็กจะถูกข้ามไป แล้วกู้ข้อมูลที่หายไม่ได้
-          and (p.cost_price is distinct from c.pack_price
-               or p.provider_fields is distinct from c.fields
-               or p.provider_variant is distinct from c.game_name
-               or p.provider_product_type is distinct from c.product_type)
-       returning p.id`,
-      [providerId]
-    )
-
-    // เตือนแพ็กที่ตอนนี้ขายต่ำกว่าทุน — เกิดได้กับแพ็กที่ตั้งราคาเองแล้วปลายทางขึ้นราคา
-    const losing = await q<{ name: string; cost_price: number; sell_price: number }>(
-      `select name, cost_price::float8 as cost_price, sell_price::float8 as sell_price
-         from products
-        where provider_id = $1 and is_active and sell_price < cost_price
-        order by (cost_price - sell_price) desc
-        limit 5`,
-      [providerId]
-    )
+    const applied = await applyCatalogToProducts(providerId)
 
     revalidatePath('/storefront')
     revalidatePath('/games')
     revalidatePath('/shop')
 
-    if (updated.length === 0) {
+    if (applied.updated === 0) {
       return { ok: 'ข้อมูลตรงกับผู้ให้บริการอยู่แล้ว — ไม่มีอะไรต้องอัปเดต' }
     }
 
-    const detail = changes
-      .map((c) => `${c.name} ${c.old_cost.toLocaleString('th-TH')}→${c.new_cost.toLocaleString('th-TH')}`)
-      .join(' · ')
+    // ราคาทุนเปลี่ยน = เรื่องเงิน ต้องแจ้งเข้า LINE ด้วย ไม่ใช่ขึ้นแค่บนหน้าจอคนที่กด
+    void notifyPriceChange(providerName, applied)
 
-    const warn =
-      losing.length > 0
-        ? ` ⚠ ขายต่ำกว่าทุน ${losing.length} แพ็ก: ` +
-          losing.map((l) => `${l.name} (ทุน ${l.cost_price} ขาย ${l.sell_price})`).join(' · ') +
-          ' — ไปแก้ราคาขายด่วน'
-        : ''
-
-    return {
-      ok:
-        `อัปเดต ${updated.length} แพ็กเกจแล้ว — ราคาขายที่ตั้งเองไม่ถูกแตะ ` +
-        `ส่วนแพ็กที่ตั้งกำไรเป็น % ไว้คิดราคาใหม่ให้แล้ว` +
-        (detail ? ` · ต้นทุนที่เปลี่ยน: ${detail}` : '') +
-        warn,
-    }
+    return { ok: applied.summary }
   } catch (err) {
     return { error: friendlyError(err, 'อัปเดตข้อมูลไม่สำเร็จ') }
   }
