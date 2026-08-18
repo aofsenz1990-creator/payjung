@@ -359,8 +359,10 @@ export default async function StorefrontPage({
   // เอาไว้โชว์ให้เห็นว่าชื่อช่องที่ถูกต้องคืออะไร จะได้พิมพ์ตามให้ตรง ไม่ต้องเดา
   const detected = editingGame
     ? await q1<{ fields: unknown }>(
+        // เช็กชนิดก่อนเสมอ — jsonb_array_length จะพังทันทีถ้าค่าที่เก็บไว้ไม่ใช่ array
         `select provider_fields as fields from products
-          where game_id = $1 and provider_fields is not null
+          where game_id = $1
+            and jsonb_typeof(provider_fields) = 'array'
             and jsonb_array_length(provider_fields) > 0
           limit 1`,
         [editingGame.id]
