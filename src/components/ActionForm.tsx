@@ -1,9 +1,43 @@
 'use client'
 
-import { useActionState, useEffect, useRef } from 'react'
+import { createContext, useActionState, useContext, useEffect, useRef } from 'react'
 import { useFormStatus } from 'react-dom'
 
 export type ActionState = { error?: string; ok?: string } | null
+
+/**
+ * ผลลัพธ์ล่าสุดของฟอร์ม เผื่อให้ลูกส่วนไหนก็ได้เอาไปแสดงเอง
+ * ใช้ตอนที่ข้อความต้องไปโผล่ในกล่องป็อปอัป ไม่ใช่ท้ายฟอร์มตามปกติ
+ */
+const ActionStateContext = createContext<ActionState>(null)
+
+export function useActionFormState() {
+  return useContext(ActionStateContext)
+}
+
+/** กล่องข้อความผลลัพธ์ วางตรงไหนก็ได้ในฟอร์ม (ใช้คู่กับ hideMessage) */
+export function ActionMessage({ className = '' }: { className?: string }) {
+  const state = useActionFormState()
+  if (state?.error) {
+    return (
+      <p
+        className={`rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad ${className}`}
+      >
+        {state.error}
+      </p>
+    )
+  }
+  if (state?.ok) {
+    return (
+      <p
+        className={`rounded-lg border border-good/40 bg-good/10 px-3 py-2 text-sm text-good ${className}`}
+      >
+        {state.ok}
+      </p>
+    )
+  }
+  return null
+}
 
 /**
  * ฟอร์มที่ผูกกับ Server Action พร้อมแสดงข้อความ error / สำเร็จ
@@ -16,6 +50,7 @@ export function ActionForm({
   resetOnSuccess = false,
   onSuccess,
   id,
+  hideMessage = false,
 }: {
   action: (formData: FormData) => Promise<ActionState>
   children: React.ReactNode
@@ -28,6 +63,8 @@ export function ActionForm({
    * ใช้ตอนที่ช่องกรอกต้องอยู่ในตารางซึ่งมีฟอร์มอื่นอยู่แล้ว เพราะฟอร์มซ้อนกันไม่ได้
    */
   id?: string
+  /** ไม่ต้องแสดงข้อความท้ายฟอร์ม — ใช้เมื่อจะเอา <ActionMessage /> ไปวางเองที่อื่น */
+  hideMessage?: boolean
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const [state, formAction] = useActionState<ActionState, FormData>(
@@ -45,13 +82,13 @@ export function ActionForm({
 
   return (
     <form ref={formRef} id={id} action={formAction} className={className}>
-      {children}
-      {state?.error ? (
+      <ActionStateContext.Provider value={state}>{children}</ActionStateContext.Provider>
+      {hideMessage ? null : state?.error ? (
         <p className="mt-3 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">
           {state.error}
         </p>
       ) : null}
-      {state?.ok ? (
+      {hideMessage ? null : state?.ok ? (
         <p className="mt-3 rounded-lg border border-good/40 bg-good/10 px-3 py-2 text-sm text-good">
           {state.ok}
         </p>

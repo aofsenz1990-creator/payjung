@@ -1,7 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { ActionForm, SubmitButton, type ActionState } from '@/components/ActionForm'
+import { useEffect, useState } from 'react'
+import {
+  ActionForm,
+  ActionMessage,
+  SubmitButton,
+  type ActionState,
+} from '@/components/ActionForm'
 import type { OrderFieldSpec } from '@/lib/orderField'
 
 export type BuyPackage = {
@@ -150,8 +155,26 @@ export function BuyForm({
   /** ชนิดช่องที่ร้านระบุเองรายเกม ใช้ตอนผู้ให้บริการไม่ได้บอกมา */
   orderField?: OrderFieldSpec | null
 }) {
-  const [productId, setProductId] = useState<number | null>(packages[0]?.id ?? null)
+  const [productId, setProductId] = useState<number | null>(null)
   const [qty, setQty] = useState(1)
+  /** เปิดกล่องกรอกข้อมูลหลังลูกค้าเลือกแพ็กเกจแล้ว */
+  const [open, setOpen] = useState(false)
+
+  // กด Esc เพื่อปิด และห้ามหน้าเบื้องหลังเลื่อนตามตอนกล่องเปิดอยู่
+  // (บนมือถือถ้าไม่ล็อก พอเลื่อนในกล่องจนสุดแล้วหน้าเบื้องหลังจะเลื่อนต่อ สับสนมาก)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = previous
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
 
   // เกมเดียวกันอาจมีหลายช่องทางตามประเทศ/ค่าเงิน ให้ลูกค้าเลือกก่อนแล้วค่อยโชว์แพ็กของช่องทางนั้น
   //
@@ -176,7 +199,7 @@ export function BuyForm({
   const outOfStock = Boolean(selected?.track_stock && selected.stock_qty < qty)
 
   return (
-    <ActionForm action={action} className="space-y-5">
+    <ActionForm action={action} className="space-y-5" hideMessage>
       <input type="hidden" name="product_id" value={selected?.id ?? ''} />
 
       {/* เกมเดียวกันแต่คนละประเทศ/ค่าเงิน — ให้เลือกก่อนว่าจะเติมแบบไหน */}
@@ -192,6 +215,7 @@ export function BuyForm({
                   setVariant(v)
                   // แพ็กที่เลือกไว้เป็นของประเภทเดิม ต้องล้างก่อนไม่งั้นสั่งข้ามประเภท
                   setProductId(null)
+                  setOpen(false)
                 }}
                 className={`rounded-xl border px-3 py-3 text-center text-sm transition ${
                   v === variant
@@ -224,7 +248,11 @@ export function BuyForm({
                 key={p.id}
                 type="button"
                 disabled={soldOut}
-                onClick={() => setProductId(p.id)}
+                onClick={() => {
+                  setProductId(p.id)
+                  setQty(1)
+                  setOpen(true)
+                }}
                 className={`flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-center transition ${
                   soldOut
                     ? 'cursor-not-allowed border-ink-800 bg-ink-900 opacity-50'
@@ -263,6 +291,52 @@ export function BuyForm({
           })}
         </div>
       </div>
+
+      {/* กล่องสั่งซื้อ — เปิดเมื่อลูกค้าเลือกแพ็กเกจแล้ว
+          อยู่ในฟอร์มเดียวกับด้านบน จึงส่งค่าที่กรอกไปพร้อมกันได้เลย
+          และ **ต้องไม่เรนเดอร์ตอนปิด** เพราะช่อง required ที่ซ่อนอยู่จะทำให้กดส่งฟอร์มไม่ได้
+          โดยไม่มีอะไรขึ้นเตือน (เบราว์เซอร์เลื่อนไปหาช่องที่มองไม่เห็นแล้วค้างอยู่แค่นั้น) */}
+      {open && selected ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`สั่งซื้อ ${selected.name}`}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
+          onMouseDown={(e) => {
+            // ปิดเมื่อคลิกพื้นหลัง แต่ต้องเป็นการคลิกที่พื้นหลังจริง ๆ
+            // (ถ้าใช้ onClick แล้วลากเมาส์จากในกล่องออกมาปล่อย จะถือว่าคลิกพื้นหลังแล้วปิดทิ้งทั้งที่ยังกรอกอยู่)
+            if (e.target === e.currentTarget) setOpen(false)
+          }}
+        >
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-ink-700 bg-ink-900 p-5 shadow-2xl sm:rounded-2xl">
+            <div className="mb-4 flex items-start gap-3">
+              {selected.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={selected.image_url}
+                  alt=""
+                  className="size-12 shrink-0 rounded-lg bg-ink-850 object-contain p-1"
+                />
+              ) : (
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-ink-850 text-2xl">
+                  💎
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm leading-snug font-medium text-fg">{selected.name}</p>
+                <p className="mt-0.5 text-sm font-bold text-brand-400">
+                  ฿{baht.format(selected.sell_price)} / แพ็ก
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="btn-ghost size-9 shrink-0 p-0 text-lg"
+                aria-label="ปิด"
+              >
+                ✕
+              </button>
+            </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {/* เกมที่ผู้ให้บริการบอกมาว่าต้องกรอกอะไรบ้าง จะสร้างช่องตามนั้น
@@ -421,6 +495,12 @@ export function BuyForm({
           <p className="mt-3 text-sm text-bad">⚠ จำนวนที่เลือกมากกว่าสินค้าที่เหลืออยู่</p>
         ) : null}
       </div>
+
+            {/* ผลลัพธ์ต้องขึ้นในกล่อง ไม่ใช่ท้ายฟอร์มที่อยู่หลังฉากดำ ลูกค้าจะไม่เห็นเลย */}
+            <ActionMessage className="mt-3" />
+          </div>
+        </div>
+      ) : null}
     </ActionForm>
   )
 }
