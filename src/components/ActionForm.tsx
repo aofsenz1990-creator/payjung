@@ -112,6 +112,7 @@ export function SubmitButton({
   title,
   name,
   value,
+  form,
 }: {
   children: React.ReactNode
   className?: string
@@ -120,11 +121,14 @@ export function SubmitButton({
   title?: string
   name?: string
   value?: string
+  /** ผูกปุ่มกับฟอร์มที่อยู่คนละที่ใน DOM (เช่นปุ่มอยู่ในกล่องป็อปอัปที่ย้ายไปไว้ใต้ body) */
+  form?: string
 }) {
   const { pending } = useFormStatus()
   return (
     <button
       type="submit"
+      form={form}
       className={className}
       disabled={pending || disabled}
       title={title}

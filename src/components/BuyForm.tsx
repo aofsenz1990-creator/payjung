@@ -1,12 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import {
-  ActionForm,
-  ActionMessage,
-  SubmitButton,
-  type ActionState,
-} from '@/components/ActionForm'
+import { createPortal } from 'react-dom'
+import { ActionForm, ActionMessage, SubmitButton, type ActionState } from '@/components/ActionForm'
 import type { OrderFieldSpec } from '@/lib/orderField'
 
 export type BuyPackage = {
@@ -130,7 +126,10 @@ function variantLabel(all: string[], one: string) {
   return cleaned || one
 }
 
-const baht = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const baht = new Intl.NumberFormat('th-TH', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
 
 /** เลือกแพ็กเกจ ใส่จำนวน แล้วกดสั่งซื้อโดยตัดจากเครดิต */
 export function BuyForm({
@@ -199,9 +198,7 @@ export function BuyForm({
   const outOfStock = Boolean(selected?.track_stock && selected.stock_qty < qty)
 
   return (
-    <ActionForm action={action} className="space-y-5" hideMessage>
-      <input type="hidden" name="product_id" value={selected?.id ?? ''} />
-
+    <div className="space-y-5">
       {/* เกมเดียวกันแต่คนละประเทศ/ค่าเงิน — ให้เลือกก่อนว่าจะเติมแบบไหน */}
       {hasVariants ? (
         <div>
@@ -232,7 +229,6 @@ export function BuyForm({
           </p>
         </div>
       ) : null}
-      <input type="hidden" name="qty" value={qty} />
 
       <div>
         <p className="label">เลือกสินค้าที่ต้องการ</p>
@@ -274,9 +270,7 @@ export function BuyForm({
                   </span>
                 )}
                 <span className="w-full">
-                  <span className="block text-sm leading-snug font-medium text-fg">
-                    {p.name}
-                  </span>
+                  <span className="block text-sm leading-snug font-medium text-fg">{p.name}</span>
                   <span className="mt-1 block text-lg font-bold text-brand-400">
                     ฿{baht.format(p.sell_price)}
                   </span>
@@ -296,211 +290,243 @@ export function BuyForm({
           อยู่ในฟอร์มเดียวกับด้านบน จึงส่งค่าที่กรอกไปพร้อมกันได้เลย
           และ **ต้องไม่เรนเดอร์ตอนปิด** เพราะช่อง required ที่ซ่อนอยู่จะทำให้กดส่งฟอร์มไม่ได้
           โดยไม่มีอะไรขึ้นเตือน (เบราว์เซอร์เลื่อนไปหาช่องที่มองไม่เห็นแล้วค้างอยู่แค่นั้น) */}
-      {open && selected ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`สั่งซื้อ ${selected.name}`}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
-          onMouseDown={(e) => {
-            // ปิดเมื่อคลิกพื้นหลัง แต่ต้องเป็นการคลิกที่พื้นหลังจริง ๆ
-            // (ถ้าใช้ onClick แล้วลากเมาส์จากในกล่องออกมาปล่อย จะถือว่าคลิกพื้นหลังแล้วปิดทิ้งทั้งที่ยังกรอกอยู่)
-            if (e.target === e.currentTarget) setOpen(false)
-          }}
-        >
-          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-ink-700 bg-ink-900 p-5 shadow-2xl sm:rounded-2xl">
-            <div className="mb-4 flex items-start gap-3">
-              {selected.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={selected.image_url}
-                  alt=""
-                  className="size-12 shrink-0 rounded-lg bg-ink-850 object-contain p-1"
-                />
-              ) : (
-                <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-ink-850 text-2xl">
-                  💎
-                </span>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm leading-snug font-medium text-fg">{selected.name}</p>
-                <p className="mt-0.5 text-sm font-bold text-brand-400">
-                  ฿{baht.format(selected.sell_price)} / แพ็ก
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="btn-ghost size-9 shrink-0 p-0 text-lg"
-                aria-label="ปิด"
-              >
-                ✕
-              </button>
-            </div>
+      {/* ต้องย้ายกล่องไปไว้ใต้ body ด้วย portal
+          เพราะการ์ดที่ครอบฟอร์มอยู่ใช้ backdrop-blur ซึ่งทำให้ position: fixed
+          ไปยึดกับการ์ดแทนที่จะยึดกับหน้าจอ ผลคือฉากดำคลุมไม่เต็มจอและกล่องหลุดออกนอกจอ */}
+      {open && selected
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`สั่งซื้อ ${selected.name}`}
+              className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center sm:p-4"
+              onMouseDown={(e) => {
+                // ปิดเมื่อคลิกพื้นหลัง แต่ต้องเป็นการคลิกที่พื้นหลังจริง ๆ
+                // (ถ้าใช้ onClick แล้วลากเมาส์จากในกล่องออกมาปล่อย จะถือว่าคลิกพื้นหลังแล้วปิดทิ้งทั้งที่ยังกรอกอยู่)
+                if (e.target === e.currentTarget) setOpen(false)
+              }}
+            >
+              <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-ink-700 bg-ink-900 p-5 shadow-2xl sm:rounded-2xl">
+                <ActionForm action={action} className="space-y-4" hideMessage>
+                  <input type="hidden" name="product_id" value={selected.id} />
+                  <input type="hidden" name="qty" value={qty} />
+                  <div className="mb-4 flex items-start gap-3">
+                    {selected.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={selected.image_url}
+                        alt=""
+                        className="size-12 shrink-0 rounded-lg bg-ink-850 object-contain p-1"
+                      />
+                    ) : (
+                      <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-ink-850 text-2xl">
+                        💎
+                      </span>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm leading-snug font-medium text-fg">{selected.name}</p>
+                      <p className="mt-0.5 text-sm font-bold text-brand-400">
+                        ฿{baht.format(selected.sell_price)} / แพ็ก
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setOpen(false)}
+                      className="btn-ghost size-9 shrink-0 p-0 text-lg"
+                      aria-label="ปิด"
+                    >
+                      ✕
+                    </button>
+                  </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {/* เกมที่ผู้ให้บริการบอกมาว่าต้องกรอกอะไรบ้าง จะสร้างช่องตามนั้น
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {/* เกมที่ผู้ให้บริการบอกมาว่าต้องกรอกอะไรบ้าง จะสร้างช่องตามนั้น
             บางเกมต้องเลือกเซิร์ฟเวอร์/ภูมิภาคด้วย ถ้าไม่ถามแล้วส่งไปมั่ว ๆ
             ออเดอร์จะถูกปฏิเสธ หรือแย่กว่านั้นคือเติมเข้าผิดเซิร์ฟเวอร์ */}
-        {hasFields ? (
-          activeFields!.map((f) =>
-            f.options && f.options.length > 0 ? (
-              <div key={f.key}>
-                <label className="label" htmlFor={`field_${f.key}`}>
-                  {fieldLabel(f)}
-                </label>
-                <select
-                  id={`field_${f.key}`}
-                  name={`field_${f.key}`}
-                  className="input"
-                  defaultValue=""
-                  required
-                >
-                  <option value="" disabled>
-                    — กรุณาเลือก —
-                  </option>
-                  {f.options.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div key={f.key}>
-                <label className="label" htmlFor={`field_${f.key}`}>
-                  {fieldLabel(f)}
-                </label>
-                <input
-                  id={`field_${f.key}`}
-                  name={`field_${f.key}`}
-                  className="input"
-                  type={f.key === 'password' ? 'password' : f.key === 'link' ? 'url' : 'text'}
-                  defaultValue={f.key === 'uid' ? (defaultGameUid ?? '') : ''}
-                  placeholder={
-                    f.key === 'uid' ? 'เช่น 123456789' : f.key === 'link' ? 'https://...' : ''
-                  }
-                  required
-                />
-                {f.key === 'link' ? (
-                  // ช่องลิงก์ใช้คำแนะนำของค่ายนั้น ๆ ถ้าร้านยังไม่ได้ตั้งไว้ค่อยใช้คำกลาง
-                  <p className="mt-1 text-xs leading-relaxed text-mute">
-                    {linkHints?.[linkKindOf(selected?.variant)] ||
-                      linkHints?.fallback ||
-                      FIELD_HINT_TH.link}
-                  </p>
-                ) : FIELD_HINT_TH[f.key] ? (
-                  <p className="mt-1 text-xs text-mute">{FIELD_HINT_TH[f.key]}</p>
-                ) : null}
-              </div>
-            )
-          )
-        ) : (
-          <div>
-            <label className="label" htmlFor="game_account">
-              {orderField?.label ?? 'ไอดีเกม / UID ที่จะเติม'}
-            </label>
-            <input
-              id="game_account"
-              name="game_account"
-              className="input"
-              type={orderField?.type ?? 'text'}
-              // เติมไอดีที่ลูกค้าเคยบันทึกไว้ให้เฉพาะช่องที่เป็นไอดีเกมจริง ๆ
-              // ถ้าเป็นช่องลิงก์แล้วไปเติมเลขไอดีให้ ลูกค้าจะงงและอาจกดสั่งทั้งอย่างนั้น
-              defaultValue={!orderField || orderField.key === 'uid' ? (defaultGameUid ?? '') : ''}
-              placeholder={orderField?.placeholder ?? 'เช่น 123456789'}
-              required
-            />
-            <p className="mt-1 text-xs leading-relaxed text-mute">
-              {orderField?.hint ?? 'เลขประจำตัวผู้เล่น ดูได้ในหน้าโปรไฟล์ของเกม'}
-            </p>
-          </div>
-        )}
-        <div>
-          <label className="label" htmlFor="qty">
-            จำนวนแพ็ก
-          </label>
-          {/* ปุ่มบวกลบต้องกว้างและสูงอย่างน้อย 44px ตามขนาดนิ้วมือ
+                    {hasFields ? (
+                      activeFields!.map((f) =>
+                        f.options && f.options.length > 0 ? (
+                          <div key={f.key}>
+                            <label className="label" htmlFor={`field_${f.key}`}>
+                              {fieldLabel(f)}
+                            </label>
+                            <select
+                              id={`field_${f.key}`}
+                              name={`field_${f.key}`}
+                              className="input"
+                              defaultValue=""
+                              required
+                            >
+                              <option value="" disabled>
+                                — กรุณาเลือก —
+                              </option>
+                              {f.options.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div key={f.key}>
+                            <label className="label" htmlFor={`field_${f.key}`}>
+                              {fieldLabel(f)}
+                            </label>
+                            <input
+                              id={`field_${f.key}`}
+                              name={`field_${f.key}`}
+                              className="input"
+                              type={
+                                f.key === 'password'
+                                  ? 'password'
+                                  : f.key === 'link'
+                                    ? 'url'
+                                    : 'text'
+                              }
+                              defaultValue={f.key === 'uid' ? (defaultGameUid ?? '') : ''}
+                              placeholder={
+                                f.key === 'uid'
+                                  ? 'เช่น 123456789'
+                                  : f.key === 'link'
+                                    ? 'https://...'
+                                    : ''
+                              }
+                              required
+                            />
+                            {f.key === 'link' ? (
+                              // ช่องลิงก์ใช้คำแนะนำของค่ายนั้น ๆ ถ้าร้านยังไม่ได้ตั้งไว้ค่อยใช้คำกลาง
+                              <p className="mt-1 text-xs leading-relaxed text-mute">
+                                {linkHints?.[linkKindOf(selected?.variant)] ||
+                                  linkHints?.fallback ||
+                                  FIELD_HINT_TH.link}
+                              </p>
+                            ) : FIELD_HINT_TH[f.key] ? (
+                              <p className="mt-1 text-xs text-mute">{FIELD_HINT_TH[f.key]}</p>
+                            ) : null}
+                          </div>
+                        )
+                      )
+                    ) : (
+                      <div>
+                        <label className="label" htmlFor="game_account">
+                          {orderField?.label ?? 'ไอดีเกม / UID ที่จะเติม'}
+                        </label>
+                        <input
+                          id="game_account"
+                          name="game_account"
+                          className="input"
+                          type={orderField?.type ?? 'text'}
+                          // เติมไอดีที่ลูกค้าเคยบันทึกไว้ให้เฉพาะช่องที่เป็นไอดีเกมจริง ๆ
+                          // ถ้าเป็นช่องลิงก์แล้วไปเติมเลขไอดีให้ ลูกค้าจะงงและอาจกดสั่งทั้งอย่างนั้น
+                          defaultValue={
+                            !orderField || orderField.key === 'uid' ? (defaultGameUid ?? '') : ''
+                          }
+                          placeholder={orderField?.placeholder ?? 'เช่น 123456789'}
+                          required
+                        />
+                        <p className="mt-1 text-xs leading-relaxed text-mute">
+                          {orderField?.hint ?? 'เลขประจำตัวผู้เล่น ดูได้ในหน้าโปรไฟล์ของเกม'}
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <label className="label" htmlFor="qty">
+                        จำนวนแพ็ก
+                      </label>
+                      {/* ปุ่มบวกลบต้องกว้างและสูงอย่างน้อย 44px ตามขนาดนิ้วมือ
               ของเดิมกว้างแค่ 31px กดพลาดง่ายมากบนมือถือ */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn-ghost size-11 shrink-0 p-0 text-lg"
-              aria-label="ลดจำนวน"
-              onClick={() => setQty((v) => Math.max(1, v - 1))}
-            >
-              −
-            </button>
-            <input
-              id="qty"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={99}
-              className="input h-11 text-center"
-              value={qty}
-              onChange={(e) => setQty(Math.max(1, Math.min(99, Number(e.target.value) || 1)))}
-            />
-            <button
-              type="button"
-              className="btn-ghost size-11 shrink-0 p-0 text-lg"
-              aria-label="เพิ่มจำนวน"
-              onClick={() => setQty((v) => Math.min(99, v + 1))}
-            >
-              +
-            </button>
-          </div>
-        </div>
-      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="btn-ghost size-11 shrink-0 p-0 text-lg"
+                          aria-label="ลดจำนวน"
+                          onClick={() => setQty((v) => Math.max(1, v - 1))}
+                        >
+                          −
+                        </button>
+                        <input
+                          id="qty"
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          max={99}
+                          className="input h-11 text-center"
+                          value={qty}
+                          onChange={(e) =>
+                            setQty(Math.max(1, Math.min(99, Number(e.target.value) || 1)))
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="btn-ghost size-11 shrink-0 p-0 text-lg"
+                          aria-label="เพิ่มจำนวน"
+                          onClick={() => setQty((v) => Math.min(99, v + 1))}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
-      <div className="rounded-xl border border-ink-700 bg-ink-850 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm text-mute">
-              ยอดที่ต้องจ่าย{' '}
-              <span className="ml-1 text-xl font-bold text-fg">{baht.format(total)}</span>{' '}
-              <span className="text-sm">บาท</span>
-            </p>
-            {signedIn ? (
-              <p className="mt-1 text-xs text-mute">
-                เครดิตคงเหลือ {baht.format(credit)} บาท
-                {total > 0 && !notEnough ? (
-                  <span className="text-good"> · เหลือหลังหัก {baht.format(credit - total)}</span>
-                ) : null}
-              </p>
-            ) : null}
-          </div>
+                  <div className="rounded-xl border border-ink-700 bg-ink-850 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm text-mute">
+                          ยอดที่ต้องจ่าย{' '}
+                          <span className="ml-1 text-xl font-bold text-fg">
+                            {baht.format(total)}
+                          </span>{' '}
+                          <span className="text-sm">บาท</span>
+                        </p>
+                        {signedIn ? (
+                          <p className="mt-1 text-xs text-mute">
+                            เครดิตคงเหลือ {baht.format(credit)} บาท
+                            {total > 0 && !notEnough ? (
+                              <span className="text-good">
+                                {' '}
+                                · เหลือหลังหัก {baht.format(credit - total)}
+                              </span>
+                            ) : null}
+                          </p>
+                        ) : null}
+                      </div>
 
-          {signedIn ? (
-            <SubmitButton
-              className="btn-primary"
-              disabled={!selected || notEnough || outOfStock}
-              pendingLabel="กำลังสั่งซื้อ..."
-            >
-              สั่งซื้อด้วยเครดิต
-            </SubmitButton>
-          ) : (
-            <a href="/shop/login" className="btn-primary">
-              เข้าสู่ระบบเพื่อสั่งซื้อ
-            </a>
-          )}
-        </div>
+                      {signedIn ? (
+                        <SubmitButton
+                          className="btn-primary"
+                          disabled={!selected || notEnough || outOfStock}
+                          pendingLabel="กำลังสั่งซื้อ..."
+                        >
+                          สั่งซื้อด้วยเครดิต
+                        </SubmitButton>
+                      ) : (
+                        <a href="/shop/login" className="btn-primary">
+                          เข้าสู่ระบบเพื่อสั่งซื้อ
+                        </a>
+                      )}
+                    </div>
 
-        {notEnough ? (
-          <p className="mt-3 text-sm text-bad">
-            ⚠ เครดิตไม่พอ ขาดอีก {baht.format(total - credit)} บาท — ติดต่อร้านเพื่อเติมเครดิต
-          </p>
-        ) : null}
-        {outOfStock ? (
-          <p className="mt-3 text-sm text-bad">⚠ จำนวนที่เลือกมากกว่าสินค้าที่เหลืออยู่</p>
-        ) : null}
-      </div>
+                    {notEnough ? (
+                      <p className="mt-3 text-sm text-bad">
+                        ⚠ เครดิตไม่พอ ขาดอีก {baht.format(total - credit)} บาท —
+                        ติดต่อร้านเพื่อเติมเครดิต
+                      </p>
+                    ) : null}
+                    {outOfStock ? (
+                      <p className="mt-3 text-sm text-bad">
+                        ⚠ จำนวนที่เลือกมากกว่าสินค้าที่เหลืออยู่
+                      </p>
+                    ) : null}
+                  </div>
 
-            {/* ผลลัพธ์ต้องขึ้นในกล่อง ไม่ใช่ท้ายฟอร์มที่อยู่หลังฉากดำ ลูกค้าจะไม่เห็นเลย */}
-            <ActionMessage className="mt-3" />
-          </div>
-        </div>
-      ) : null}
-    </ActionForm>
+                  {/* ผลลัพธ์ต้องขึ้นในกล่อง ไม่ใช่ท้ายฟอร์มที่อยู่หลังฉากดำ ลูกค้าจะไม่เห็นเลย */}
+                  <ActionMessage className="mt-3" />
+                </ActionForm>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
+    </div>
   )
 }
