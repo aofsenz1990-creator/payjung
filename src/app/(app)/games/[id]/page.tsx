@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { q, q1 } from '@/lib/db'
-import { OVERTOPUP_PRODUCT_TYPES } from '@/lib/providers/constants'
+import { JCR_PRODUCT_TYPES, OVERTOPUP_PRODUCT_TYPES } from '@/lib/providers/constants'
 import { requirePage } from '@/lib/auth'
 import {
   deleteProductAction,
@@ -378,11 +378,12 @@ export default async function GameDetailPage({
                     />
                   </div>
                 </div>
-                {/* OverTopup แยกชนิดสินค้า ส่งพารามิเตอร์คนละชุด จึงต้องเลือกให้ถูกรายแพ็กเกจ
-                    เจ้าอื่นไม่ใช้ค่านี้ เว้นไว้ได้ */}
+                {/* OverTopup แยกชนิดสินค้า ส่วน JCR แยกแพ็กเกจราคาคงที่กับแบบระบุจำนวนเอง
+                    ทั้งสองเจ้าส่งพารามิเตอร์คนละชุด จึงต้องเลือกให้ถูกรายแพ็กเกจ
+                    (ปกติระบบเติมให้เองตอนดึงรายการ) เจ้าอื่นไม่ใช้ค่านี้ เว้นไว้ได้ */}
                 <div>
                   <label className="label" htmlFor="provider_product_type">
-                    ชนิดสินค้าฝั่งผู้ให้บริการ (เฉพาะ OverTopup)
+                    ชนิดสินค้าฝั่งผู้ให้บริการ (OverTopup / JCR)
                   </label>
                   <select
                     id="provider_product_type"
@@ -391,11 +392,20 @@ export default async function GameDetailPage({
                     defaultValue={editing?.provider_product_type ?? ''}
                   >
                     <option value="">— ไม่ระบุ (ใช้เติมด้วย UID) —</option>
-                    {OVERTOPUP_PRODUCT_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
+                    <optgroup label="OverTopup">
+                      {OVERTOPUP_PRODUCT_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="JCR-SHOP">
+                      {JCR_PRODUCT_TYPES.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">

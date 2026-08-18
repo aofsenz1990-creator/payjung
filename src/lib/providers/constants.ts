@@ -6,6 +6,11 @@ export const BUYM_DEFAULT_BASE = 'https://new-api.24buymseller.com'
 /** Reseller API v2 — โหมดทดสอบเติม /sandbox ต่อท้าย */
 export const OVERTOPUP_DEFAULT_BASE = 'https://www.overtopup.com/api/v2'
 export const OVERTOPUP_SANDBOX_BASE = 'https://www.overtopup.com/api/v2/sandbox'
+/**
+ * JCR-SHOP Reseller API v1 — เส้นทางจริงคือ <base>/api/reseller/v1/...
+ * เอกสารเขียน base เป็น http:// แต่เว็บรองรับ https อยู่แล้ว จึงใช้ https เพื่อไม่ให้คีย์วิ่งบนเน็ตแบบเปิดเผย
+ */
+export const JCR_DEFAULT_BASE = 'https://jcr-shop.com'
 
 /**
  * ชนิดสินค้าของ OverTopup — ใช้ path คนละอันและส่งพารามิเตอร์คนละชุด
@@ -15,6 +20,15 @@ export const OVERTOPUP_PRODUCT_TYPES = [
   { value: 'uid', label: 'เติมด้วย UID' },
   { value: 'card', label: 'บัตรเงินสด' },
   { value: 'idpass', label: 'เติมด้วยไอดี+รหัสผ่าน (ต้องเติมเอง)' },
+] as const
+
+/**
+ * ชนิดแพ็กเกจของ JCR — แบบระบุจำนวนเองต้องขอราคาที่ /quote ก่อนสั่งทุกครั้ง
+ * เก็บไว้ที่ products.provider_product_type เหมือนกัน (ตอนดึงรายการระบบเติมให้เอง)
+ */
+export const JCR_PRODUCT_TYPES = [
+  { value: 'fixed', label: 'แพ็กเกจราคาคงที่' },
+  { value: 'dynamic', label: 'ระบุจำนวนเอง (ขอราคาก่อนสั่ง)' },
 ] as const
 
 /**
@@ -55,6 +69,15 @@ export const PROVIDER_KIND_META: ProviderKindMeta[] = [
     fixedBaseUrl: OVERTOPUP_DEFAULT_BASE,
     autoSupported: true,
     hasSandbox: true,
+    unit: 'บาท',
+  },
+  {
+    kind: 'jcr',
+    // ใช้ API Key ตัวเดียวแบบ Bearer (คีย์ขึ้นต้นด้วย jcr_rk_)
+    label: 'JCR-SHOP (ต่ออัตโนมัติได้)',
+    needsUsername: false,
+    fixedBaseUrl: JCR_DEFAULT_BASE,
+    autoSupported: true,
     unit: 'บาท',
   },
   {

@@ -1,6 +1,7 @@
 import 'server-only'
 import { BuymError, addOrder, getAccount, getOrder, getProducts } from './24buym'
 import { OVERTOPUP_SANDBOX_BASE, providerMeta } from './constants'
+import { jcr } from './jcr'
 import { overtopup } from './overtopup'
 import { providerCallbackUrl } from '../siteUrl'
 import {
@@ -154,6 +155,7 @@ function notReady(kind: string): ProviderAdapter {
 const ADAPTERS: Record<string, ProviderAdapter> = {
   '24buym': buym,
   overtopup,
+  jcr,
   userpass: notReady('userpass'),
   custom: notReady('custom'),
 }
