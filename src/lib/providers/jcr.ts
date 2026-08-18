@@ -35,9 +35,18 @@ const TIMEOUT_MS = 20_000
 const LIST_LIMIT = 50
 const LIST_MAX_PAGES = 4
 
-/** ดึงรายการสินค้า — ยิงพร้อมกันได้กี่เส้น และให้เวลาทั้งหมดเท่าไร (Vercel ตัดที่ 60 วินาที) */
-const CATALOG_CONCURRENCY = 6
+/**
+ * ดึงรายการสินค้า — ยิงพร้อมกันได้กี่เส้น และให้เวลาทั้งหมดเท่าไร (Vercel ตัดที่ 60 วินาที)
+ * ยิงพร้อมกันเยอะเกินไปจะโดนปลายทางกันไว้ (rate limit) แล้วได้ของมาไม่ครบ
+ * 4 เส้นพร้อมกัน + ลองใหม่เมื่อโดนกัน ได้ครบกว่ายิงรัว ๆ 6 เส้นแล้วพลาดครึ่งหนึ่ง
+ */
+const CATALOG_CONCURRENCY = 4
 const CATALOG_BUDGET_MS = 45_000
+
+/** ลองใหม่กี่ครั้งเมื่อเส้นนั้นพลาดแบบที่ลองใหม่แล้วมีโอกาสสำเร็จ */
+const CATALOG_RETRIES = 3
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 type Json = Record<string, unknown>
 
@@ -68,6 +77,9 @@ const ERROR_HINT: Record<string, string> = {
   invalid_quote: 'ใบเสนอราคาใช้ไม่ได้ — ระบบจะขอราคาใหม่ให้ในรอบถัดไป',
   validation_error: 'ข้อมูลที่ส่งไปไม่ครบหรือผิดรูปแบบ — ตรวจช่องที่ลูกค้ากรอกกับรหัสแพ็กเกจ',
   rate_limited: 'ยิงถี่เกินไป ระบบจะลองใหม่ให้เอง',
+  http_429: 'ปลายทางกันไว้เพราะยิงถี่เกินไป ระบบจะลองใหม่ให้เอง',
+  http_404: 'ปลายทางไม่มีเส้นทางนี้ หรือสินค้าตัวนี้ถูกปิดอยู่',
+  http_403: 'คีย์นี้ไม่มีสิทธิ์เข้าถึงรายการนี้ — ติดต่อทีมงาน JCR',
 }
 
 /** ที่อยู่เต็มของเส้น API — รองรับกรณีมีคนใส่ base_url มาพร้อม /api/reseller/v1 แล้ว */
@@ -131,7 +143,8 @@ async function api(
     const detail = parts.filter(Boolean).join(' · ')
     throw new ProviderError(
       detail ? `${detail} (${code})` : `JCR แจ้งข้อผิดพลาด: ${code}`,
-      RETRYABLE.has(code) || res.status >= 500
+      // 429 = โดนกันเพราะยิงถี่ ลองใหม่ทีหลังได้เสมอ แม้ปลายทางจะไม่ได้ส่งรหัสมาให้
+      RETRYABLE.has(code) || res.status >= 500 || res.status === 429
     )
   }
 
@@ -524,8 +537,29 @@ export const jcr: ProviderAdapter = {
     let cursor = 0
     /** แพ็กเกจที่ปลายทางไม่บอกราคา — ข้ามไปเพราะตั้งราคาขายให้ไม่ได้ */
     let noPrice = 0
-    /** สินค้าที่ยิงถามแพ็กเกจแล้วปลายทางไม่ตอบ */
-    let failed = 0
+    /** เหตุผลที่สินค้าแต่ละตัวดึงไม่สำเร็จ — เก็บไว้รายงาน ไม่ใช่แค่นับจำนวน */
+    const failures: string[] = []
+
+    /**
+     * ถามแพ็กเกจของสินค้าหนึ่ง พร้อมลองใหม่เมื่อโดนปลายทางกัน
+     * ตอนดึงทั้งร้านจะยิงเป็นร้อยเส้นรวด ผู้ให้บริการมักกันไว้ชั่วคราว
+     * ถ้ายอมแพ้ตั้งแต่ครั้งแรก จะได้ของมาไม่ครบทั้งที่ปลายทางไม่ได้เสียอะไรเลย
+     */
+    const packagesOf = async (productId: string): Promise<Json[]> => {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          return asArray(
+            await api(config, `products/${encodeURIComponent(productId)}/packages`),
+            'packages'
+          )
+        } catch (err) {
+          const canRetry = err instanceof ProviderError && err.retryable
+          if (!canRetry || attempt >= CATALOG_RETRIES || Date.now() > deadline) throw err
+          // ถอยห่างขึ้นเรื่อย ๆ ให้ปลายทางได้พัก
+          await sleep(400 * attempt)
+        }
+      }
+    }
 
     const worker = async () => {
       while (cursor < products.length && Date.now() < deadline) {
@@ -536,13 +570,11 @@ export const jcr: ProviderAdapter = {
 
         let packages: Json[]
         try {
-          packages = asArray(
-            await api(config, `products/${encodeURIComponent(productId)}/packages`),
-            'packages'
-          )
-        } catch {
+          packages = await packagesOf(productId)
+        } catch (err) {
           // สินค้าตัวนี้ดึงไม่ได้ (เช่นถูกปิดอยู่) — ข้ามไป อย่าให้ทั้งรายการพัง
-          failed++
+          // แต่ต้องจำเหตุผลไว้ ไม่งั้นคนกดจะไม่มีทางรู้ว่าทำไมของหาย
+          failures.push(err instanceof Error ? err.message : String(err))
           continue
         }
 
@@ -596,11 +628,19 @@ export const jcr: ProviderAdapter = {
 
     // สิ่งที่ยังไม่ได้ดึงมา ต้องบอกให้รู้ ไม่ใช่ปล่อยให้เข้าใจว่าครบ
     const left = products.length - cursor
+    // เหตุผลที่เจอบ่อยที่สุด — บอกไปด้วยจะได้รู้ว่าต้องแก้ที่ไหน (โดนกัน / คีย์ / สินค้าปิด)
+    const tally = new Map<string, number>()
+    for (const reason of failures) tally.set(reason, (tally.get(reason) ?? 0) + 1)
+    const topReason = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+
     const warnings = [
       left > 0
         ? `ดึงไม่ทัน ${left} สินค้า (หมดเวลา ${CATALOG_BUDGET_MS / 1000} วินาที) — กดดึงซ้ำอีกครั้ง`
         : null,
-      failed > 0 ? `${failed} สินค้าที่ปลายทางไม่ตอบ` : null,
+      failures.length > 0
+        ? `${failures.length} สินค้าที่ดึงแพ็กเกจไม่สำเร็จ` +
+          (topReason ? ` — ส่วนใหญ่เพราะ: ${topReason.slice(0, 160)}` : '')
+        : null,
       noPrice > 0 ? `ข้าม ${noPrice} แพ็กเกจที่ JCR ไม่ได้บอกราคา` : null,
     ].filter(Boolean)
 
