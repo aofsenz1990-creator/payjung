@@ -10,6 +10,7 @@ import { adapterFor, supportsAuto, toConfig } from '@/lib/providers/registry'
 import { ProviderError } from '@/lib/providers/types'
 import { bool, friendlyError, int, optStr, str } from '@/lib/form'
 import { ORDER_FIELD_KEYS } from '@/lib/orderField'
+import { parseFieldSpecText } from '@/lib/fieldSpec'
 import type { ActionState } from '@/components/ActionForm'
 
 const AUTH_TYPES = ['bearer', 'apikey', 'basic', 'none']
@@ -156,6 +157,13 @@ export async function saveGameStorefrontAction(formData: FormData): Promise<Acti
   const orderFieldRaw = str(formData, 'order_field')
   const orderField = ORDER_FIELD_KEYS.includes(orderFieldRaw) ? orderFieldRaw : null
 
+  // ช่องกรอกที่ร้านพิมพ์เอง — ทับค่าที่ได้จากผู้ให้บริการเฉพาะเกมนี้
+  // ปล่อยว่าง = กลับไปใช้ของผู้ให้บริการตามเดิม
+  const { fields: customFields, error: fieldError } = parseFieldSpecText(
+    str(formData, 'provider_fields_text')
+  )
+  if (fieldError) return { error: fieldError }
+
   if (!id) return { error: 'ไม่พบเกมนี้' }
   if (imageUrl && !/^https?:\/\//i.test(imageUrl)) {
     return { error: 'ลิงก์รูปต้องขึ้นต้นด้วย http:// หรือ https://' }
@@ -164,9 +172,17 @@ export async function saveGameStorefrontAction(formData: FormData): Promise<Acti
   try {
     await q(
       `update games set image_url = $1, description = $2, sort_order = $3, is_published = $4,
-                        order_field = $6
+                        order_field = $6, provider_fields = $7::jsonb
         where id = $5`,
-      [imageUrl, description, sortOrder, isPublished, id, orderField]
+      [
+        imageUrl,
+        description,
+        sortOrder,
+        isPublished,
+        id,
+        orderField,
+        customFields.length > 0 ? JSON.stringify(customFields) : null,
+      ]
     )
   } catch (err) {
     return { error: friendlyError(err) }

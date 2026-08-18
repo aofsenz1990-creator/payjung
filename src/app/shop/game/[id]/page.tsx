@@ -27,8 +27,10 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
       image_url: string | null
       description: string | null
       order_field: string | null
+      provider_fields: unknown
     }>(
-      'select id, name, image_url, description, order_field from games where id = $1 and is_published and is_active',
+      `select id, name, image_url, description, order_field, provider_fields
+         from games where id = $1 and is_published and is_active`,
       [gameId]
     ),
     q<Omit<BuyPackage, 'fields'> & { provider_fields: unknown; provider_variant: string | null }>(
@@ -45,6 +47,10 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
 
   // ช่องที่ต้องกรอกติดมากับแพ็กเกจ เพราะเกมเดียวกันคนละประเภท (THB / MYR / GOC)
   // ใช้ข้อมูลคนละชุด บางอันขอ UID บางอันขอลิงก์ บางอันขอ AID
+  // ช่องกรอกที่ร้านตั้งเองรายเกม — ใช้ตอนผู้ให้บริการไม่ได้บอกมา
+  // หรือบอกมาไม่ตรงกับที่หน้าเว็บของเขาขอจริง (เช่นต้องกรอก Role ID + เลือกเซิร์ฟเวอร์)
+  const gameFields = jsonArray<BuyField>(game.provider_fields)
+
   const buyPackages: BuyPackage[] = packages.map((p) => ({
     id: p.id,
     name: p.name,
@@ -53,7 +59,8 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
     track_stock: p.track_stock,
     stock_qty: p.stock_qty,
     variant: p.provider_variant,
-    fields: jsonArray<BuyField>(p.provider_fields),
+    // ของร้านมาก่อนเสมอ ถ้าไม่ได้ตั้งไว้ค่อยใช้ของผู้ให้บริการ
+    fields: gameFields ?? jsonArray<BuyField>(p.provider_fields),
   }))
 
   return (

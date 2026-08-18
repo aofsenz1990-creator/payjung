@@ -385,6 +385,8 @@ export const SCHEMA_STATEMENTS: string[] = [
   // ทั้งที่บางเกมต้องใช้ AID หรือให้วางลิงก์ — ช่องนี้ให้ร้านระบุเองได้ว่าเกมนี้ใช้แบบไหน
   // ว่างไว้ = ใช้ตามที่ผู้ให้บริการบอกเหมือนเดิม
   `alter table games add column if not exists order_field text`,
+  // ช่องกรอกที่ร้านตั้งเองรายเกม — ทับค่าที่ได้จากผู้ให้บริการ ใช้กับเกมที่ปลายทางไม่บอกมา
+  `alter table games add column if not exists provider_fields jsonb`,
 
   // ระดับของลูกค้า: 'normal' = ลูกค้าทั่วไป, 'partner' = พาร์ทเนอร์ที่ได้ราคาพิเศษ
   `alter table customers add column if not exists tier text not null default 'normal'`,

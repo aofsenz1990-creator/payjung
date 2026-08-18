@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
 import { jsonArray } from '@/lib/json'
+import { FIELD_SPEC_EXAMPLE, fieldSpecToText, type CustomField } from '@/lib/fieldSpec'
 import { requireAdmin } from '@/lib/auth'
 import {
   deleteProviderAction,
@@ -69,6 +70,8 @@ type GameRow = {
   is_published: boolean
   sort_order: number
   order_field: string | null
+  /** ช่องกรอกที่ร้านตั้งเองรายเกม — ทับค่าที่ผู้ให้บริการบอกมา */
+  provider_fields: unknown
   recent_sales: number
   published_products: number
   total_products: number
@@ -249,7 +252,9 @@ export default async function StorefrontPage({
     ),
     q<ProductRow>(
       `select p.id, p.game_id, g.name as game, p.name, p.sell_price::float8 as sell_price,
-              p.is_published, ap.name as provider_name, p.provider_sku, p.provider_fields
+              p.is_published, ap.name as provider_name, p.provider_sku,
+              -- ที่ร้านตั้งเองรายเกมมาก่อน จะได้เห็นตรงกับที่ลูกค้าเจอจริงบนหน้าเว็บ
+              coalesce(g.provider_fields, p.provider_fields) as provider_fields
          from products p
          join games g on g.id = p.game_id
          left join api_providers ap on ap.id = p.provider_id
@@ -267,7 +272,9 @@ export default async function StorefrontPage({
       : Promise.resolve(null),
     editGame
       ? q1<GameRow>(
-          'select id, name, image_url, description, is_published, sort_order, order_field from games where id = $1',
+          `select id, name, image_url, description, is_published, sort_order, order_field,
+                  provider_fields
+             from games where id = $1`,
           [Number(editGame)]
         )
       : Promise.resolve(null),
@@ -347,6 +354,22 @@ export default async function StorefrontPage({
       byProvider.set(row.provider_id, { name: row.provider_name, price: row.min_price })
     }
   }
+
+  // ช่องกรอกที่ผู้ให้บริการแจ้งมาจริงสำหรับเกมที่กำลังแก้ไข
+  // เอาไว้โชว์ให้เห็นว่าชื่อช่องที่ถูกต้องคืออะไร จะได้พิมพ์ตามให้ตรง ไม่ต้องเดา
+  const detected = editingGame
+    ? await q1<{ fields: unknown }>(
+        `select provider_fields as fields from products
+          where game_id = $1 and provider_fields is not null
+            and jsonb_array_length(provider_fields) > 0
+          limit 1`,
+        [editingGame.id]
+      )
+    : null
+  const editingGameFields =
+    (jsonArray<CustomField>(detected?.fields) ?? [])
+      .map((f) => `${f.key} (${f.label})`)
+      .join(', ') || null
 
   const publishedGames = games.filter((g) => g.is_published).length
   const publishedProducts = products.filter((p) => p.is_published).length
@@ -1145,6 +1168,46 @@ export default async function StorefrontPage({
                   ทุกเกมจึงขึ้นเป็น &quot;ไอดีเกม / UID&quot; เหมือนกันหมด ·
                   เลือกให้ตรงแล้วหน้าเว็บจะเปลี่ยนชื่อช่องและคำอธิบายให้เอง
                 </p>
+              </div>
+
+              {/* เกมที่ต้องกรอกหลายช่อง (Role ID + เลือกเซิร์ฟเวอร์) ตัวเลือกด้านบนเอาไม่อยู่
+                  ตรงนี้ให้พิมพ์เองได้ทั้งชุด เฉพาะเกมนี้เกมเดียว */}
+              <div>
+                <label className="label" htmlFor="provider_fields_text">
+                  กำหนดช่องกรอกเองทั้งชุด (เฉพาะเกมนี้)
+                </label>
+                <textarea
+                  id="provider_fields_text"
+                  name="provider_fields_text"
+                  className="input font-mono text-xs"
+                  rows={4}
+                  defaultValue={fieldSpecToText(
+                    jsonArray<CustomField>(editingGame.provider_fields)
+                  )}
+                  placeholder={FIELD_SPEC_EXAMPLE}
+                  spellCheck={false}
+                />
+                <p className="mt-1 text-xs leading-relaxed text-mute">
+                  หนึ่งบรรทัดต่อหนึ่งช่อง:{' '}
+                  <b className="text-slate-200">ชื่อช่อง | ป้ายที่ลูกค้าเห็น | ตัวเลือก</b> ·
+                  ตัวเลือกเขียนเป็น <span className="font-mono">ค่า=ป้าย</span> คั่นด้วยจุลภาค
+                  (มีตัวเลือก = กลายเป็นดรอปดาวน์ให้เลือก) · เว้นว่าง = ใช้ของผู้ให้บริการตามเดิม
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-warn">
+                  ⚠️ <b>ชื่อช่องต้องตรงกับที่ผู้ให้บริการกำหนดเป๊ะ</b> เพราะถูกส่งกลับไปให้เขาตรง ๆ
+                  ตอนสั่งซื้อ — พิมพ์ผิดตัวเดียวออเดอร์จะถูกปฏิเสธ หรือเติมเข้าผิดเซิร์ฟเวอร์
+                </p>
+                {/* ของจริงที่ผู้ให้บริการบอกมาสำหรับเกมนี้ — ไว้ให้คัดลอกชื่อช่องไปใช้ให้ตรง */}
+                {editingGameFields ? (
+                  <p className="mt-1 text-xs leading-relaxed text-mute">
+                    ผู้ให้บริการของเกมนี้แจ้งมาว่า:{' '}
+                    <span className="font-mono text-good">{editingGameFields}</span>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs leading-relaxed text-mute">
+                    ผู้ให้บริการของเกมนี้ไม่ได้แจ้งช่องกรอกมา — ต้องดูจากหน้าเว็บของเขาแล้วพิมพ์เอง
+                  </p>
+                )}
               </div>
               <div>
                 <label className="label" htmlFor="sort_order">
