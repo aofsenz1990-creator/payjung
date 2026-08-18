@@ -27,9 +27,8 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
       image_url: string | null
       description: string | null
       order_field: string | null
-      provider_fields: unknown
     }>(
-      `select id, name, image_url, description, order_field, provider_fields
+      `select id, name, image_url, description, order_field
          from games where id = $1 and is_published and is_active`,
       [gameId]
     ),
@@ -47,9 +46,18 @@ export default async function ShopGamePage({ params }: { params: Promise<{ id: s
 
   // ช่องที่ต้องกรอกติดมากับแพ็กเกจ เพราะเกมเดียวกันคนละประเภท (THB / MYR / GOC)
   // ใช้ข้อมูลคนละชุด บางอันขอ UID บางอันขอลิงก์ บางอันขอ AID
-  // ช่องกรอกที่ร้านตั้งเองรายเกม — ใช้ตอนผู้ให้บริการไม่ได้บอกมา
-  // หรือบอกมาไม่ตรงกับที่หน้าเว็บของเขาขอจริง (เช่นต้องกรอก Role ID + เลือกเซิร์ฟเวอร์)
-  const gameFields = jsonArray<BuyField>(game.provider_fields)
+  /**
+   * ช่องกรอกที่ร้านตั้งเองรายเกม — ใช้ตอนผู้ให้บริการไม่ได้บอกมา
+   * หรือบอกมาไม่ตรงกับที่หน้าเว็บของเขาขอจริง (เช่นต้องกรอก Role ID + เลือกเซิร์ฟเวอร์)
+   *
+   * ถามแยกและกลืน error ไว้ — คอลัมน์นี้เพิ่งเพิ่ม ถ้าฐานข้อมูลยังปรับโครงสร้างไม่เสร็จ
+   * ต้องไม่ทำให้หน้าซื้อของลูกค้าล่มตามไปด้วย
+   */
+  const override = await q1<{ provider_fields: unknown }>(
+    'select provider_fields from games where id = $1',
+    [gameId]
+  ).catch(() => null)
+  const gameFields = jsonArray<BuyField>(override?.provider_fields)
 
   const buyPackages: BuyPackage[] = packages.map((p) => ({
     id: p.id,

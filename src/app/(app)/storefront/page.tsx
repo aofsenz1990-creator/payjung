@@ -70,8 +70,6 @@ type GameRow = {
   is_published: boolean
   sort_order: number
   order_field: string | null
-  /** ช่องกรอกที่ร้านตั้งเองรายเกม — ทับค่าที่ผู้ให้บริการบอกมา */
-  provider_fields: unknown
   recent_sales: number
   published_products: number
   total_products: number
@@ -252,9 +250,7 @@ export default async function StorefrontPage({
     ),
     q<ProductRow>(
       `select p.id, p.game_id, g.name as game, p.name, p.sell_price::float8 as sell_price,
-              p.is_published, ap.name as provider_name, p.provider_sku,
-              -- ที่ร้านตั้งเองรายเกมมาก่อน จะได้เห็นตรงกับที่ลูกค้าเจอจริงบนหน้าเว็บ
-              coalesce(g.provider_fields, p.provider_fields) as provider_fields
+              p.is_published, ap.name as provider_name, p.provider_sku, p.provider_fields
          from products p
          join games g on g.id = p.game_id
          left join api_providers ap on ap.id = p.provider_id
@@ -272,9 +268,7 @@ export default async function StorefrontPage({
       : Promise.resolve(null),
     editGame
       ? q1<GameRow>(
-          `select id, name, image_url, description, is_published, sort_order, order_field,
-                  provider_fields
-             from games where id = $1`,
+          'select id, name, image_url, description, is_published, sort_order, order_field from games where id = $1',
           [Number(editGame)]
         )
       : Promise.resolve(null),
@@ -355,7 +349,23 @@ export default async function StorefrontPage({
     }
   }
 
-  // ช่องกรอกที่ผู้ให้บริการแจ้งมาจริงสำหรับเกมที่กำลังแก้ไข
+  /**
+   * ช่องกรอกที่ร้านตั้งเองรายเกม กับที่ผู้ให้บริการแจ้งมา
+   *
+   * แยกมาถามต่างหากและกลืน error ไว้ ไม่รวมเข้าไปในคิวรีหลัก
+   * เพราะคอลัมน์ games.provider_fields เพิ่งเพิ่มเข้ามา ถ้าการปรับโครงสร้างฐานข้อมูล
+   * ยังทำไม่สำเร็จ (ขอล็อกตารางไม่ได้เพราะมีคนเปิดหน้าเว็บค้างไว้) คิวรีหลักจะพัง
+   * แล้วทั้งหน้าจะเปิดไม่ได้ — ยอมให้ฟีเจอร์นี้ยังไม่ทำงานดีกว่าทำให้หลังร้านล่ม
+   */
+  const gameOverrides = new Map<number, unknown>()
+  if (tab === 'products' || editingGame) {
+    const rows = await q<{ id: number; provider_fields: unknown }>(
+      `select id, provider_fields from games where provider_fields is not null`
+    ).catch(() => [])
+    for (const row of rows) gameOverrides.set(row.id, row.provider_fields)
+  }
+
+  // ของจริงที่ผู้ให้บริการแจ้งมาสำหรับเกมที่กำลังแก้ไข
   // เอาไว้โชว์ให้เห็นว่าชื่อช่องที่ถูกต้องคืออะไร จะได้พิมพ์ตามให้ตรง ไม่ต้องเดา
   const detected = editingGame
     ? await q1<{ fields: unknown }>(
@@ -366,7 +376,7 @@ export default async function StorefrontPage({
             and jsonb_array_length(provider_fields) > 0
           limit 1`,
         [editingGame.id]
-      )
+      ).catch(() => null)
     : null
   const editingGameFields =
     (jsonArray<CustomField>(detected?.fields) ?? [])
@@ -1184,7 +1194,7 @@ export default async function StorefrontPage({
                   className="input font-mono text-xs"
                   rows={4}
                   defaultValue={fieldSpecToText(
-                    jsonArray<CustomField>(editingGame.provider_fields)
+                    jsonArray<CustomField>(gameOverrides.get(editingGame.id))
                   )}
                   placeholder={FIELD_SPEC_EXAMPLE}
                   spellCheck={false}
@@ -1456,9 +1466,13 @@ export default async function StorefrontPage({
                           ตรวจได้จากตรงนี้เลย ไม่ต้องไปเปิดหน้าเว็บลูกค้าดูทีละเกม */}
                       <span className="mt-1 block text-xs text-mute">
                         {(() => {
-                          const spec = jsonArray<{ key: string; label: string }>(p.provider_fields)
+                          // ที่ร้านตั้งเองรายเกมมาก่อน — ต้องตรงกับที่ลูกค้าเจอจริงบนหน้าเว็บ
+                          const spec =
+                            jsonArray<CustomField>(gameOverrides.get(p.game_id)) ??
+                            jsonArray<CustomField>(p.provider_fields)
                           if (!spec || spec.length === 0) return 'ถามแค่ไอดีเกม'
-                          return `ถาม: ${spec.map((f) => f.label || f.key).join(', ')}`
+                          const from = gameOverrides.has(p.game_id) ? ' (ร้านตั้งเอง)' : ''
+                          return `ถาม: ${spec.map((f) => f.label || f.key).join(', ')}${from}`
                         })()}
                       </span>
                     </td>

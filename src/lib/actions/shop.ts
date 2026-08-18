@@ -344,15 +344,11 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
       track_stock: boolean
       stock_qty: number
       provider_fields: unknown
-      game_fields: unknown
     }>(
       `select p.id, p.game_id, p.name, ${priceExpr(isPartner(customer))}::float8 as sell_price,
               p.cost_price::float8 as cost_price,
-              p.track_stock, p.stock_qty, p.provider_fields,
-              g.provider_fields as game_fields
-         from products p
-         join games g on g.id = p.game_id
-        where p.id = $1 and p.is_active and p.is_published`,
+              p.track_stock, p.stock_qty, p.provider_fields
+         from products p where p.id = $1 and p.is_active and p.is_published`,
       [productId]
     )
     if (!product) return { error: 'แพ็กเกจนี้ปิดขายอยู่' }
@@ -362,8 +358,14 @@ export async function shopOrderAction(formData: FormData): Promise<ActionState> 
     // และถ้าส่งไปไม่ครบ ปลายทางอาจเติมเข้าผิดเซิร์ฟเวอร์ซึ่งเอาเงินคืนไม่ได้
     // ชุดที่ร้านตั้งเองรายเกมมาก่อน ต้องเป็นชุดเดียวกับที่หน้าเว็บแสดง
     // ไม่งั้นลูกค้ากรอกอย่างหนึ่ง แต่ระบบตรวจอีกอย่าง แล้วสั่งไม่ผ่านทั้งที่กรอกครบ
+    // (ถามแยกและกลืน error เหมือนหน้าเว็บ กันกรณีฐานข้อมูลยังปรับโครงสร้างไม่เสร็จ)
+    const override = await q1<{ provider_fields: unknown }>(
+      'select provider_fields from games where id = $1',
+      [product.game_id]
+    ).catch(() => null)
+
     const spec =
-      jsonArray<{ key: string; label: string }>(product.game_fields) ??
+      jsonArray<{ key: string; label: string }>(override?.provider_fields) ??
       jsonArray<{ key: string; label: string }>(product.provider_fields) ??
       []
     let fieldValues: Record<string, string> | null = null
