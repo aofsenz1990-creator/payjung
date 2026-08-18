@@ -21,6 +21,7 @@ type GameRow = {
   publisher: string | null
   note: string | null
   is_active: boolean
+  is_published: boolean
   image_url: string | null
   products: number
   stock: number
@@ -39,7 +40,7 @@ export default async function GamesPage({
 
   const [games, editing, pendingPrices] = await Promise.all([
     q<GameRow>(
-      `select g.id, g.name, g.publisher, g.note, g.is_active, g.image_url,
+      `select g.id, g.name, g.publisher, g.note, g.is_active, g.is_published, g.image_url,
               (select count(*) from products p where p.game_id = g.id)::int as products,
               coalesce((select sum(p.stock_qty) from products p
                          where p.game_id = g.id and p.track_stock), 0)::int as stock,
@@ -50,7 +51,9 @@ export default async function GamesPage({
                        ), 0)::float8 as month_revenue
          from games g
         ${search ? 'where g.name ilike $1 or g.publisher ilike $1 or g.note ilike $1' : ''}
-        order by g.is_active desc, g.name`,
+        -- เกมที่ลูกค้าเห็นบนหน้าเว็บอยู่บนสุด ตามด้วยที่ยังเปิดขายแต่ซ่อนจากเว็บ
+        -- ส่วนที่ซ่อนหรือปิดไปแล้วไหลลงล่าง — ของที่ต้องดูแลบ่อยจะได้อยู่ใกล้มือ
+        order by g.is_published desc, g.is_active desc, g.name`,
       search ? [`%${search}%`] : []
     ),
     edit
@@ -282,11 +285,20 @@ export default async function GamesPage({
                         {money(g.month_revenue)}
                       </td>
                       <td>
-                        {g.is_active ? (
-                          <Badge tone="good">เปิดขาย</Badge>
-                        ) : (
-                          <Badge>ปิดขาย</Badge>
-                        )}
+                        {/* สองเรื่องคนละเรื่องกัน: "เปิดขาย" คือขายที่ร้านได้
+                            ส่วน "บนหน้าเว็บ" คือลูกค้าเห็นและกดซื้อเองได้ — ตารางเรียงตามอันหลัง */}
+                        <div className="flex flex-wrap gap-1">
+                          {g.is_active ? (
+                            <Badge tone="good">เปิดขาย</Badge>
+                          ) : (
+                            <Badge>ปิดขาย</Badge>
+                          )}
+                          {g.is_published ? (
+                            <Badge tone="brand">บนหน้าเว็บ</Badge>
+                          ) : (
+                            <Badge tone="warn">ซ่อนจากเว็บ</Badge>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <div className="flex justify-end gap-1.5">
