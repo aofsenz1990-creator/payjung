@@ -50,7 +50,12 @@ const ERROR_HINT: Record<string, string> = {
     'เลขอ้างอิงนี้เคยส่งไปแล้ว = ออเดอร์เข้าระบบ OverTopup ไปก่อนหน้านี้ ' +
     'ระบบจะไม่สั่งซ้ำ ให้กดตามสถานะแทน',
   ORDER_NOT_FOUND: 'ไม่พบออเดอร์นี้ที่ OverTopup',
+  INTERNAL_ERROR: 'ระบบของ OverTopup ขัดข้องชั่วคราว ระบบจะลองใหม่ให้เอง',
 }
+
+/** ข้อความสำหรับรหัสตระกูล INVALID_{PARAMETER} ที่เอกสารบอกว่าออกได้หลายชื่อ */
+const INVALID_HINT =
+  'ข้อมูลที่ส่งไปไม่ถูกต้องหรือไม่ครบ — กดดึงรายการใหม่เพื่ออัปเดตรหัสสินค้า/ช่องกรอก แล้วลองอีกครั้ง'
 
 type ApiError = { status?: string; code?: string; message?: string }
 
@@ -139,7 +144,9 @@ async function rawApi<T>(
   const body = data as ApiError & { data?: unknown }
   if (body?.status === 'error' || body?.code) {
     const code = body.code ?? 'UNKNOWN'
-    const parts = [ERROR_HINT[code], body.message && `ปลายทางแจ้ง: ${body.message}`]
+    // เอกสารใช้รูปแบบ INVALID_{PARAMETER} เช่น INVALID_PACKAGE_ID จึงดักด้วยคำขึ้นต้น
+    const hint = ERROR_HINT[code] ?? (code.startsWith('INVALID_') ? INVALID_HINT : undefined)
+    const parts = [hint, body.message && `ปลายทางแจ้ง: ${body.message}`]
     const detail = parts.filter(Boolean).join(' · ')
     throw new ProviderError(
       detail ? `${detail} (${code})` : `OverTopup แจ้งข้อผิดพลาด: ${code}`,
@@ -168,6 +175,11 @@ type OrderData = {
   status?: string
   message?: string
   total?: number
+  /**
+   * บัตรเงินสดที่ได้จากการสั่งซื้อสินค้าประเภท card
+   * **นี่คือตัวสินค้าจริงที่ลูกค้าต้องได้รับ** ถ้าไม่เก็บไว้ = ลูกค้าจ่ายเงินแล้วไม่ได้ของ
+   */
+  cards?: Array<{ serial?: string; pin?: string; exp?: string }>
 }
 
 export const overtopup: ProviderAdapter = {
@@ -257,7 +269,17 @@ export const overtopup: ProviderAdapter = {
     }
 
     if (!data) return { state: 'missing', message: 'OverTopup ไม่พบออเดอร์นี้' }
-    return mapStatus(data.status, data.message, data.order_id ?? order.orderId)
+
+    // บัตรเงินสดคือตัวสินค้าเอง ต้องเก็บรหัสไว้ในบิลให้พนักงานส่งต่อให้ลูกค้า
+    // ถ้าปล่อยผ่านไปคือลูกค้าจ่ายเงินแล้วไม่ได้อะไรเลย และตามย้อนหลังไม่ได้ด้วย
+    const cards = (data.cards ?? [])
+      .map((c) => [c.serial, c.pin].filter(Boolean).join(' / '))
+      .filter(Boolean)
+    const detail = [data.message, cards.length > 0 ? `บัตร: ${cards.join(' · ')}` : null]
+      .filter(Boolean)
+      .join(' · ')
+
+    return mapStatus(data.status, detail, data.order_id ?? order.orderId)
   },
 
   /**

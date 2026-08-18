@@ -43,7 +43,6 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
   }
 
   // OverTopup คิดราคาต่างกันตามระดับลูกค้า ดึงผิดระดับ = ราคาทุนในระบบไม่ตรงกับที่ถูกตัดจริง
-  const vip = bool(formData, 'vip')
 
   try {
     /**
@@ -71,7 +70,7 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
     const startedAt = Date.now()
 
     // ตัวเชื่อมบางเจ้าคืนหมายเหตุมาด้วยว่ามีอะไรที่ยังดึงมาไม่ครบ — ต้องเอาไปบอกคนกด
-    const result = await adapter.fetchCatalog(toConfig(provider), { vip, have })
+    const result = await adapter.fetchCatalog(toConfig(provider), { have })
     const fetchMs = Date.now() - startedAt
     const entries = Array.isArray(result) ? result : result.entries
     const note = Array.isArray(result) ? null : result.note
@@ -172,9 +171,6 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
         `รวมที่เก็บไว้ ${games} เกม ${stored?.packs ?? rows.length} รายการสินค้า · ` +
         `ใช้เวลา ${(fetchMs / 1000).toFixed(1)} วิ (ยิง API) + ` +
         `${((Date.now() - startedAt - fetchMs) / 1000).toFixed(1)} วิ (บันทึก)` +
-        (provider.kind === 'overtopup'
-          ? ` (ราคาระดับ ${vip ? 'VIP' : 'ทั่วไป'} — ถ้าไม่ตรงกับที่ถูกตัดจริง ให้ดึงใหม่อีกระดับ)`
-          : '') +
         (note ? ` · ⚠️ ${note}` : ''),
     }
   } catch (err) {

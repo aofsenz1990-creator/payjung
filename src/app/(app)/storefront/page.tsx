@@ -813,15 +813,6 @@ export default async function StorefrontPage({
                   ⬇ ดึงรายการเกมทั้งหมด
                 </SubmitButton>
               </div>
-              {/* OverTopup คิดราคาคนละระดับ ดึงผิดระดับ = ราคาทุนที่บันทึกไว้ไม่ตรงกับที่ถูกตัดจริง */}
-              <label className="mt-2 flex items-center gap-2 text-xs text-slate-200">
-                <input
-                  type="checkbox"
-                  name="vip"
-                  className="size-4 rounded border-ink-600 bg-ink-850"
-                />
-                ร้านเราเป็นลูกค้าระดับ VIP (เฉพาะ OverTopup — ราคาทุนจะต่างจากระดับทั่วไป)
-              </label>
               {/* ปกติจะข้ามสินค้าที่เพิ่งดึงไปเพื่อประหยัดเวลา ติ๊กนี่เมื่อต้องการดึงใหม่หมดจริง ๆ */}
               <label className="mt-2 flex items-center gap-2 text-xs text-slate-200">
                 <input
