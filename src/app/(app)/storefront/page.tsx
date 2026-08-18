@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
+import { jsonArray } from '@/lib/json'
 import { requireAdmin } from '@/lib/auth'
 import {
   deleteProviderAction,
@@ -82,6 +83,8 @@ type ProductRow = {
   is_published: boolean
   provider_name: string | null
   provider_sku: string | null
+  /** ช่องที่ผู้ให้บริการบังคับให้ลูกค้ากรอก — ว่าง = หน้าเว็บจะถามแค่ไอดีเกมช่องเดียว */
+  provider_fields: unknown
 }
 
 type CatalogGame = {
@@ -246,7 +249,7 @@ export default async function StorefrontPage({
     ),
     q<ProductRow>(
       `select p.id, p.game_id, g.name as game, p.name, p.sell_price::float8 as sell_price,
-              p.is_published, ap.name as provider_name, p.provider_sku
+              p.is_published, ap.name as provider_name, p.provider_sku, p.provider_fields
          from products p
          join games g on g.id = p.game_id
          left join api_providers ap on ap.id = p.provider_id
@@ -1374,6 +1377,16 @@ export default async function StorefrontPage({
                       ) : (
                         <Badge tone="warn">ยังไม่ผูก</Badge>
                       )}
+                      {/* ลูกค้าจะถูกถามอะไรบ้างตอนสั่ง — ต้องตรงกับที่ผู้ให้บริการกำหนด
+                          ถามไม่ครบ = ออเดอร์ถูกปฏิเสธ หรือเติมเข้าผิดเซิร์ฟเวอร์
+                          ตรวจได้จากตรงนี้เลย ไม่ต้องไปเปิดหน้าเว็บลูกค้าดูทีละเกม */}
+                      <span className="mt-1 block text-xs text-mute">
+                        {(() => {
+                          const spec = jsonArray<{ key: string; label: string }>(p.provider_fields)
+                          if (!spec || spec.length === 0) return 'ถามแค่ไอดีเกม'
+                          return `ถาม: ${spec.map((f) => f.label || f.key).join(', ')}`
+                        })()}
+                      </span>
                     </td>
                     <td className="font-mono text-xs text-mute">{p.provider_sku ?? '-'}</td>
                     <td>
