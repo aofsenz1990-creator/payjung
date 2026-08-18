@@ -96,6 +96,33 @@ type CatalogGame = {
   synced_at: string
 }
 
+/** ผู้ให้บริการที่มีรายการสินค้าดึงเก็บไว้แล้ว — ใช้ทำแถบเลือกว่าจะดูของเจ้าไหน */
+type CatalogProvider = {
+  provider_id: number
+  provider_name: string
+  games: number
+  packs: number
+  synced_at: string
+}
+
+/** ราคาเริ่มต้นของเกมหนึ่ง ที่ผู้ให้บริการเจ้าหนึ่ง — ใช้เทียบกันว่าเจ้าไหนถูกกว่า */
+type CatalogPrice = {
+  provider_id: number
+  provider_name: string
+  game_name: string
+  min_price: number
+}
+
+/**
+ * กุญแจจับคู่ชื่อเกมข้ามผู้ให้บริการ
+ * แต่ละเจ้าเขียนชื่อไม่เหมือนกันเป๊ะ (ตัวพิมพ์ใหญ่เล็ก เว้นวรรค ขีด วงเล็บ)
+ * ตัดทุกอย่างที่ไม่ใช่ตัวอักษรหรือตัวเลขออก เหลือแต่แก่นชื่อไว้เทียบกัน
+ * ชื่อที่ต่างกันจริง ๆ เช่น "Free Fire" กับ "Free Fire TH" จะยังถือเป็นคนละเกม ซึ่งถูกแล้ว
+ */
+function gameKey(name: string) {
+  return name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+}
+
 type NewsRow = {
   id: number
   title: string
@@ -128,10 +155,16 @@ const AUTH_LABELS: Record<string, string> = {
 export default async function StorefrontPage({
   searchParams,
 }: {
-  searchParams: Promise<{ provider?: string; game?: string; cq?: string; tab?: string }>
+  searchParams: Promise<{
+    provider?: string
+    game?: string
+    cq?: string
+    cp?: string
+    tab?: string
+  }>
 }) {
   await requireAdmin()
-  const { provider: editProvider, game: editGame, cq, tab: tabParam } = await searchParams
+  const { provider: editProvider, game: editGame, cq, cp, tab: tabParam } = await searchParams
 
   // หน้านี้ยาวมาก แบ่งเป็นแท็บให้เลือกดูทีละส่วน
   // ถ้ากำลังแก้ไขอะไรอยู่ ให้เด้งไปแท็บนั้นเอง ไม่งั้นกดแก้ไขแล้วจะหาฟอร์มไม่เจอ
@@ -139,14 +172,50 @@ export default async function StorefrontPage({
     ? 'providers'
     : editGame
       ? 'games'
-      : cq
+      : cq || cp
         ? 'catalog'
         : TABS.some((t) => t.key === tabParam)
           ? (tabParam as string)
           : 'games'
   const catalogSearch = (cq ?? '').trim()
 
-  const [providers, games, products, editingProvider, editingGame, news, settings, catalog] =
+  // ผู้ให้บริการที่มีรายการดึงไว้แล้ว — ต้องรู้ก่อนถึงจะเลือกได้ว่าจะแสดงรายการของเจ้าไหน
+  // (ยิงก่อนชุดใหญ่หนึ่งครั้ง เฉพาะตอนเปิดแท็บนี้ แท็บอื่นไม่เสียเวลา)
+  const catalogProviders =
+    tab === 'catalog'
+      ? await q<CatalogProvider>(
+          `select c.provider_id, ap.name as provider_name,
+                  count(distinct c.game_id)::int as games,
+                  count(*)::int as packs,
+                  max(c.synced_at) as synced_at
+             from provider_catalog c
+             join api_providers ap on ap.id = c.provider_id
+            group by c.provider_id, ap.name
+            order by ap.name`
+        )
+      : []
+
+  // เลือกดูทีละเจ้าเสมอ — เดิมแสดงรวมกันทุกเจ้า ทำให้เทียบราคายาก
+  // และปุ่มนำเข้าจะยิงเข้าเจ้าของแถวแรกเจ้าเดียว ซึ่งผิดถ้ามีหลายเจ้าปนกัน
+  const catalogProviderId =
+    catalogProviders.find((p) => String(p.provider_id) === cp)?.provider_id ??
+    catalogProviders[0]?.provider_id ??
+    null
+  const catalogProvider = catalogProviders.find((p) => p.provider_id === catalogProviderId) ?? null
+
+  const catalogParams: unknown[] = []
+  const catalogWhere: string[] = []
+  if (catalogProviderId !== null) {
+    catalogParams.push(catalogProviderId)
+    catalogWhere.push(`c.provider_id = $${catalogParams.length}`)
+  }
+  if (catalogSearch) {
+    catalogParams.push(`%${catalogSearch}%`)
+    catalogWhere.push(`c.game_name ilike $${catalogParams.length}`)
+  }
+  const catalogFilter = catalogWhere.length > 0 ? `where ${catalogWhere.join(' and ')}` : ''
+
+  const [providers, games, products, editingProvider, editingGame, news, settings, catalog, catalogPrices] =
     await Promise.all([
     q<Provider>(
       `select p.id, p.name, p.kind, p.base_url, p.auth_type, (p.api_key is not null) as has_key,
@@ -196,7 +265,7 @@ export default async function StorefrontPage({
       getSiteSettings(),
       // ตารางรายการสินค้าของผู้ให้บริการมีหลายพันแถว และรวมกลุ่มทุกครั้งที่เปิดหน้า
       // ดึงเฉพาะตอนเปิดแท็บนี้จริง ๆ หน้าที่เหลือจะโหลดเร็วขึ้นมาก
-      tab === 'catalog'
+      tab === 'catalog' && catalogProviderId !== null
       ? q<CatalogGame>(
         `select c.provider_id, c.game_id, min(c.game_name) as game_name,
                 count(*)::int as packs,
@@ -208,13 +277,42 @@ export default async function StorefrontPage({
                   where pr.provider_id = c.provider_id
                     and pr.provider_game_id = c.game_id)::int as imported
            from provider_catalog c
-          ${catalogSearch ? 'where c.game_name ilike $1' : ''}
+          ${catalogFilter}
           group by c.provider_id, c.game_id
           order by min(c.game_name)`,
-        catalogSearch ? [`%${catalogSearch}%`] : []
+        catalogParams
       )
       : Promise.resolve([] as CatalogGame[]),
+      // ราคาเริ่มต้นของทุกเกมของทุกเจ้า — ดึงมาทั้งชุดเพื่อเทียบว่าเกมเดียวกันเจ้าไหนถูกกว่า
+      // (หนึ่งแถวต่อเกมต่อเจ้า ไม่ใช่รายแพ็กเกจ จึงเบากว่าตารางเต็มหลายสิบเท่า)
+      tab === 'catalog'
+      ? q<CatalogPrice>(
+        `select c.provider_id, ap.name as provider_name, c.game_name,
+                min(c.pack_price)::float8 as min_price
+           from provider_catalog c
+           join api_providers ap on ap.id = c.provider_id
+          group by c.provider_id, ap.name, c.game_name`
+      )
+      : Promise.resolve([] as CatalogPrice[]),
     ])
+
+  /**
+   * ราคาเริ่มต้นของแต่ละเกม แยกตามผู้ให้บริการ — เก็บเฉพาะราคาที่ถูกที่สุดของเจ้านั้น
+   * (เจ้าหนึ่งอาจมีชื่อเกมเดียวกันหลายรายการ เช่นแยกภูมิภาค)
+   */
+  const priceByGame = new Map<string, Map<number, { name: string; price: number }>>()
+  for (const row of catalogPrices) {
+    const key = gameKey(row.game_name)
+    let byProvider = priceByGame.get(key)
+    if (!byProvider) {
+      byProvider = new Map()
+      priceByGame.set(key, byProvider)
+    }
+    const current = byProvider.get(row.provider_id)
+    if (!current || row.min_price < current.price) {
+      byProvider.set(row.provider_id, { name: row.provider_name, price: row.min_price })
+    }
+  }
 
   const publishedGames = games.filter((g) => g.is_published).length
   const publishedProducts = products.filter((p) => p.is_published).length
@@ -617,7 +715,10 @@ export default async function StorefrontPage({
               ) : undefined
             }
           >
-            รายการเกมจากผู้ให้บริการ
+            รายการเกมจาก
+            <span className="text-brand-400">
+              {catalogProvider ? ` ${catalogProvider.provider_name}` : 'ผู้ให้บริการ'}
+            </span>
           </SectionTitle>
 
           <div className="mb-4 rounded-xl border border-ink-700 bg-ink-850 p-3">
@@ -687,7 +788,40 @@ export default async function StorefrontPage({
             </p>
           </div>
 
+          {/* เลือกดูทีละเจ้า — ราคาของเจ้าอื่นจะไปแสดงเป็นคอลัมน์เทียบราคาในตารางแทน */}
+          {catalogProviders.length > 0 ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-mute">ดูรายการของ</span>
+              {catalogProviders.map((p) => {
+                const active = p.provider_id === catalogProviderId
+                const href = `/storefront?tab=catalog&cp=${p.provider_id}${
+                  catalogSearch ? `&cq=${encodeURIComponent(catalogSearch)}` : ''
+                }`
+                return (
+                  <Link
+                    key={p.provider_id}
+                    href={href}
+                    className={`chip ${
+                      active ? 'bg-brand-500/15 text-brand-400' : 'bg-ink-800 text-slate-300'
+                    }`}
+                  >
+                    {p.provider_name}
+                    <span className="ml-1 opacity-70">{num(p.games)} เกม</span>
+                  </Link>
+                )
+              })}
+              <span className="w-full text-xs text-mute">
+                คอลัมน์ &ldquo;เทียบราคา&rdquo; จะบอกว่าเกมเดียวกันนี้เจ้าอื่นเริ่มต้นเท่าไร
+                (จับคู่จากชื่อเกม — ชื่อที่เขียนต่างกันมากจะเทียบให้ไม่ได้)
+              </span>
+            </div>
+          ) : null}
+
           <form method="get" className="mb-4 flex gap-2">
+            <input type="hidden" name="tab" value="catalog" />
+            {catalogProviderId !== null ? (
+              <input type="hidden" name="cp" value={catalogProviderId} />
+            ) : null}
             <input
               name="cq"
               className="input"
@@ -715,7 +849,7 @@ export default async function StorefrontPage({
             /* ฟอร์มเดียวครอบทั้งตาราง — ติ๊กเลือกหลายเกมแล้วกดนำเข้าทีเดียว
                ผู้ให้บริการมีเป็นร้อยเกม กดนำเข้าทีละเกมไม่ไหว */
             <ActionForm action={importGamesAction}>
-              <input type="hidden" name="provider_id" value={catalog[0].provider_id} />
+              <input type="hidden" name="provider_id" value={catalogProviderId ?? ''} />
 
               <div className="mb-3 rounded-xl border border-brand-500/30 bg-brand-500/10 p-3">
                 <div className="flex flex-wrap items-end gap-3">
@@ -752,7 +886,10 @@ export default async function StorefrontPage({
                       className="btn-ghost"
                       pendingLabel="กำลังนำเข้า..."
                     >
-                      นำเข้าทั้งหมด ({num(catalog.length)} เกม)
+                      {/* ปุ่มนี้นำเข้าทุกเกมของเจ้านี้เสมอ ไม่สนคำค้น จึงต้องบอกให้ตรง */}
+                      {catalogSearch
+                        ? `นำเข้าทั้งหมดของเจ้านี้ (${num(catalogProvider?.games ?? 0)} เกม)`
+                        : `นำเข้าทั้งหมด (${num(catalog.length)} เกม)`}
                     </SubmitButton>
                   </div>
                 </div>
@@ -771,11 +908,24 @@ export default async function StorefrontPage({
                       <th>เกมฝั่งผู้ให้บริการ</th>
                       <th className="text-right">แพ็กเกจ</th>
                       <th className="text-right">ช่วงราคาทุน</th>
+                      <th>เทียบราคาเริ่มต้นกับเจ้าอื่น</th>
                       <th>สถานะในระบบเรา</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {catalog.map((g) => (
+                    {catalog.map((g) => {
+                      // เกมเดียวกันที่เจ้าอื่นมีขาย เรียงจากถูกไปแพง
+                      const rivals = priceByGame.get(gameKey(g.game_name))
+                      const others = rivals
+                        ? [...rivals]
+                            .filter(([id]) => id !== g.provider_id)
+                            .sort((a, b) => a[1].price - b[1].price)
+                        : []
+                      const cheapestRival = others[0]?.[1].price ?? null
+                      // เท่ากันถือว่าถูกสุดด้วย (บวกเผื่อเศษสตางค์จากการปัด)
+                      const weAreCheapest =
+                        cheapestRival === null || g.min_price <= cheapestRival + 0.01
+                      return (
                       <tr key={`${g.provider_id}-${g.game_id}`}>
                         <td>
                           <input
@@ -794,8 +944,42 @@ export default async function StorefrontPage({
                           </span>
                         </td>
                         <td className="text-right">{num(g.packs)}</td>
-                        <td className="text-right text-mute">
-                          {money(g.min_price)} – {money(g.max_price)}
+                        <td className="text-right">
+                          <span className={weAreCheapest ? 'text-good' : 'text-mute'}>
+                            {money(g.min_price)}
+                          </span>
+                          <span className="text-mute"> – {money(g.max_price)}</span>
+                        </td>
+                        <td>
+                          {others.length === 0 ? (
+                            <span className="text-xs text-mute">— มีเจ้านี้เจ้าเดียว</span>
+                          ) : (
+                            <div className="space-y-0.5 text-xs">
+                              {others.map(([id, o]) => (
+                                <div key={id} className="flex items-center gap-2">
+                                  <span className="text-mute">{o.name}</span>
+                                  <span
+                                    className={
+                                      o.price < g.min_price - 0.01
+                                        ? 'font-semibold text-good'
+                                        : 'text-slate-300'
+                                    }
+                                  >
+                                    เริ่มต้น {money(o.price)}
+                                  </span>
+                                </div>
+                              ))}
+                              <div className="pt-0.5">
+                                {weAreCheapest ? (
+                                  <Badge tone="good">เจ้านี้ถูกสุด</Badge>
+                                ) : (
+                                  <Badge tone="bad">
+                                    แพงกว่า {money(g.min_price - (cheapestRival ?? 0))}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </td>
                         <td>
                           {g.imported > 0 ? (
@@ -805,7 +989,8 @@ export default async function StorefrontPage({
                           )}
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
