@@ -774,7 +774,14 @@ export const jcr: ProviderAdapter = {
         )
         // JSON ไม่ได้บอกมา — ไปอ่านจากแบบฟอร์มที่เขาเปิดให้ดึง (?format=html) แทน
         if (productFields.length === 0) {
-          productFields = await formFieldsOf(productId)
+          try {
+            productFields = await formFieldsOf(productId)
+          } catch (err) {
+            // หมดเวลาแล้ว — หยุดเส้นนี้ ไม่ใช่โยนทิ้งทั้งรอบ
+            // ของที่เก็บมาได้ก่อนหน้านี้ต้องได้บันทึก ไม่งั้นกดซ้ำกี่รอบก็ไม่คืบ
+            if (err instanceof OutOfTime) return
+            throw err
+          }
           if (productFields.length > 0) fromForm++
         }
 
@@ -807,15 +814,22 @@ export const jcr: ProviderAdapter = {
               (dynamic ? ' (ระบุจำนวนเอง — ราคาต่อหน่วย)' : ''),
             price,
             productType: dynamic ? 'dynamic' : 'fixed',
-            fields: fields.length > 0 ? fields : null,
+            // ส่ง [] เมื่อสินค้านี้ไม่มีช่องกรอกจริง ๆ (ไม่ใช่ null ที่แปลว่า "ยังไม่รู้")
+            // ระบบจะได้ไม่วนกลับมาถามฟอร์มของสินค้าตัวเดิมซ้ำทุกรอบจนไม่คืบไปไหน
+            fields,
           })
         }
       }
     }
 
-    await Promise.all(
-      Array.from({ length: Math.min(CATALOG_CONCURRENCY, products.length) }, worker)
-    )
+    // กันไว้อีกชั้น — ไม่ว่าเกิดอะไรขึ้นระหว่างทาง ของที่เก็บมาได้ต้องถูกส่งกลับไปบันทึกเสมอ
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(CATALOG_CONCURRENCY, products.length) }, worker)
+      )
+    } catch (err) {
+      if (!(err instanceof OutOfTime)) throw err
+    }
 
     // ยังเหลือสินค้าที่ไม่ได้แตะเลยในรอบนี้ (หมดเวลา) หรือแตะแล้วแต่ไม่สำเร็จ
     const left = products.length - handled - failures.length

@@ -93,7 +93,8 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
       e.packDesc,
       e.price,
       // เก็บเป็นข้อความ JSON แล้วให้ Postgres แปลงเป็น jsonb ตอน insert
-      e.fields && e.fields.length > 0 ? JSON.stringify(e.fields) : null,
+      // แยกให้ชัดระหว่าง [] (ถามแล้ว ไม่มีช่องกรอกจริง ๆ) กับ null (ยังไม่รู้ ต้องไปถามใหม่)
+      e.fields ? JSON.stringify(e.fields) : null,
       e.productType ?? null,
     ])
 
