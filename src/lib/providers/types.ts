@@ -98,9 +98,15 @@ export type BalanceResult = {
 export class ProviderError extends Error {
   /** true = ลองใหม่แล้วมีโอกาสสำเร็จ (เน็ตสะดุด/ปลายทางล่มชั่วคราว) */
   readonly retryable: boolean
-  constructor(message: string, retryable = false) {
+  /**
+   * ปลายทางบอกเองว่าให้รออีกกี่มิลลิวินาทีค่อยลองใหม่ (จาก header `Retry-After`)
+   * เดาเวลารอเองมักผิด — รอสั้นไปก็โดนกันอีก รอนานไปก็เสียเวลาฟรี
+   */
+  readonly retryAfterMs: number | null
+  constructor(message: string, retryable = false, retryAfterMs: number | null = null) {
     super(message)
     this.retryable = retryable
+    this.retryAfterMs = retryAfterMs
   }
 }
 
@@ -138,7 +144,15 @@ export type CatalogEntry = {
  * `note` ไว้บอกสิ่งที่ "ไม่ได้ดึงมา" เช่นโดนตัดเพราะหมดเวลา หรือข้ามเพราะปลายทางไม่บอกราคา
  * ถ้าไม่บอก คนกดจะเข้าใจว่าได้ครบทั้งที่ไม่ครบ แล้วไปงงตอนหาแพ็กเกจไม่เจอ
  */
-export type CatalogResult = { entries: CatalogEntry[]; note?: string | null }
+export type CatalogResult = {
+  entries: CatalogEntry[]
+  note?: string | null
+  /**
+   * true = ยังดึงมาไม่ครบทั้งร้าน (โดนกัน/หมดเวลา) กดซ้ำเพื่อดึงส่วนที่เหลือได้
+   * ตอนไม่ครบ ห้ามล้างของเดิมทิ้งแล้วใส่ชุดใหม่ ไม่งั้นกดซ้ำเท่าไรก็ไม่มีวันครบ
+   */
+  partial?: boolean
+}
 
 export type ProviderAdapter = {
   kind: string
@@ -158,6 +172,13 @@ export type ProviderAdapter = {
    */
   fetchCatalog?(
     config: ProviderConfig,
-    opts: { vip: boolean }
+    opts: {
+      vip: boolean
+      /**
+       * รหัสสินค้าที่เพิ่งดึงมาแล้วและยังใหม่พอ — ข้ามไปได้เลย
+       * มีไว้ให้เจ้าที่ต้องยิงทีละสินค้าและโดนกันกลางทาง กดซ้ำแล้วไปต่อจากที่ค้างไว้
+       */
+      have?: ReadonlySet<string>
+    }
   ): Promise<CatalogEntry[] | CatalogResult>
 }

@@ -37,16 +37,53 @@ const LIST_MAX_PAGES = 4
 
 /**
  * ดึงรายการสินค้า — ยิงพร้อมกันได้กี่เส้น และให้เวลาทั้งหมดเท่าไร (Vercel ตัดที่ 60 วินาที)
- * ยิงพร้อมกันเยอะเกินไปจะโดนปลายทางกันไว้ (rate limit) แล้วได้ของมาไม่ครบ
- * 4 เส้นพร้อมกัน + ลองใหม่เมื่อโดนกัน ได้ครบกว่ายิงรัว ๆ 6 เส้นแล้วพลาดครึ่งหนึ่ง
+ *
+ * JCR กันการยิงถี่ไว้ (ตอบ rate_limit_exceeded พร้อมบอกเวลาที่ต้องรอใน Retry-After)
+ * จึงไม่ยิงรัวแล้วค่อยแก้ตอนโดนกัน แต่เว้นจังหวะให้พอดีตั้งแต่แรก
+ * เร็วกว่าเพราะไม่ต้องเสียเที่ยวยิงทิ้ง และไม่ทำให้ปลายทางเดือดร้อน
  */
-const CATALOG_CONCURRENCY = 4
+const CATALOG_CONCURRENCY = 3
 const CATALOG_BUDGET_MS = 45_000
+
+/** เว้นระยะระหว่างการยิงแต่ละครั้งอย่างน้อยเท่านี้ (ราว 2.8 ครั้งต่อวินาที) */
+const CATALOG_GAP_MS = 360
 
 /** ลองใหม่กี่ครั้งเมื่อเส้นนั้นพลาดแบบที่ลองใหม่แล้วมีโอกาสสำเร็จ */
 const CATALOG_RETRIES = 3
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * ตัวคุมจังหวะการยิงที่ทุกเส้นใช้ร่วมกัน
+ * จองคิวเวลาไว้ล่วงหน้าทีละคน จึงไม่มีทางยิงพร้อมกันเป็นกระจุก
+ * และเมื่อโดนกัน ให้ทุกเส้นหยุดพร้อมกันตามเวลาที่ปลายทางบอกมา
+ * (ถ้าหยุดแค่เส้นที่โดน เส้นที่เหลือจะยิงต่อจนโดนกันทั้งหมดอยู่ดี)
+ */
+class Pacer {
+  private nextAt = 0
+  constructor(private readonly gap: number) {}
+
+  async take() {
+    const now = Date.now()
+    const at = Math.max(now, this.nextAt)
+    this.nextAt = at + this.gap
+    if (at > now) await sleep(at - now)
+  }
+
+  /** ปลายทางสั่งให้พัก — เลื่อนคิวของทุกเส้นออกไป */
+  pause(ms: number) {
+    this.nextAt = Math.max(this.nextAt, Date.now() + ms)
+  }
+}
+
+/** อ่าน Retry-After ที่ปลายทางส่งมา รองรับทั้งแบบจำนวนวินาทีและแบบวันที่ */
+function retryAfterMs(header: string | null): number | null {
+  if (!header) return null
+  const seconds = Number(header.trim())
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000)
+  const at = Date.parse(header)
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null
+}
 
 type Json = Record<string, unknown>
 
@@ -144,7 +181,8 @@ async function api(
     throw new ProviderError(
       detail ? `${detail} (${code})` : `JCR แจ้งข้อผิดพลาด: ${code}`,
       // 429 = โดนกันเพราะยิงถี่ ลองใหม่ทีหลังได้เสมอ แม้ปลายทางจะไม่ได้ส่งรหัสมาให้
-      RETRYABLE.has(code) || res.status >= 500 || res.status === 429
+      RETRYABLE.has(code) || res.status >= 500 || res.status === 429,
+      retryAfterMs(res.headers.get('retry-after'))
     )
   }
 
@@ -526,14 +564,26 @@ export const jcr: ProviderAdapter = {
    * ฝั่ง JCR แยกเป็นคนละสินค้า (คนละ productId) แต่ใช้ชื่อเดียวกัน
    * ที่นี่จึงได้มาหลายชุดชื่อซ้ำกัน ซึ่งถูกแล้ว — ต้องนำเข้าให้ครบทุกชุดถึงจะได้แพ็กเกจครบ
    */
-  async fetchCatalog(config) {
-    const products = asArray(await api(config, 'products'), 'products')
-    if (products.length === 0) {
+  async fetchCatalog(config, opts) {
+    const all = asArray(await api(config, 'products'), 'products')
+    if (all.length === 0) {
       throw new ProviderError('JCR ไม่ได้ส่งรายการสินค้ามาเลย — ตรวจสอบสิทธิ์ของคีย์กับทีมงาน JCR')
     }
 
+    // สินค้าที่เพิ่งดึงไปแล้วในรอบก่อน ข้ามไปก่อน จะได้เอาเวลาที่มีไปดึงส่วนที่ยังขาด
+    // (ทั้งร้านมีสองร้อยกว่าสินค้า ยิงทีเดียวไม่ทันในเวลาที่ Vercel ให้ ต้องกดซ้ำสะสม)
+    const have = opts?.have
+    const products = have
+      ? all.filter((p) => {
+          const id = pickString(p, ['id', 'productId', 'product_id', 'code'])
+          return !id || !have.has(id)
+        })
+      : all
+    const skipped = all.length - products.length
+
     const out: CatalogEntry[] = []
     const deadline = Date.now() + CATALOG_BUDGET_MS
+    const pacer = new Pacer(CATALOG_GAP_MS)
     let cursor = 0
     /** แพ็กเกจที่ปลายทางไม่บอกราคา — ข้ามไปเพราะตั้งราคาขายให้ไม่ได้ */
     let noPrice = 0
@@ -547,6 +597,7 @@ export const jcr: ProviderAdapter = {
      */
     const packagesOf = async (productId: string): Promise<Json[]> => {
       for (let attempt = 1; ; attempt++) {
+        await pacer.take()
         try {
           return asArray(
             await api(config, `products/${encodeURIComponent(productId)}/packages`),
@@ -554,9 +605,12 @@ export const jcr: ProviderAdapter = {
           )
         } catch (err) {
           const canRetry = err instanceof ProviderError && err.retryable
-          if (!canRetry || attempt >= CATALOG_RETRIES || Date.now() > deadline) throw err
-          // ถอยห่างขึ้นเรื่อย ๆ ให้ปลายทางได้พัก
-          await sleep(400 * attempt)
+          if (!canRetry) throw err
+          // ปลายทางบอกเวลามาก็รอตามนั้น ไม่ได้บอกก็ถอยห่างขึ้นเรื่อย ๆ
+          const wait = (err as ProviderError).retryAfterMs ?? 500 * attempt
+          // ให้ทุกเส้นพักพร้อมกัน ไม่งั้นเส้นอื่นจะยิงต่อจนโดนกันตามไปด้วย
+          pacer.pause(wait)
+          if (attempt >= CATALOG_RETRIES || Date.now() + wait > deadline) throw err
         }
       }
     }
@@ -620,30 +674,40 @@ export const jcr: ProviderAdapter = {
       Array.from({ length: Math.min(CATALOG_CONCURRENCY, products.length) }, worker)
     )
 
-    if (out.length === 0) {
+    // ยังเหลือสินค้าที่ไม่ได้แตะเลยในรอบนี้ (หมดเวลา) หรือแตะแล้วแต่ไม่สำเร็จ
+    const left = products.length - cursor
+    // นับ "ที่ข้ามเพราะดึงไว้แล้ว" เป็นไม่ครบด้วย — รอบนี้ไม่ได้ดึงของพวกนั้นมา
+    // ถ้าบอกว่าครบ ฝั่งที่บันทึกจะล้างของเดิมทิ้งแล้วใส่เฉพาะรอบนี้ = ของที่สะสมมาหายหมด
+    const partial = left > 0 || failures.length > 0 || skipped > 0
+
+    if (out.length === 0 && !partial) {
       throw new ProviderError(
         'ดึงรายการจาก JCR ได้ แต่ไม่มีแพ็กเกจที่ระบุราคาไว้เลย — ตรวจสอบสิทธิ์ราคาตัวแทนกับทีมงาน JCR'
       )
     }
 
-    // สิ่งที่ยังไม่ได้ดึงมา ต้องบอกให้รู้ ไม่ใช่ปล่อยให้เข้าใจว่าครบ
-    const left = products.length - cursor
     // เหตุผลที่เจอบ่อยที่สุด — บอกไปด้วยจะได้รู้ว่าต้องแก้ที่ไหน (โดนกัน / คีย์ / สินค้าปิด)
     const tally = new Map<string, number>()
     for (const reason of failures) tally.set(reason, (tally.get(reason) ?? 0) + 1)
     const topReason = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
 
     const warnings = [
+      skipped > 0 ? `ข้าม ${skipped} สินค้าที่ดึงไว้แล้วก่อนหน้านี้` : null,
       left > 0
-        ? `ดึงไม่ทัน ${left} สินค้า (หมดเวลา ${CATALOG_BUDGET_MS / 1000} วินาที) — กดดึงซ้ำอีกครั้ง`
+        ? `ยังเหลืออีก ${left} สินค้า (หมดเวลา ${CATALOG_BUDGET_MS / 1000} วินาที)`
         : null,
       failures.length > 0
         ? `${failures.length} สินค้าที่ดึงแพ็กเกจไม่สำเร็จ` +
-          (topReason ? ` — ส่วนใหญ่เพราะ: ${topReason.slice(0, 160)}` : '')
+          (topReason ? ` — ส่วนใหญ่เพราะ: ${topReason.slice(0, 140)}` : '')
         : null,
       noPrice > 0 ? `ข้าม ${noPrice} แพ็กเกจที่ JCR ไม่ได้บอกราคา` : null,
+      partial ? '👉 กด "ดึงรายการเกมทั้งหมด" ซ้ำอีกครั้ง ระบบจะไปต่อจากที่ค้างไว้' : null,
     ].filter(Boolean)
 
-    return { entries: out, note: warnings.length > 0 ? warnings.join(' · ') : null }
+    return {
+      entries: out,
+      partial,
+      note: warnings.length > 0 ? warnings.join(' · ') : null,
+    }
   },
 }

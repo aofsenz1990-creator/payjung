@@ -45,10 +45,21 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
   const vip = bool(formData, 'vip')
 
   try {
+    // สินค้าที่เพิ่งดึงมาไม่นาน — ส่งไปให้ตัวเชื่อมข้าม จะได้เอาเวลาไปดึงส่วนที่ยังขาด
+    // เกินสองชั่วโมงถือว่าเก่าแล้ว ดึงใหม่ทั้งหมดเพื่อให้ราคาตรงกับปลายทาง
+    const fresh = await q<{ game_id: string }>(
+      `select distinct game_id from provider_catalog
+        where provider_id = $1 and synced_at > now() - interval '2 hours'`,
+      [providerId]
+    )
+    const have = new Set(fresh.map((r) => r.game_id))
+
     // ตัวเชื่อมบางเจ้าคืนหมายเหตุมาด้วยว่ามีอะไรที่ยังดึงมาไม่ครบ — ต้องเอาไปบอกคนกด
-    const result = await adapter.fetchCatalog(toConfig(provider), { vip })
+    const result = await adapter.fetchCatalog(toConfig(provider), { vip, have })
     const entries = Array.isArray(result) ? result : result.entries
     const note = Array.isArray(result) ? null : result.note
+    // ดึงมาไม่ครบ = ห้ามล้างของเดิมทิ้ง ไม่งั้นกดซ้ำเท่าไรก็วนอยู่ที่เดิม ไม่มีวันครบ
+    const partial = Array.isArray(result) ? false : Boolean(result.partial)
 
     type Row = [
       number, string, string, string, string | null,
@@ -69,10 +80,20 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
       e.productType ?? null,
     ])
 
-    if (rows.length === 0) return { error: 'ปลายทางไม่ได้ส่งรายการสินค้ามาเลย' }
+    if (rows.length === 0) {
+      // ไม่ได้อะไรมาเลยเพราะดึงครบไปแล้วตั้งแต่รอบก่อน ไม่ใช่ความผิดพลาด
+      if (partial) {
+        revalidatePath('/storefront')
+        return { ok: `ไม่มีรายการใหม่ในรอบนี้${note ? ` · ⚠️ ${note}` : ''}` }
+      }
+      return { error: 'ปลายทางไม่ได้ส่งรายการสินค้ามาเลย' }
+    }
 
-    // ล้างของเก่าของเจ้านี้แล้วใส่ชุดใหม่ทั้งหมด จะได้ตรงกับปลายทางเสมอ
-    await q('delete from provider_catalog where provider_id = $1', [providerId])
+    // ได้มาครบทั้งร้าน = ล้างของเก่าแล้วใส่ชุดใหม่ทั้งหมด จะได้ตรงกับปลายทางเสมอ
+    // ได้มาไม่ครบ = เก็บของเดิมไว้ แล้วทับเฉพาะที่เพิ่งดึงมา (กดซ้ำเพื่อสะสมให้ครบ)
+    if (!partial) {
+      await q('delete from provider_catalog where provider_id = $1', [providerId])
+    }
 
     const CHUNK = 400
     for (let i = 0; i < rows.length; i += CHUNK) {
@@ -91,16 +112,31 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
            (provider_id, game_id, game_name, server_id, server_name, pack_code, pack_name,
             pack_desc, pack_price, fields, product_type)
          values ${values}
-         on conflict (provider_id, game_id, server_id, pack_code) do nothing`,
+         on conflict (provider_id, game_id, server_id, pack_code) do update
+            set game_name = excluded.game_name,
+                server_name = excluded.server_name,
+                pack_name = excluded.pack_name,
+                pack_desc = excluded.pack_desc,
+                pack_price = excluded.pack_price,
+                fields = excluded.fields,
+                product_type = excluded.product_type,
+                synced_at = now()`,
         chunk.flat()
       )
     }
 
-    const games = new Set(rows.map((r) => r[1])).size
+    // รายงานจากของที่เก็บไว้จริงทั้งหมด ไม่ใช่แค่รอบนี้ — ตอนกดซ้ำสะสมจะได้เห็นว่าคืบไปถึงไหน
+    const stored = await q1<{ games: number; packs: number }>(
+      `select count(distinct game_id)::int as games, count(*)::int as packs
+         from provider_catalog where provider_id = $1`,
+      [providerId]
+    )
+    const games = stored?.games ?? new Set(rows.map((r) => r[1])).size
     revalidatePath('/storefront')
     return {
       ok:
-        `ดึงรายการสำเร็จ — ${games} เกม รวม ${rows.length} รายการสินค้า` +
+        `ดึงรายการสำเร็จ — รอบนี้ได้ ${rows.length} รายการ · ` +
+        `รวมที่เก็บไว้ ${games} เกม ${stored?.packs ?? rows.length} รายการสินค้า` +
         (provider.kind === 'overtopup'
           ? ` (ราคาระดับ ${vip ? 'VIP' : 'ทั่วไป'} — ถ้าไม่ตรงกับที่ถูกตัดจริง ให้ดึงใหม่อีกระดับ)`
           : '') +
