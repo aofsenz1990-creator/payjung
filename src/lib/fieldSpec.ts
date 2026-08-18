@@ -86,3 +86,13 @@ export function fieldSpecToText(fields: CustomField[] | null | undefined): strin
     })
     .join('\n')
 }
+
+/**
+ * กุญแจจับคู่ชื่อเกมข้ามผู้ให้บริการ
+ * แต่ละเจ้าเขียนชื่อไม่เหมือนกันเป๊ะ (ตัวพิมพ์ใหญ่เล็ก เว้นวรรค ขีด วงเล็บ)
+ * ตัดทุกอย่างที่ไม่ใช่ตัวอักษรหรือตัวเลขออก เหลือแต่แก่นชื่อไว้เทียบกัน
+ * ชื่อที่ต่างกันจริง ๆ เช่น "Free Fire" กับ "Free Fire TH" จะยังถือเป็นคนละเกม ซึ่งถูกแล้ว
+ */
+export function gameKey(name: string) {
+  return name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+}

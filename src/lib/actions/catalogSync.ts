@@ -4,11 +4,80 @@ import { revalidatePath } from 'next/cache'
 import { q, q1 } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth'
 import { BuymError } from '@/lib/providers/24buym'
+import { PROVIDER_KIND_META } from '@/lib/providers/constants'
 import { adapterFor, toConfig } from '@/lib/providers/registry'
 import { OutOfTime } from '@/lib/providers/http'
 import { ProviderError } from '@/lib/providers/types'
 import { bool, decimal, friendlyError, int, str } from '@/lib/form'
+import { gameKey, type CustomField } from '@/lib/fieldSpec'
+import { jsonArray } from '@/lib/json'
 import type { ActionState } from '@/components/ActionForm'
+
+/**
+ * เดาชื่อช่องกรอกให้เจ้าที่ไม่บอกมา โดยยืมจากเกมเดียวกันของเจ้าอื่น
+ *
+ * 24BUYM ไม่ส่งรายการช่องกรอกมาเลย (ยืนยันจากเอกสารแล้ว) ทุกเกมจึงขึ้นว่า "ไอดีเกม / UID"
+ * เหมือนกันหมด ทั้งที่บางเกมต้องใช้ Role ID หรือ Riot ID ซึ่งลูกค้าจะงงว่าต้องกรอกอะไร
+ *
+ * แต่ฝั่งสั่งซื้อของเจ้านี้รับแค่ค่าเดียว (UserID) โดยไม่สนว่าเราเรียกช่องนั้นว่าอะไร
+ * การยืม "ป้ายกำกับ" จากเจ้าอื่นจึงปลอดภัย — ลูกค้าเห็นชื่อที่ถูกต้อง
+ * ส่วนค่าที่กรอกก็ยังถูกส่งไปเป็น UserID เหมือนเดิม
+ *
+ * ยืมเฉพาะช่องพิมพ์เองช่องแรกเท่านั้น ไม่ยืมดรอปดาวน์อย่างเซิร์ฟเวอร์/ภูมิภาค
+ * เพราะเลขเซิร์ฟเวอร์ของแต่ละเจ้าไม่ตรงกัน ส่งข้ามเจ้าไปคือเติมผิดเซิร์ฟเวอร์
+ * (ของ 24BUYM เซิร์ฟเวอร์ติดมากับตัวแพ็กเกจอยู่แล้ว)
+ */
+async function borrowFieldLabels(): Promise<number> {
+  const kinds = PROVIDER_KIND_META.filter((m) => m.borrowsFieldLabels).map((m) => m.kind)
+  if (kinds.length === 0) return 0
+
+  const donors = await q<{ game_name: string; fields: unknown }>(
+    `select game_name, fields from provider_catalog
+      where jsonb_typeof(fields) = 'array' and jsonb_array_length(fields) > 0`
+  )
+  const mainByGame = new Map<string, CustomField>()
+  for (const donor of donors) {
+    const key = gameKey(donor.game_name)
+    if (mainByGame.has(key)) continue
+    const main = (jsonArray<CustomField>(donor.fields) ?? []).find((f) => !f.options?.length)
+    if (main) mainByGame.set(key, main)
+  }
+  if (mainByGame.size === 0) return 0
+
+  const holes = kinds.map((_, i) => `$${i + 1}`).join(',')
+  const targets = await q<{ provider_id: number; game_id: string; game_name: string }>(
+    `select distinct c.provider_id, c.game_id, c.game_name
+       from provider_catalog c
+       join api_providers ap on ap.id = c.provider_id
+      where ap.kind in (${holes}) and c.fields is null`,
+    kinds
+  )
+
+  // จัดกลุ่มตามชุดที่จะใส่ เพื่อยิงคำสั่งเดียวต่อหนึ่งกลุ่ม (ฐานข้อมูลต่อได้ทีละคำสั่ง)
+  const groups = new Map<string, { providerId: number; spec: string; gameIds: string[] }>()
+  for (const t of targets) {
+    const main = mainByGame.get(gameKey(t.game_name))
+    if (!main) continue
+    const spec = JSON.stringify([{ key: main.key, label: main.label }])
+    const bucket = `${t.provider_id}|${spec}`
+    const found = groups.get(bucket)
+    if (found) found.gameIds.push(t.game_id)
+    else groups.set(bucket, { providerId: t.provider_id, spec, gameIds: [t.game_id] })
+  }
+
+  let changed = 0
+  for (const group of groups.values()) {
+    const ids = group.gameIds.map((_, i) => `$${i + 3}`).join(',')
+    const rows = await q<{ game_id: string }>(
+      `update provider_catalog set fields = $1::jsonb
+        where provider_id = $2 and fields is null and game_id in (${ids})
+       returning game_id`,
+      [group.spec, group.providerId, ...group.gameIds]
+    )
+    changed += new Set(rows.map((r) => r.game_id)).size
+  }
+  return changed
+}
 
 /**
  * ดึงรายการเกม/เซิร์ฟเวอร์/แพ็กเกจทั้งหมดจากผู้ให้บริการมาเก็บไว้
@@ -158,6 +227,10 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
       ])
     }
 
+    // เกมเดียวกันของอีกเจ้าอาจบอกไว้แล้วว่าลูกค้าต้องกรอกอะไร — ยืมมาเติมให้เจ้าที่ไม่บอก
+    // ทำหลังบันทึกทุกครั้ง เพราะเจ้าที่เพิ่งดึงอาจเป็นได้ทั้งฝ่ายให้ยืมและฝ่ายยืม
+    const borrowed = await borrowFieldLabels().catch(() => 0)
+
     // รายงานจากของที่เก็บไว้จริงทั้งหมด ไม่ใช่แค่รอบนี้ — ตอนกดซ้ำสะสมจะได้เห็นว่าคืบไปถึงไหน
     const stored = await q1<{ games: number; packs: number }>(
       `select count(distinct game_id)::int as games, count(*)::int as packs
@@ -175,6 +248,7 @@ export async function syncCatalogAction(formData: FormData): Promise<ActionState
         (provider.kind === 'overtopup'
           ? ` (ราคาระดับ ${vip ? 'VIP' : 'ทั่วไป'} — ถ้าไม่ตรงกับที่ถูกตัดจริง ให้ดึงใหม่อีกระดับ)`
           : '') +
+        (borrowed > 0 ? ` · เดาช่องกรอกให้ ${borrowed} เกมจากข้อมูลของเจ้าอื่น` : '') +
         (note ? ` · ⚠️ ${note}` : ''),
     }
   } catch (err) {

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { q, q1 } from '@/lib/db'
 import { jsonArray } from '@/lib/json'
-import { FIELD_SPEC_EXAMPLE, fieldSpecToText, type CustomField } from '@/lib/fieldSpec'
+import { FIELD_SPEC_EXAMPLE, fieldSpecToText, gameKey, type CustomField } from '@/lib/fieldSpec'
 import { requireAdmin } from '@/lib/auth'
 import {
   deleteProviderAction,
@@ -115,16 +115,6 @@ type CatalogPrice = {
   provider_name: string
   game_name: string
   min_price: number
-}
-
-/**
- * กุญแจจับคู่ชื่อเกมข้ามผู้ให้บริการ
- * แต่ละเจ้าเขียนชื่อไม่เหมือนกันเป๊ะ (ตัวพิมพ์ใหญ่เล็ก เว้นวรรค ขีด วงเล็บ)
- * ตัดทุกอย่างที่ไม่ใช่ตัวอักษรหรือตัวเลขออก เหลือแต่แก่นชื่อไว้เทียบกัน
- * ชื่อที่ต่างกันจริง ๆ เช่น "Free Fire" กับ "Free Fire TH" จะยังถือเป็นคนละเกม ซึ่งถูกแล้ว
- */
-function gameKey(name: string) {
-  return name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
 type NewsRow = {

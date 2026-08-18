@@ -48,6 +48,11 @@ export type ProviderKindMeta = {
   autoSupported: boolean
   /** มีสภาพแวดล้อมทดสอบให้ยิงโดยไม่เสียเงินจริง */
   hasSandbox?: boolean
+  /**
+   * เจ้านี้ไม่บอกมาว่าลูกค้าต้องกรอกอะไร และฝั่งสั่งซื้อรับค่าเดียวโดยไม่สนชื่อช่อง
+   * (24BUYM รับแค่ UserID) จึงยืมชื่อช่องของเกมเดียวกันจากเจ้าอื่นมาใช้เป็นป้ายได้อย่างปลอดภัย
+   */
+  borrowsFieldLabels?: boolean
   /** ชื่อหน่วยเงินที่เจ้านั้นใช้เรียก */
   unit: string
 }
@@ -59,6 +64,7 @@ export const PROVIDER_KIND_META: ProviderKindMeta[] = [
     needsUsername: false,
     fixedBaseUrl: BUYM_DEFAULT_BASE,
     autoSupported: true,
+    borrowsFieldLabels: true,
     unit: 'พอยต์',
   },
   {
