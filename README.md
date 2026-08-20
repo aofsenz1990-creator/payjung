@@ -80,6 +80,27 @@ git init && git add -A && git commit -m "Pay Jung dashboard" && git branch -M ma
 
 บัญชีถูกสร้างใน Supabase Auth และยืนยันอีเมลให้เลย จึงล็อกอินได้ทันทีโดยไม่ต้องรอเมลยืนยัน
 
+### 5. ผูกโดเมนร้าน — ข้ามไม่ได้ ไม่งั้นลูกค้าเข้าหน้าร้านไม่ได้
+
+โดเมนที่ Vercel แจกให้ (`xxx.vercel.app`, `xxx-git-main-xxx.vercel.app`) **ถูก Deployment Protection
+เอาหน้าล็อกอินของ Vercel มาบังไว้** เจ้าของร้านเปิดได้เพราะล็อกอิน Vercel ค้างอยู่ แต่ลูกค้าทั่วไป
+จะโดนเด้งไป `vercel.com/login` ทุกคน · Vercel เว้นให้เฉพาะ **โดเมนของเราเองที่ผูกกับ Production**
+
+1. **Settings → Domains** → เพิ่ม `payjung-shop.com` และ `www.payjung-shop.com`
+   → ตั้ง Branch เป็น **`main` (Production)** ⚠ ถ้าผูกเป็น Preview จะยังโดนบังเหมือนเดิม
+2. **Settings → Deployment Protection** → Vercel Authentication ตั้งเป็น `Only Preview Deployments`
+3. **Settings → Environment Variables** (Production) → เพิ่ม `NEXT_PUBLIC_SITE_URL=https://payjung-shop.com`
+   ⚠ ข้อนี้สำคัญ เพราะงานเบื้องหลัง (cron, ตามสถานะออเดอร์) ไม่มี header ให้อ่านโดเมน ต้องพึ่งค่านี้
+   ถ้าไม่ตั้ง ลิงก์รับผลที่ส่งให้ผู้ให้บริการจะชี้ไปโดเมน `.vercel.app` ที่โดนบัง — callback ตายเงียบ
+4. **Redeploy** หนึ่งครั้งให้ค่าใหม่มีผล
+5. **Supabase → Authentication → URL Configuration** → Site URL เป็นโดเมนใหม่
+   และเพิ่ม `https://payjung-shop.com/**` ใน Redirect URLs
+   ไม่งั้นอีเมลรีเซ็ตรหัสผ่านของลูกค้าจะยังลิงก์กลับโดเมนเก่า
+6. แจ้งโดเมนใหม่ให้ผู้ให้บริการ (JCR / OverTopup / 24BUYM) ลงทะเบียน callback ใหม่
+
+> ย้ายโดเมนไม่ต้องแก้โค้ด — [`src/lib/siteUrl.ts`](src/lib/siteUrl.ts) อ่านโดเมนจาก header ของรีเควสต์
+> ให้เองอยู่แล้ว มีแค่งานเบื้องหลังเท่านั้นที่ต้องพึ่ง `NEXT_PUBLIC_SITE_URL` ตามข้อ 3
+
 ---
 
 ## รันบนเครื่องตัวเอง
