@@ -17,6 +17,7 @@ import { money, num } from '@/lib/format'
 import { q1 } from '@/lib/db'
 import { cookies } from 'next/headers'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { IdleLogout } from '@/components/IdleLogout'
 
 export const dynamic = 'force-dynamic'
 
@@ -193,6 +194,10 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
           <p className="mt-6 text-xs text-mute">© Pay Jung · ระบบเติมเกมออนไลน์</p>
         </div>
       </footer>
+
+      {/* ทิ้งหน้าเว็บไว้เฉย ๆ นานเกินกำหนดแล้วพาออกจากระบบให้เอง
+          เรนเดอร์เฉพาะตอนล็อกอินอยู่ ไม่งั้นคนที่ยังไม่ได้ล็อกอินจะโดนนับเวลาไปด้วยเปล่า ๆ */}
+      {customer ? <IdleLogout /> : null}
 
       {/* ปุ่มลอยมุมขวา — กดถึงสิ่งที่ใช้บ่อยได้จากทุกหน้า */}
       <FloatingActions

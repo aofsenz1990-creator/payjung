@@ -3,12 +3,21 @@ import { redirect } from 'next/navigation'
 import { getShopCustomer, getSiteSettings, registrationOpen } from '@/lib/shop'
 import { shopLoginAction } from '@/lib/actions/shop'
 import { ActionForm, SubmitButton } from '@/components/ActionForm'
+import { IDLE_LOGOUT_PARAM, SHOP_IDLE_MINUTES } from '@/lib/idle'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ShopLoginPage() {
+export default async function ShopLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [IDLE_LOGOUT_PARAM]?: string }>
+}) {
   if (await getShopCustomer()) redirect('/shop/me')
   const canRegister = registrationOpen(await getSiteSettings())
+
+  // มาจากการถูกพาออกจากระบบเพราะทิ้งหน้าเว็บไว้เฉย ๆ ต้องบอกเหตุผลให้ชัด
+  // ไม่งั้นลูกค้าจะเข้าใจว่าเว็บพังหรือบัญชีโดนแฮก แล้วโทรมาถามร้าน
+  const kickedOut = (await searchParams)[IDLE_LOGOUT_PARAM] === '1'
 
   return (
     <div className="mx-auto max-w-sm py-6">
@@ -16,6 +25,16 @@ export default async function ShopLoginPage() {
       <p className="mt-1 text-center text-sm text-mute">
         {canRegister ? 'ยังไม่มีบัญชี? สมัครฟรีได้เลย' : 'ใช้อีเมลและรหัสผ่านที่ทางร้านสร้างให้'}
       </p>
+
+      {kickedOut ? (
+        <div className="mt-4 rounded-xl border border-warn/50 bg-warn/10 px-4 py-3 text-sm leading-relaxed text-body">
+          <p className="font-semibold text-warn">ออกจากระบบอัตโนมัติแล้ว</p>
+          <p className="mt-1">
+            ไม่มีการใช้งานเกิน {SHOP_IDLE_MINUTES} นาที ระบบจึงพาออกจากระบบให้
+            เพื่อไม่ให้คนอื่นที่มาใช้เครื่องนี้ต่อเอายอดเงินของคุณไปเติมเกม
+          </p>
+        </div>
+      ) : null}
 
       <div className="card mt-6 border-ink-700/70 bg-ink-900/75 backdrop-blur-md">
         <ActionForm action={shopLoginAction} className="space-y-4">

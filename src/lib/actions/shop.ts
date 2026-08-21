@@ -17,6 +17,7 @@ import { SlipError, uploadImage } from '@/lib/storage'
 import { autoDispatchOn, dispatchSale, markForDispatch } from '@/lib/dispatch'
 import { jsonArray } from '@/lib/json'
 import { supabaseAdmin, supabaseServer } from '@/lib/supabase'
+import { IDLE_LOGOUT_PARAM } from '@/lib/idle'
 import { bool, clip, customerError, decimal, friendlyError, int, optStr, str } from '@/lib/form'
 import { tooMany, tooManyFromIp, TOO_MANY_MESSAGE } from '@/lib/ratelimit'
 import type { ActionState } from '@/components/ActionForm'
@@ -309,6 +310,25 @@ export async function shopLogoutAction() {
   const supabase = await supabaseServer()
   await supabase.auth.signOut()
   redirect('/shop')
+}
+
+/**
+ * ออกจากระบบอัตโนมัติเพราะทิ้งหน้าเว็บไว้เฉย ๆ นานเกินกำหนด
+ *
+ * แยกจากปุ่ม "ออก" ปกติ เพราะต้องพาไปหน้า login พร้อมป้ายบอกเหตุผล
+ * ไม่งั้นลูกค้าจะงงว่าทำไมอยู่ ๆ ก็หลุด แล้วเข้าใจว่าเว็บพัง
+ *
+ * ทางนี้เพิกถอน token ที่ Supabase ให้ด้วย ต่างจากด่านใน middleware ที่ลบ cookie อย่างเดียว
+ */
+export async function shopIdleLogoutAction() {
+  try {
+    const supabase = await supabaseServer()
+    await supabase.auth.signOut()
+  } catch {
+    // ติดต่อ Supabase ไม่ได้ — ไม่เป็นไร cookie จะถูกล้างที่ middleware อยู่ดี
+    // สิ่งที่ห้ามเกิดคือค้างอยู่หน้าเดิมโดยที่ยอดเงินยังโชว์อยู่บนจอ
+  }
+  redirect(`/shop/login?${IDLE_LOGOUT_PARAM}=1`)
 }
 
 /**
