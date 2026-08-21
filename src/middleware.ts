@@ -8,7 +8,18 @@ import { IDLE_LOGOUT_PARAM, SHOP_ACTIVITY_COOKIE, SHOP_IDLE_MS } from '@/lib/idl
 // จึงต้องปล่อยผ่าน middleware — ตัวมันเองยืนยันด้วยกุญแจลับใน path อยู่แล้ว
 // /api/line-webhook คือช่องที่ LINE ยิงเข้ามาเมื่อมีคนทักบัญชีทางการของร้าน
 // ไม่มี session เช่นกัน — ตัวมันยืนยันด้วยลายเซ็นจาก Channel secret ของ LINE
-const PUBLIC_PATHS = ['/login', '/setup', '/shop', '/api/provider-callback', '/api/line-webhook']
+// /api/daily-summary กับ /api/refresh-prices คืองานตามเวลาที่ Vercel Cron ยิงเข้ามา
+// ไม่มี cookie ติดมาด้วย ถ้าไม่ปล่อยผ่านตรงนี้จะโดนเด้งไปหน้า login แล้วงานไม่เคยทำงานเลย
+// ทั้งสองเส้นตรวจ CRON_SECRET ของตัวเองอยู่แล้ว
+const PUBLIC_PATHS = [
+  '/login',
+  '/setup',
+  '/shop',
+  '/api/provider-callback',
+  '/api/line-webhook',
+  '/api/daily-summary',
+  '/api/refresh-prices',
+]
 
 /** cookie ของ Supabase มีอายุยาว ตัวจับเวลาจึงต้องอยู่ได้นานเท่ากัน (เพดานของเบราว์เซอร์คือ 400 วัน) */
 const ACTIVITY_COOKIE_MAX_AGE = 400 * 24 * 60 * 60

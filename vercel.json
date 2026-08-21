@@ -5,6 +5,10 @@
     {
       "path": "/api/daily-summary",
       "schedule": "5 17 * * *"
+    },
+    {
+      "path": "/api/refresh-prices",
+      "schedule": "30 19 * * *"
     }
   ]
 }

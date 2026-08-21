@@ -20,6 +20,7 @@ import {
   toggleAutoDispatchAction,
 } from '@/lib/actions/dispatch'
 import { autoDispatchOn } from '@/lib/dispatch'
+import { lastRefreshRun } from '@/lib/priceRefresh'
 import { providerMeta } from '@/lib/providers/constants'
 import { DEFAULT_SHOP_BG, DEFAULT_SHOP_COVER, getSiteSettings, SITE_KEYS } from '@/lib/shop'
 import { ImageInput } from '@/components/ImageInput'
@@ -395,6 +396,10 @@ export default async function StorefrontPage({
     : products
 
   const autoOn = await autoDispatchOn()
+
+  // ผลรอบดึงราคาอัตโนมัติล่าสุด — ต้องเห็นได้จากหน้านี้ว่ามันทำงานอยู่จริงไหม
+  // (ตัวมันกลืน error ในตัวแล้ว ถ้าอ่านไม่ได้จะคืน null ไม่ทำให้ทั้งหน้าล่ม)
+  const lastRefresh = await lastRefreshRun()
 
   // ประวัติที่ร้านเติมเงินให้ผู้ให้บริการ + ยอดรวมเดือนนี้และปีนี้ (ใช้ทำบัญชี)
   const [providerTopups, topupSummary] = await Promise.all([
@@ -880,6 +885,40 @@ export default async function StorefrontPage({
                   <b className="text-good">ถ้าราคาทุนเปลี่ยน ระบบจะแจ้งเข้า LINE ให้ด้วย</b>
                 </p>
               </ActionForm>
+
+              {/* รอบอัตโนมัติวันละครั้ง — ต้องเห็นจากหน้านี้ว่าทำงานอยู่จริงไหม
+                  ไม่งั้นถ้ามันเงียบไปหลายวันแล้วราคาทุนเพี้ยน จะไม่มีใครรู้ว่าต้นเหตุอยู่ตรงนี้ */}
+              <div className="mt-3 rounded-lg border border-ink-700/70 bg-ink-850/60 px-3 py-2 text-xs leading-relaxed">
+                <span className="font-medium text-slate-200">🕒 รอบอัตโนมัติ</span>{' '}
+                <span className="text-mute">
+                  ระบบดึงราคาของทุกเจ้าที่มีของขายอยู่ให้เองทุกวันตี 2 ครึ่ง
+                </span>
+                {lastRefresh ? (
+                  <>
+                    <br />
+                    <span className={lastRefresh.ok ? 'text-good' : 'text-bad'}>
+                      {lastRefresh.ok ? '✓' : '✗'} รอบล่าสุด{' '}
+                      {new Intl.DateTimeFormat('th-TH', {
+                        timeZone: 'Asia/Bangkok',
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      }).format(new Date(lastRefresh.at))}
+                    </span>{' '}
+                    <span className="text-mute">— {lastRefresh.text}</span>
+                  </>
+                ) : (
+                  <>
+                    <br />
+                    <span className="text-mute">
+                      ยังไม่เคยรัน — จะเริ่มทำงานเองหลัง deploy ครั้งถัดไป
+                      หรือกดสั่งรันเดี๋ยวนี้ได้ที่{' '}
+                      <a href="/api/refresh-prices" className="text-brand-400 underline">
+                        /api/refresh-prices
+                      </a>
+                    </span>
+                  </>
+                )}
+              </div>
               <p className="mt-2 text-xs leading-relaxed text-mute">
                 ซิงก์ <b className="text-slate-200">ต้นทุน</b> และ{' '}
                 <b className="text-slate-200">ช่องกรอกของลูกค้า</b> (เช่นตัวเลือกเซิร์ฟเวอร์)
