@@ -115,6 +115,12 @@ npm install
 npm run dev
 ```
 
+ตรวจก่อนส่งงานทุกครั้ง:
+
+```bash
+npx tsc --noEmit && npm test && npm run build
+```
+
 เปิด http://localhost:3000
 
 ---

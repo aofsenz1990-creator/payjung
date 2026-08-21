@@ -111,14 +111,44 @@ export const SCHEMA_STATEMENTS: string[] = [
     pack_price numeric(12,2) not null default 0,
     synced_at timestamptz not null default now()
   )`,
-  `create unique index if not exists provider_catalog_uniq
-     on provider_catalog (provider_id, game_id, server_id, pack_code)`,
+  // ดัชนีชุดเก่าไม่มี product_type จึงถือว่าสินค้าคนละชนิดที่รหัสตรงกันคือตัวเดียวกัน
+  // ทิ้งไว้เพื่อให้ฐานข้อมูลเก่าที่ยังมีดัชนีนี้ถูกแทนที่ด้วยชุดใหม่ด้านล่าง
+  `drop index if exists provider_catalog_uniq`,
   // ช่องที่เกมนั้นบังคับให้กรอกตอนสั่งเติม เช่น uid, server (บางเกมต้องเลือกภูมิภาค)
   // เก็บทั้งชื่อช่อง ป้ายกำกับ และตัวเลือกที่มีให้เลือก ตามที่ผู้ให้บริการส่งมา
   `alter table provider_catalog add column if not exists fields jsonb`,
   // ชนิดสินค้ารายแพ็ก (uid / card / idpass) — ต่างกันได้ในผู้ให้บริการเดียวกัน
   // และใช้ path คนละอันตอนสั่ง ถ้าตั้งเหมือนกันหมดบัตรเงินสดจะถูกส่งผิดที่
   `alter table provider_catalog add column if not exists product_type text`,
+  /*
+   * ชนิดสินค้าต้องเป็นส่วนหนึ่งของ "รหัสประจำตัว" ด้วย ห้ามเป็นค่าว่าง (null)
+   *
+   * OverTopup นับเลขสินค้าแยกกันคนละชุดต่อชนิด — RoV Mobile (uid) รหัส 4/16
+   * กับ Steam wallet TH 200 บาท (card) รหัส 4/16 เป็นคนละของกันแต่รหัสตรงกันเป๊ะ
+   * ถ้าไม่แยกด้วยชนิด ตัวหลังจะทับตัวหน้า แล้วราคาทุนของ RoV 6,200 คูปอง
+   * จะกลายเป็นราคาบัตร Steam 200 บาท (เจอจริงเมื่อ 21 ส.ค. 2569 ทุนเพี้ยนจาก 4,700 เหลือ 205)
+   *
+   * ใช้ค่าว่าง '' แทน null เพื่อให้เทียบในดัชนีได้ตรง ๆ (null ไม่เท่ากับ null ใน SQL)
+   */
+  `update provider_catalog set product_type = '' where product_type is null`,
+  `alter table provider_catalog alter column product_type set default ''`,
+  `alter table provider_catalog alter column product_type set not null`,
+  `create unique index if not exists provider_catalog_kind_uniq
+     on provider_catalog (provider_id, game_id, server_id, pack_code, product_type)`,
+  /*
+   * แพ็กเกจที่นำเข้าไปแล้วต้องรู้ชนิดของตัวเองด้วย ไม่งั้นจับคู่กับรายการกลางไม่ได้
+   * ของเก่าที่ยังว่างอยู่ ให้เทียบจากชื่อเกมซึ่งเชื่อถือได้กว่า (ชื่อเกมไม่เคยถูกรหัสชนกัน)
+   */
+  `update products p set provider_product_type = c.product_type
+     from provider_catalog c
+     join games g on lower(g.name) = lower(c.game_name)
+    where c.provider_id = p.provider_id
+      and c.game_id = p.provider_game_id
+      and c.server_id = p.provider_server_id
+      and c.pack_code = p.provider_sku
+      and g.id = p.game_id
+      and p.provider_product_type is null
+      and c.product_type <> ''`,
   `create index if not exists provider_catalog_game_idx on provider_catalog (provider_id, game_name)`,
 
   `create table if not exists customers (

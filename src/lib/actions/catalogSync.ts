@@ -227,7 +227,10 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
              where p.provider_id = c.provider_id
                and p.provider_game_id = c.game_id
                and p.provider_server_id = c.server_id
-               and p.provider_sku = c.pack_code)
+               and p.provider_sku = c.pack_code
+               -- ชนิดต้องตรงด้วย ไม่งั้นบัตรเงินสดที่รหัสบังเอิญชนกับแพ็กเกมที่นำเข้าแล้ว
+               -- จะถูกมองว่า "มีอยู่แล้ว" และนำเข้าไม่ได้ตลอดไป
+               and coalesce(p.provider_product_type, '') = c.product_type)
        returning id`,
       insertParams
     )

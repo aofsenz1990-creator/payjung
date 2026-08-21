@@ -20,10 +20,16 @@ export type CatalogEntryRow = {
 
 /* ------------------------------- ตัดรายการซ้ำ ------------------------------- */
 
-/** กุญแจที่ต้องไม่ซ้ำกันในตาราง provider_catalog */
+/**
+ * กุญแจที่ต้องไม่ซ้ำกันในตาราง provider_catalog
+ *
+ * ต้องมีชนิดสินค้าอยู่ด้วย เพราะบางเจ้า (OverTopup) นับเลขสินค้าแยกกันคนละชุดต่อชนิด
+ * รหัส 4/16 ของชนิด uid คือ "RoV Mobile 6,200 คูปอง" ส่วนของชนิด card คือ
+ * "Steam wallet TH 200 บาท" — คนละของกันสิ้นเชิงแต่รหัสตรงกันเป๊ะ
+ */
 function keyOf(e: CatalogEntryRow) {
   // คั่นด้วยอักขระที่ไม่มีวันโผล่ในรหัสจริง ไม่งั้นรหัสที่มีช่องว่างอาจกลายเป็นกุญแจเดียวกัน
-  return `${e.gameId}\u0000${e.serverId}\u0000${e.sku}`
+  return `${e.gameId}\u0000${e.serverId}\u0000${e.sku}\u0000${e.productType ?? ''}`
 }
 
 /** สองรายการนี้คือ "ของชิ้นเดียวกันที่ส่งมาซ้ำ" หรือ "คนละชิ้นที่รหัสดันชนกัน" */
@@ -75,13 +81,9 @@ export function dedupeEntries(entries: CatalogEntryRow[]): DedupeResult {
       } else {
         collisions++
         if (samples.length < 3) {
-          const kinds =
-            (prev.productType ?? '') !== (e.productType ?? '')
-              ? ` [ชนิด ${prev.productType ?? 'ไม่ระบุ'} ↔ ${e.productType ?? 'ไม่ระบุ'}]`
-              : ''
           samples.push(
             `รหัส ${e.gameId}/${e.sku}: "${prev.gameName} — ${prev.packName}" ` +
-              `ชนกับ "${e.gameName} — ${e.packName}"${kinds}`
+              `ชนกับ "${e.gameName} — ${e.packName}"`
           )
         }
       }

@@ -25,6 +25,12 @@ export type AppliedChanges = {
   changes: Array<{ name: string; old_cost: number; new_cost: number }>
   /** แพ็กที่ตอนนี้ขายต่ำกว่าทุน — เกิดกับแพ็กที่ตั้งราคาเองแล้วปลายทางขึ้นราคา */
   losing: Array<{ name: string; cost_price: number; sell_price: number }>
+  /** แพ็กที่ถูกซ่อม "ชนิดสินค้า" ให้ตรงกับปลายทาง (เคยจับคู่ผิดตัวอยู่) */
+  repaired: Array<{ name: string; product_type: string }>
+  /** แพ็กที่เปิดขายอยู่แต่หาคู่ในรายการของปลายทางไม่เจอ — ราคาจะค้างของเก่า */
+  unmatched: number
+  /** แพ็กที่ยังน่าสงสัยว่าจับคู่ข้ามเกมอยู่ — ซ่อมอัตโนมัติให้ไม่ได้ ต้องมีคนดู */
+  suspect: Array<{ name: string; our_game: string; their_game: string }>
   summary: string
 }
 
@@ -55,7 +61,9 @@ export async function saveCatalog(providerId: number, entries: CatalogEntryRow[]
     // เก็บเป็นข้อความ JSON แล้วให้ Postgres แปลงเป็น jsonb ตอน insert
     // แยกให้ชัดระหว่าง [] (ถามแล้ว ไม่มีช่องกรอกจริง ๆ) กับ null (ยังไม่รู้ ต้องไปถามใหม่)
     e.fields ? JSON.stringify(e.fields) : null,
-    e.productType ?? null,
+    // ชนิดสินค้าเป็นส่วนหนึ่งของกุญแจ จึงต้องเป็นข้อความเสมอ ห้าม null
+    // (ในดัชนีของ SQL ค่า null ไม่เท่ากับ null แถวจะซ้ำได้ไม่จำกัด)
+    e.productType ?? '',
   ])
 
   // ยัดทีละก้อนใหญ่ (800 × 11 ช่อง = 8,800 ตัวแปร ยังห่างเพดาน 65,535 ของ Postgres)
@@ -77,14 +85,13 @@ export async function saveCatalog(providerId: number, entries: CatalogEntryRow[]
          (provider_id, game_id, game_name, server_id, server_name, pack_code, pack_name,
           pack_desc, pack_price, fields, product_type)
        values ${values}
-       on conflict (provider_id, game_id, server_id, pack_code) do update
+       on conflict (provider_id, game_id, server_id, pack_code, product_type) do update
           set game_name = excluded.game_name,
               server_name = excluded.server_name,
               pack_name = excluded.pack_name,
               pack_desc = excluded.pack_desc,
               pack_price = excluded.pack_price,
               fields = excluded.fields,
-              product_type = excluded.product_type,
               synced_at = now()`,
       chunk.flat()
     )
@@ -106,6 +113,33 @@ export async function saveCatalog(providerId: number, entries: CatalogEntryRow[]
  * ไม่แตะ ชื่อ รูป สถานะเปิดขาย สต๊อก หรือลำดับการแสดง — ของพวกนี้ร้านตั้งเอง
  */
 export async function applyCatalogToProducts(providerId: number): Promise<AppliedChanges> {
+  /*
+   * ซ่อม "ชนิดสินค้า" ของแพ็กที่เคยจับคู่ผิดตัวก่อนเป็นอันดับแรก
+   *
+   * ก่อนหน้านี้ระบบถือว่ารหัสสินค้าที่ตรงกันคือของชิ้นเดียวกัน สินค้าคนละชนิด
+   * ของ OverTopup ที่รหัสชนกันจึงทับกัน และแพ็กของเราถูกเปลี่ยนชนิดตามตัวที่มาทีหลัง
+   * (ทุน RoV 6,200 คูปอง กลายเป็นราคาบัตร Steam 200 บาท เมื่อ 21 ส.ค. 2569)
+   *
+   * ตัวชี้ขาดว่าอันไหนคือของจริงคือ **ชื่อเกม** — ชื่อเกมของแพ็กในระบบเรา
+   * ไม่เคยถูกรอบดึงราคาเขียนทับ จึงเชื่อถือได้กว่ารหัสและชนิดที่เก็บไว้
+   * ถ้าชื่อเกมไม่ตรงกับรายการไหนเลย จะไม่แตะอะไรทั้งนั้น (ปล่อยค้างดีกว่าเดาผิด)
+   */
+  const repaired = await q<{ name: string; product_type: string }>(
+    `update products p
+        set provider_product_type = nullif(c.product_type, '')
+       from provider_catalog c
+       join games g on lower(g.name) = lower(c.game_name)
+      where c.provider_id = p.provider_id
+        and c.game_id = p.provider_game_id
+        and c.server_id = p.provider_server_id
+        and c.pack_code = p.provider_sku
+        and g.id = p.game_id
+        and p.provider_id = $1
+        and coalesce(p.provider_product_type, '') is distinct from c.product_type
+     returning p.name, c.product_type`,
+    [providerId]
+  )
+
   // ดูก่อนว่าต้นทุนของแพ็กไหนเปลี่ยนบ้าง จะได้รายงานให้เห็นว่ากระทบอะไร
   const changes = await q<{ name: string; old_cost: number; new_cost: number }>(
     `select p.name, p.cost_price::float8 as old_cost, c.pack_price::float8 as new_cost
@@ -115,6 +149,7 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
         and c.game_id = p.provider_game_id
         and c.server_id = p.provider_server_id
         and c.pack_code = p.provider_sku
+        and c.product_type = coalesce(p.provider_product_type, '')
       where p.provider_id = $1 and p.cost_price is distinct from c.pack_price
       order by abs(c.pack_price - p.cost_price) desc
       limit 5`,
@@ -126,7 +161,6 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
         set cost_price = c.pack_price,
             provider_fields = c.fields,
             provider_variant = c.game_name,
-            provider_product_type = coalesce(c.product_type, p.provider_product_type),
             sell_price = case when p.markup_percent is not null
                               then ceil(c.pack_price * (1 + p.markup_percent / 100))
                               else p.sell_price end,
@@ -138,13 +172,15 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
         and c.game_id = p.provider_game_id
         and c.server_id = p.provider_server_id
         and c.pack_code = p.provider_sku
+        -- ชนิดสินค้าต้องตรงด้วย ไม่งั้นแพ็กของเกม (uid) จะไปคว้าราคาของบัตรเงินสด (card)
+        -- ที่บังเอิญมีรหัสเดียวกันมาใส่ ซึ่งเคยทำให้ทุน RoV 6,200 คูปอง เพี้ยนเหลือ 205 บาท
+        and c.product_type = coalesce(p.provider_product_type, '')
         and p.provider_id = $1
         -- ต้องเช็กทุกคอลัมน์ที่คำสั่งนี้เขียน ไม่งั้นแถวที่ต่างกันเฉพาะคอลัมน์
         -- ที่ไม่ได้เช็กจะถูกข้ามไป แล้วกู้ข้อมูลที่หายไม่ได้
         and (p.cost_price is distinct from c.pack_price
              or p.provider_fields is distinct from c.fields
-             or p.provider_variant is distinct from c.game_name
-             or p.provider_product_type is distinct from c.product_type)
+             or p.provider_variant is distinct from c.game_name)
      returning p.id`,
     [providerId]
   )
@@ -155,6 +191,56 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
        from products
       where provider_id = $1 and is_active and sell_price < cost_price
       order by (cost_price - sell_price) desc
+      limit 5`,
+    [providerId]
+  )
+
+  /*
+   * แพ็กที่เปิดขายอยู่แต่หาคู่ในรายการของปลายทางไม่เจอ
+   * ราคาทุนของพวกนี้จะค้างของเก่าไว้เงียบ ๆ ซึ่งอันตรายพอ ๆ กับราคาผิด จึงต้องนับและบอก
+   */
+  const gap = await q1<{ n: number }>(
+    `select count(*)::int as n
+       from products p
+      where p.provider_id = $1 and p.is_active and p.provider_game_id is not null
+        and not exists (
+          select 1 from provider_catalog c
+           where c.provider_id = p.provider_id
+             and c.game_id = p.provider_game_id
+             and c.server_id = p.provider_server_id
+             and c.pack_code = p.provider_sku
+             and c.product_type = coalesce(p.provider_product_type, ''))`,
+    [providerId]
+  )
+  const unmatched = gap?.n ?? 0
+
+  /*
+   * แพ็กที่ยังน่าสงสัยว่าจับคู่ข้ามเกมอยู่
+   *
+   * ตัวซ่อมอัตโนมัติด้านบนใช้ "ชื่อเกมตรงกัน" เป็นตัวชี้ขาด ถ้าร้านเคยเปลี่ยนชื่อเกม
+   * ในระบบเราจนไม่ตรงกับที่ปลายทางเรียก มันจะซ่อมให้ไม่ได้และจะเงียบไปเฉย ๆ
+   * จึงต้องมีตัวจับอีกชั้น: แพ็กที่จับคู่กับรายการที่ "ชื่อเกมไม่ตรง" ทั้งที่รหัสเดียวกัน
+   * มีของอีกชนิดอยู่ด้วย = มีโอกาสสูงที่ยังคว้าผิดตัวอยู่ ต้องให้คนเข้าไปดู
+   */
+  const suspect = await q<{ name: string; our_game: string; their_game: string }>(
+    `select p.name, g.name as our_game, c.game_name as their_game
+       from products p
+       join games g on g.id = p.game_id
+       join provider_catalog c
+         on c.provider_id = p.provider_id
+        and c.game_id = p.provider_game_id
+        and c.server_id = p.provider_server_id
+        and c.pack_code = p.provider_sku
+        and c.product_type = coalesce(p.provider_product_type, '')
+      where p.provider_id = $1 and p.is_active
+        and lower(g.name) <> lower(c.game_name)
+        and exists (
+          select 1 from provider_catalog c2
+           where c2.provider_id = c.provider_id
+             and c2.game_id = c.game_id
+             and c2.server_id = c.server_id
+             and c2.pack_code = c.pack_code
+             and c2.product_type <> c.product_type)
       limit 5`,
     [providerId]
   )
@@ -173,17 +259,41 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
         ' — ไปแก้ราคาขายด่วน'
       : ''
 
+  const fixed =
+    repaired.length > 0
+      ? ` 🔧 ซ่อมชนิดสินค้าที่จับคู่ผิดตัว ${repaired.length} แพ็ก: ` +
+        repaired.slice(0, 5).map((r) => `${r.name} → ${r.product_type || 'ไม่ระบุ'}`).join(' · ')
+      : ''
+  const missing =
+    unmatched > 0
+      ? ` ⚠ อีก ${unmatched} แพ็กที่เปิดขายอยู่หาคู่ในรายการของปลายทางไม่เจอ ` +
+        `(ราคาทุนค้างของเก่า) — กด "ดึงรายการทั้งหมด" ของเจ้านี้เพื่อเติมรายการให้ครบ`
+      : ''
+  const crossed =
+    suspect.length > 0
+      ? ` ❗ ตรวจด่วน ${suspect.length} แพ็กอาจจับคู่ข้ามเกมอยู่: ` +
+        suspect
+          .map((x) => `${x.name} (เกมเรา "${x.our_game}" แต่ไปคว้าของ "${x.their_game}")`)
+          .join(' · ')
+      : ''
+
   return {
     updated: updated.length,
     changes,
     losing,
+    repaired,
+    unmatched,
+    suspect,
     summary:
       updated.length === 0
-        ? 'ข้อมูลตรงกับผู้ให้บริการอยู่แล้ว'
+        ? `ข้อมูลตรงกับผู้ให้บริการอยู่แล้ว${fixed}${missing}${crossed}`
         : `อัปเดต ${updated.length} แพ็กเกจ — ราคาขายที่ตั้งเองไม่ถูกแตะ ` +
           `ส่วนแพ็กที่ตั้งกำไรเป็น % ไว้คิดราคาใหม่ให้แล้ว` +
           (detail ? ` · ต้นทุนที่เปลี่ยน: ${detail}` : '') +
-          warn,
+          fixed +
+          warn +
+          missing +
+          crossed,
   }
 }
 
@@ -195,7 +305,13 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
  * ส่งแบบไม่รอผล (void) และกลืน error — แจ้งเตือนไม่ควรทำให้การอัปเดตราคาล้ม
  */
 export async function notifyPriceChange(providerName: string, applied: AppliedChanges) {
-  if (applied.changes.length === 0 && applied.losing.length === 0) return
+  if (
+    applied.changes.length === 0 &&
+    applied.losing.length === 0 &&
+    applied.repaired.length === 0
+  ) {
+    return
+  }
   try {
     const lines = [
       `💰 ${providerName} เปลี่ยนราคาทุน ${applied.updated} แพ็กเกจ`,
@@ -209,6 +325,13 @@ export async function notifyPriceChange(providerName: string, applied: AppliedCh
       for (const l of applied.losing) {
         lines.push(`• ${l.name} — ทุน ${l.cost_price} ขาย ${l.sell_price}`)
       }
+    }
+    if (applied.repaired.length > 0) {
+      lines.push('', `🔧 ซ่อมชนิดสินค้าที่จับคู่ผิดตัว ${applied.repaired.length} แพ็ก:`)
+      for (const r of applied.repaired.slice(0, 10)) {
+        lines.push(`• ${r.name} → ${r.product_type || 'ไม่ระบุ'}`)
+      }
+      lines.push('ตรวจราคาขายของแพ็กพวกนี้ด้วย เพราะทุนที่เคยผิดอาจดันราคาขายเพี้ยนไปแล้ว')
     }
     lines.push('', 'อย่าลืมกด "อัปเดตราคาขึ้นหน้าเว็บ" ให้ลูกค้าเห็นราคาใหม่')
     await notifyLine(lines.join('\n'))
@@ -452,8 +575,18 @@ export async function notifyRun(run: DailyRunResult, opts?: { chained?: boolean 
   const bad = run.results.filter((r) => !r.ok)
   const changed = run.results.filter((r) => (r.applied?.updated ?? 0) > 0)
   const noted = run.results.filter((r) => r.note)
+  const odd = run.results.filter(
+    (r) =>
+      (r.applied?.repaired.length ?? 0) > 0 ||
+      (r.applied?.unmatched ?? 0) > 0 ||
+      (r.applied?.suspect.length ?? 0) > 0
+  )
   const quiet =
-    bad.length === 0 && changed.length === 0 && noted.length === 0 && run.pending.length === 0
+    bad.length === 0 &&
+    changed.length === 0 &&
+    noted.length === 0 &&
+    odd.length === 0 &&
+    run.pending.length === 0
   if (quiet) return
 
   const lines: string[] = ['🕒 อัปเดตราคาทุนอัตโนมัติประจำวัน']
@@ -470,6 +603,15 @@ export async function notifyRun(run: DailyRunResult, opts?: { chained?: boolean 
         : `• ${r.provider}: ราคาตรงอยู่แล้ว (${r.games} เกม)`
     )
     if (r.note) lines.push(`   ⚠️ ${r.note}`)
+    if ((r.applied?.repaired.length ?? 0) > 0) {
+      lines.push(`   🔧 ซ่อมชนิดสินค้าที่จับคู่ผิดตัว ${r.applied!.repaired.length} แพ็ก`)
+    }
+    if ((r.applied?.unmatched ?? 0) > 0) {
+      lines.push(`   ⚠️ อีก ${r.applied!.unmatched} แพ็กหาคู่ในรายการปลายทางไม่เจอ ราคาทุนค้างของเก่า`)
+    }
+    for (const x of r.applied?.suspect ?? []) {
+      lines.push(`   ❗ ${x.name} อาจจับคู่ข้ามเกม — เกมเรา "${x.our_game}" ไปคว้าของ "${x.their_game}"`)
+    }
   }
 
   if (run.pendingNames.length > 0) {
