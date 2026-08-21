@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { tooMany } from '@/lib/ratelimit'
 import {
+  coverageGaps,
   notifyRun,
   recordRefreshRun,
   refreshAllSellingPrices,
@@ -78,6 +79,9 @@ export async function GET(request: NextRequest) {
       revalidatePath('/games/[id]', 'page')
     }
 
+    // ตอบให้ได้ว่า "เกมบนเว็บอัปเดตได้ครบไหม" ด้วยรายชื่อ ไม่ใช่ให้ไปเดาเอง
+    const gaps = await coverageGaps()
+
     const complete = run.pending.length === 0 && run.results.every((r) => r.ok)
     const text =
       summarizeRun(run) +
@@ -87,7 +91,14 @@ export async function GET(request: NextRequest) {
     await notifyRun(run, { chained })
 
     return NextResponse.json(
-      { ok: complete, round, summary: text, results: run.results },
+      {
+        ok: complete,
+        round,
+        summary: text,
+        // เกมที่อัปเดตอัตโนมัติไม่ครบ — ว่างเปล่า = ทุกเกมบนเว็บอัปเดตได้หมด
+        coverageGaps: gaps,
+        results: run.results,
+      },
       { headers: { 'cache-control': 'no-store' } }
     )
   } catch (err) {

@@ -517,6 +517,57 @@ export async function refreshSellingPrices(provider: ProviderRow): Promise<Refre
   }
 }
 
+/* --------------------- ตรวจว่าเกมบนเว็บอัปเดตได้ครบไหม --------------------- */
+
+export type CoverageGap = {
+  game: string
+  /** แพ็กที่เปิดขายอยู่ทั้งหมดของเกมนี้ */
+  total: number
+  /** แพ็กที่ไม่ได้ผูกกับผู้ให้บริการเลย — ต้องแก้ราคาเอง ระบบอัปเดตให้ไม่ได้ */
+  manual: number
+  /** แพ็กที่ผูกไว้แล้วแต่หาคู่ในรายการของปลายทางไม่เจอ — ราคาค้างของเก่า */
+  unmatched: number
+}
+
+/**
+ * เกมที่เปิดขายบนหน้าเว็บแต่ระบบอัปเดตราคาให้ไม่ครบ
+ *
+ * ตอบคำถามว่า "เกมบนเว็บอัปเดตได้หมดจริงไหม" ด้วยรายชื่อ ไม่ใช่การเดา
+ * เกมที่ไม่โผล่ในรายการนี้ = แพ็กทุกตัวของมันผูกกับผู้ให้บริการและจับคู่ได้ครบ
+ *
+ * สองสาเหตุที่เป็นไปได้ต่างกันคนละเรื่อง จึงต้องแยกนับ:
+ *  - manual = ร้านตั้งขายเอง ไม่ได้ผูกกับใคร (เช่นบัตรที่ซื้อมาเก็บสต๊อก) ตั้งใจให้เป็นแบบนั้น
+ *  - unmatched = ผูกไว้แล้วแต่คว้าของไม่เจอ อันนี้ผิดปกติ ต้องไปกดดึงรายการทั้งหมดใหม่
+ */
+export async function coverageGaps(): Promise<CoverageGap[]> {
+  try {
+    return await q<CoverageGap>(
+      `select * from (
+         select g.name as game,
+                count(*)::int as total,
+                sum(case when p.provider_id is null then 1 else 0 end)::int as manual,
+                sum(case when p.provider_id is not null and c.id is null then 1 else 0 end)::int
+                  as unmatched
+           from products p
+           join games g on g.id = p.game_id
+           left join provider_catalog c
+             on c.provider_id = p.provider_id
+            and c.game_id = p.provider_game_id
+            and c.server_id = p.provider_server_id
+            and c.pack_code = p.provider_sku
+            and c.product_type = coalesce(p.provider_product_type, '')
+          where p.is_active and g.is_published
+          group by g.name
+       ) t
+       where t.manual > 0 or t.unmatched > 0
+       order by t.game`
+    )
+  } catch {
+    // ถามไม่ได้ก็ไม่ควรทำให้ทั้งรอบล้ม — รายงานจะบอกว่าตรวจไม่ได้แทน
+    return []
+  }
+}
+
 /* ------------------------- รอบอัตโนมัติวันละครั้ง ------------------------- */
 
 /** กันงานถูกตัดกลางคัน — เผื่อเวลาไว้เขียนสรุปและส่ง LINE หลังหมดงบเวลา */
