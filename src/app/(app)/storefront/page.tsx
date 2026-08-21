@@ -892,6 +892,7 @@ export default async function StorefrontPage({
                 <span className="font-medium text-slate-200">🕒 รอบอัตโนมัติ</span>{' '}
                 <span className="text-mute">
                   ระบบดึงราคาของทุกเจ้าที่มีของขายอยู่ให้เองทุกวันตี 2 ครึ่ง
+                  แล้วเอาราคาขึ้นหน้าเว็บให้เลย (ยกเว้นแพ็กที่ขายต่ำกว่าทุน)
                 </span>
                 {lastRefresh ? (
                   <>

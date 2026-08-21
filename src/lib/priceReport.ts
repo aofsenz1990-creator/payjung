@@ -102,6 +102,18 @@ export function buildRunReport(run: DailyRunResult, opts?: { chained?: boolean }
       )
     }
 
+    const pub = r.published
+    if (pub && pub.count > 0) {
+      lines.push(`   🌐 ขึ้นหน้าเว็บให้แล้ว ${pub.count} แพ็ก — ลูกค้าเห็นราคาใหม่ทันที`)
+    }
+    if (pub && pub.held.length > 0) {
+      lines.push(`   ⛔ ไม่ขึ้นให้ ${pub.held.length} แพ็ก เพราะราคาขายต่ำกว่าทุน:`)
+      for (const h of pub.held.slice(0, 5)) {
+        lines.push(`   • ${h.name} — ทุน ${baht(h.cost)} ขาย ${baht(h.sell)}`)
+      }
+      lines.push('   แก้ราคาขายในหลังร้านแล้วกด "อัปเดตราคาขึ้นหน้าเว็บ" เอง')
+    }
+
     if (r.note) lines.push(`   ℹ️ ${r.note}`)
   }
 
@@ -115,9 +127,10 @@ export function buildRunReport(run: DailyRunResult, opts?: { chained?: boolean }
     )
   }
 
-  if (totalChanged > 0) {
+  const totalHeld = run.results.reduce((n, r) => n + (r.published?.held.length ?? 0), 0)
+  if (totalHeld > 0) {
     lines.push('')
-    lines.push('อย่าลืมกด "อัปเดตราคาขึ้นหน้าเว็บ" ให้ลูกค้าเห็นราคาใหม่')
+    lines.push(`⛔ รวม ${totalHeld} แพ็กที่ยังไม่ขึ้นเว็บเพราะขายต่ำกว่าทุน — ต้องเข้าไปแก้ราคาขาย`)
   }
 
   if (bad.length === 0 && run.pending.length === 0 && totalChanged === 0) {

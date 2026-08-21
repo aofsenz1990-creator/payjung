@@ -364,6 +364,54 @@ export function getProvider(providerId: number) {
   return q1<ProviderRow>(`select ${PROVIDER_COLUMNS} from api_providers where id = $1`, [providerId])
 }
 
+export type Published = {
+  /** จำนวนแพ็กที่ราคาขึ้นหน้าเว็บให้ลูกค้าเห็นแล้ว */
+  count: number
+  /** แพ็กที่ไม่ยอมเผยแพร่ให้ เพราะราคาขายต่ำกว่าทุน (ขายไปเท่ากับขาดทุนแน่นอน) */
+  held: Array<{ name: string; cost: number; sell: number }>
+}
+
+/**
+ * เผยแพร่ราคาที่เพิ่งคำนวณใหม่ขึ้นหน้าเว็บลูกค้า
+ *
+ * หน้าเว็บลูกค้าอ่านจากช่อง "ราคาที่เผยแพร่แล้ว" ไม่ใช่ช่องราคาที่หลังร้านตั้งไว้
+ * ปกติต้องกดปุ่มเอง แต่เจ้าของร้านสั่งให้ขึ้นเองอัตโนมัติหลังดึงราคาเสร็จ (22 ส.ค. 2569)
+ *
+ * ข้อยกเว้นเดียว: **แพ็กที่ราคาขายต่ำกว่าทุน จะไม่ถูกเผยแพร่**
+ * เพราะขายออกไปคือขาดทุนทุกบิลแน่นอน ไม่มีทางเป็นสิ่งที่ร้านตั้งใจ
+ * ของพวกนี้จะค้างราคาเดิมไว้บนเว็บและถูกรายงานเข้า LINE ให้ไปแก้
+ */
+export async function publishPrices(providerId: number): Promise<Published> {
+  // ดูก่อนว่าอันไหนจะถูกกันไว้ ต้องอ่านก่อนอัปเดต ไม่งั้นมันจะหายไปจากเงื่อนไข
+  const held = await q<{ name: string; cost: number; sell: number }>(
+    `select name, cost_price::float8 as cost, sell_price::float8 as sell
+       from products
+      where provider_id = $1 and is_active
+        and (published_sell_price is distinct from sell_price
+             or published_partner_price is distinct from partner_price)
+        and (sell_price < cost_price
+             or (partner_price is not null and partner_price < cost_price))
+      order by (cost_price - sell_price) desc
+      limit 10`,
+    [providerId]
+  )
+
+  const updated = await q<{ id: number }>(
+    `update products
+        set published_sell_price = sell_price,
+            published_partner_price = partner_price
+      where provider_id = $1
+        and (published_sell_price is distinct from sell_price
+             or published_partner_price is distinct from partner_price)
+        and sell_price >= cost_price
+        and (partner_price is null or partner_price >= cost_price)
+     returning id`,
+    [providerId]
+  )
+
+  return { count: updated.length, held }
+}
+
 export type RefreshResult = {
   provider: string
   /** ทำสำเร็จไหม — ไม่สำเร็จต้องมี error เสมอ */
@@ -374,6 +422,8 @@ export type RefreshResult = {
   fetchMs: number
   saveMs: number
   applied?: AppliedChanges
+  /** ผลการเอาราคาขึ้นหน้าเว็บลูกค้า */
+  published?: Published
   /** หมายเหตุจากตัวเชื่อม หรือเรื่องรายการซ้ำ */
   note?: string | null
 }
@@ -440,6 +490,8 @@ export async function refreshSellingPrices(provider: ProviderRow): Promise<Refre
 
     const saved = await saveCatalog(provider.id, entries)
     const applied = await applyCatalogToProducts(provider.id)
+    // ราคาที่คำนวณใหม่ต้องถึงมือลูกค้าเลย ไม่ต้องรอคนมากดปุ่มเผยแพร่
+    const published = await publishPrices(provider.id)
 
     return {
       provider: provider.name,
@@ -449,6 +501,7 @@ export async function refreshSellingPrices(provider: ProviderRow): Promise<Refre
       fetchMs,
       saveMs: Date.now() - startedAt - fetchMs,
       applied,
+      published,
       note: [adapterNote, saved.note].filter(Boolean).join(' · ') || null,
     }
   } catch (err) {

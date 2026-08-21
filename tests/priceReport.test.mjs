@@ -33,6 +33,7 @@ function result(over = {}) {
     fetchMs: 600,
     saveMs: 400,
     applied: applied(),
+    published: { count: 0, held: [] },
     note: null,
     ...over,
   }
@@ -84,7 +85,6 @@ check('บอกทีละเจ้า และบอกว่าเกมไ
   assert.match(text, /📦 Free Fire/)
   assert.match(text, /▼ 520 เพชร: 100 → 95 บาท/)
   assert.match(text, /✔️ JCR-SHOP/)
-  assert.match(text, /อัปเดตราคาขึ้นหน้าเว็บ/)
 })
 
 check('เจ้าที่ล้มเหลวต้องขึ้นพร้อมเหตุผล ไม่ใช่แค่หายไปจากรายงาน', () => {
@@ -156,6 +156,32 @@ check('ทำไม่ครบแล้วต่อรอบถัดไปไ�
 check('หมายเหตุจากผู้ให้บริการต้องติดไปด้วย', () => {
   const text = buildRunReport(run({ results: [result({ note: 'ข้าม 13 แพ็กเกจที่ต้องแนบรูป' })] }))
   assert.match(text, /ℹ️ ข้าม 13 แพ็กเกจที่ต้องแนบรูป/)
+})
+
+check('ราคาที่ขึ้นหน้าเว็บให้อัตโนมัติ ต้องบอกจำนวน', () => {
+  const text = buildRunReport(
+    run({
+      results: [result({ applied: applied({ updated: 5 }), published: { count: 5, held: [] } })],
+    })
+  )
+  assert.match(text, /🌐 ขึ้นหน้าเว็บให้แล้ว 5 แพ็ก/)
+  assert.doesNotMatch(text, /อย่าลืมกด/)
+})
+
+check('แพ็กที่ขายต่ำกว่าทุนต้องไม่ถูกเอาขึ้นเว็บ และต้องบอกว่าอันไหน', () => {
+  const text = buildRunReport(
+    run({
+      results: [
+        result({
+          applied: applied({ updated: 3 }),
+          published: { count: 2, held: [{ name: 'RoV 6,200 คูปอง', cost: 4700, sell: 226 }] },
+        }),
+      ],
+    })
+  )
+  assert.match(text, /⛔ ไม่ขึ้นให้ 1 แพ็ก เพราะราคาขายต่ำกว่าทุน/)
+  assert.match(text, /RoV 6,200 คูปอง — ทุน 4,700 ขาย 226/)
+  assert.match(text, /รวม 1 แพ็กที่ยังไม่ขึ้นเว็บเพราะขายต่ำกว่าทุน/)
 })
 
 console.log(`\nผ่านทั้งหมด ${pass} ข้อ`)

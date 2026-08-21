@@ -296,11 +296,19 @@ export async function refreshSellingPricesAction(formData: FormData): Promise<Ac
   revalidatePath('/shop')
 
   const applied = result.applied!
+  const pub = result.published
+  const web =
+    pub && pub.count > 0 ? ` · 🌐 ขึ้นหน้าเว็บให้แล้ว ${pub.count} แพ็ก` : ''
+  const heldNote =
+    pub && pub.held.length > 0
+      ? ` · ⛔ ไม่ขึ้นให้ ${pub.held.length} แพ็กเพราะขายต่ำกว่าทุน: ` +
+        pub.held.map((h) => `${h.name} (ทุน ${h.cost} ขาย ${h.sell})`).join(' · ')
+      : ''
   const head =
     `ดึงราคาเฉพาะที่เปิดขายของ "${result.provider}" แล้ว — ` +
     `${result.games} เกม ${result.packs} แพ็กเกจ · ` +
     `ใช้เวลา ${(result.fetchMs / 1000).toFixed(1)} + ${(result.saveMs / 1000).toFixed(1)} วินาที`
-  const tail = result.note ? ` · ⚠️ ${result.note}` : ''
+  const tail = (result.note ? ` · ⚠️ ${result.note}` : '') + web + heldNote
 
   if (applied.updated === 0) {
     return { ok: `${head} · ราคาตรงกับปลายทางอยู่แล้ว ไม่มีอะไรเปลี่ยน${tail}` }

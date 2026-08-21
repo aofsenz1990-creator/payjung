@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { getSession } from '@/lib/auth'
 import { tooMany } from '@/lib/ratelimit'
 import {
@@ -68,6 +69,13 @@ export async function GET(request: NextRequest) {
     let chained = false
     if (run.pending.length > 0 && round < MAX_ROUNDS) {
       chained = await continueLater(run.pending, round + 1, secret)
+    }
+
+    // ราคาถูกเผยแพร่ขึ้นหน้าเว็บไปแล้วในรอบนี้ ต้องล้างแคชให้ลูกค้าเห็นของใหม่
+    if (run.results.some((r) => (r.published?.count ?? 0) > 0)) {
+      for (const p of ['/shop', '/games', '/storefront']) revalidatePath(p)
+      revalidatePath('/shop/game/[id]', 'page')
+      revalidatePath('/games/[id]', 'page')
     }
 
     const complete = run.pending.length === 0 && run.results.every((r) => r.ok)

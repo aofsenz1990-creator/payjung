@@ -797,12 +797,17 @@ export const jcr: ProviderAdapter = {
     let fromSchema = 0
     /** สินค้าที่ต้องถอยไปอ่านช่องกรอกจากแบบฟอร์ม HTML */
     let fromForm = 0
+    /*
+     * แพ็กเกจที่ถูกคัดออก — เก็บ "ชื่อ" ไว้ ไม่ใช่แค่นับจำนวน
+     * บอกว่า "ข้าม 13 แพ็กเกจ" เฉย ๆ ทำอะไรต่อไม่ได้เลย ต้องรู้ว่าเป็นเกมไหนแพ็กไหน
+     * ถึงจะไปคุยกับ JCR หรือตัดสินใจตั้งราคาเองได้
+     */
     /** แพ็กเกจที่ปลายทางปิดขายอยู่ */
-    let unavailable = 0
+    const unavailable: string[] = []
     /** แพ็กเกจที่ต้องแนบรูป ซึ่งหน้าเว็บลูกค้ายังทำไม่ได้ */
-    let needsFile = 0
+    const needsFile: string[] = []
     /** แพ็กเกจที่ปลายทางไม่บอกราคา — ข้ามไปเพราะตั้งราคาขายให้ไม่ได้ */
-    let noPrice = 0
+    const noPrice: string[] = []
     /** เหตุผลที่สินค้าแต่ละตัวดึงไม่สำเร็จ — เก็บไว้รายงาน ไม่ใช่แค่นับจำนวน */
     const failures: string[] = []
 
@@ -878,16 +883,18 @@ export const jcr: ProviderAdapter = {
         for (const pack of packages) {
           const packageId = pickString(pack, ['id', 'packageId', 'package_id', 'code'])
           if (!packageId) continue
+          const packName = pickString(pack, ['name', 'title', 'packageName']) ?? packageId
+          const label = `${productName} — ${packName}`
 
           // เอกสาร: available = false แปลว่าตอนนี้สั่งไม่ได้ ไม่ต้องเอามาขาย
           if (pack.available === false) {
-            unavailable++
+            unavailable.push(label)
             continue
           }
 
           // ช่องแบบแนบรูปยังทำไม่ได้บนหน้าเว็บลูกค้า — เอามาขายแล้วสั่งไม่ผ่านแน่นอน
           if (needsFileUpload(pack.inputFields ?? pack.fields)) {
-            needsFile++
+            needsFile.push(label)
             continue
           }
 
@@ -895,7 +902,7 @@ export const jcr: ProviderAdapter = {
           // ราคาทุนต้องรู้ก่อนถึงจะตั้งราคาขายอัตโนมัติได้
           // แพ็กเกจที่ปลายทางไม่บอกราคา (หรือราคา 0) ข้ามไป ไม่งั้นจะกลายเป็นสินค้าราคา 0 บนหน้าเว็บ
           if (price === null || price <= 0) {
-            noPrice++
+            noPrice.push(label)
             continue
           }
 
@@ -928,7 +935,7 @@ export const jcr: ProviderAdapter = {
             serverId: '0',
             serverName: null,
             sku: packageId,
-            packName: pickString(pack, ['name', 'title', 'packageName']) ?? packageId,
+            packName,
             packDesc:
               (pickString(pack, ['description', 'detail', 'desc', 'note']) ?? '') +
               (dynamic ? ' (ระบุจำนวนเอง — ราคาต่อหน่วย)' : ''),
@@ -977,11 +984,20 @@ export const jcr: ProviderAdapter = {
         ? `${failures.length} สินค้าที่ดึงแพ็กเกจไม่สำเร็จ` +
           (topReason ? ` — ส่วนใหญ่เพราะ: ${topReason.slice(0, 140)}` : '')
         : null,
-      noPrice > 0 ? `ข้าม ${noPrice} แพ็กเกจที่ JCR ไม่ได้บอกราคา` : null,
+      noPrice.length > 0
+        ? `ข้าม ${noPrice.length} แพ็กเกจที่ JCR ไม่ได้บอกราคา (ตั้งราคาขายให้ไม่ได้): ` +
+          `${noPrice.slice(0, 5).join(', ')}${noPrice.length > 5 ? ` และอีก ${noPrice.length - 5}` : ''}`
+        : null,
       fromSchema > 0 ? `ได้ช่องกรอกของลูกค้าครบ ${fromSchema} แพ็กเกจ` : null,
       fromForm > 0 ? `อ่านช่องกรอกจากแบบฟอร์มของ JCR อีก ${fromForm} สินค้า` : null,
-      unavailable > 0 ? `ข้าม ${unavailable} แพ็กเกจที่ JCR ปิดขายอยู่` : null,
-      needsFile > 0 ? `ข้าม ${needsFile} แพ็กเกจที่ต้องแนบรูป (หน้าเว็บลูกค้ายังทำไม่ได้)` : null,
+      unavailable.length > 0
+        ? `ข้าม ${unavailable.length} แพ็กเกจที่ JCR ปิดขายอยู่: ` +
+          `${unavailable.slice(0, 5).join(', ')}${unavailable.length > 5 ? ` และอีก ${unavailable.length - 5}` : ''}`
+        : null,
+      needsFile.length > 0
+        ? `ข้าม ${needsFile.length} แพ็กเกจที่ต้องให้ลูกค้าแนบรูป (หน้าเว็บเรายังทำไม่ได้): ` +
+          `${needsFile.slice(0, 5).join(', ')}${needsFile.length > 5 ? ` และอีก ${needsFile.length - 5}` : ''}`
+        : null,
       partial ? '👉 กด "ดึงรายการเกมทั้งหมด" ซ้ำอีกครั้ง ระบบจะไปต่อจากที่ค้างไว้' : null,
     ].filter(Boolean)
 
