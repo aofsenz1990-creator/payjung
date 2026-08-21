@@ -34,6 +34,8 @@ export type AppliedChanges = {
   unmatched: number
   /** แพ็กที่ยังน่าสงสัยว่าจับคู่ข้ามเกมอยู่ — ซ่อมอัตโนมัติให้ไม่ได้ ต้องมีคนดู */
   suspect: Array<{ name: string; our_game: string; their_game: string }>
+  /** แพ็กใหม่ที่ปลายทางเพิ่มมาในเกมที่เราขายอยู่ แต่ยังไม่ได้นำเข้ามาขาย */
+  newPacks: { count: number; sample: Array<{ game: string; pack: string; price: number }> }
   summary: string
 }
 
@@ -275,6 +277,38 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
       ? ` ⚠ อีก ${unmatched} แพ็กที่เปิดขายอยู่หาคู่ในรายการของปลายทางไม่เจอ ` +
         `(ราคาทุนค้างของเก่า) — กด "ดึงรายการทั้งหมด" ของเจ้านี้เพื่อเติมรายการให้ครบ`
       : ''
+  /*
+   * แพ็กใหม่ที่ปลายทางเพิ่มเข้ามาในเกมที่เราขายอยู่
+   *
+   * รอบอัตโนมัติ "อัปเดตราคาของเดิม" อย่างเดียว ไม่เอาของใหม่ขึ้นขายให้เอง
+   * เพราะการเปิดขายต้องตั้งกำไรและตรวจก่อนเสมอ (ดู importGamesAction)
+   * แต่ต้องบอกให้รู้ว่ามีของใหม่รออยู่ ไม่งั้นจะไม่มีใครรู้เลยว่าพลาดของขายไป
+   */
+  const fresh = await q<{ game: string; pack: string; price: number }>(
+    `select c.game_name as game, c.pack_name as pack, c.pack_price::float8 as price
+       from provider_catalog c
+       join (select distinct provider_game_id as gid
+               from products
+              where provider_id = $1 and is_active and provider_game_id is not null) s
+         on s.gid = c.game_id
+       left join products p
+         on p.provider_id = c.provider_id
+        and p.provider_game_id = c.game_id
+        and p.provider_server_id = c.server_id
+        and p.provider_sku = c.pack_code
+        and coalesce(p.provider_product_type, '') = c.product_type
+      where c.provider_id = $1 and p.id is null
+      order by c.game_name, c.pack_price
+      limit 200`,
+    [providerId]
+  )
+
+  const brandNew =
+    fresh.length > 0
+      ? ` 🆕 ปลายทางมีแพ็กใหม่ในเกมที่เราขายอยู่ ${fresh.length} รายการที่ยังไม่ได้เอาขึ้นขาย — ` +
+        `กด "นำเข้าเกม" ถ้าต้องการ`
+      : ''
+
   const crossed =
     suspect.length > 0
       ? ` ❗ ตรวจด่วน ${suspect.length} แพ็กอาจจับคู่ข้ามเกมอยู่: ` +
@@ -290,16 +324,18 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
     repaired,
     unmatched,
     suspect,
+    newPacks: { count: fresh.length, sample: fresh.slice(0, 5) },
     summary:
       updated.length === 0
-        ? `ข้อมูลตรงกับผู้ให้บริการอยู่แล้ว${fixed}${missing}${crossed}`
+        ? `ข้อมูลตรงกับผู้ให้บริการอยู่แล้ว${fixed}${missing}${crossed}${brandNew}`
         : `อัปเดต ${updated.length} แพ็กเกจ — ราคาขายที่ตั้งเองไม่ถูกแตะ ` +
           `ส่วนแพ็กที่ตั้งกำไรเป็น % ไว้คิดราคาใหม่ให้แล้ว` +
           (detail ? ` · ต้นทุนที่เปลี่ยน: ${detail}` : '') +
           fixed +
           warn +
           missing +
-          crossed,
+          crossed +
+          brandNew,
   }
 }
 

@@ -102,6 +102,15 @@ export function buildRunReport(run: DailyRunResult, opts?: { chained?: boolean }
       )
     }
 
+    const fresh = applied?.newPacks
+    if (fresh && fresh.count > 0) {
+      lines.push(`   🆕 ปลายทางมีแพ็กใหม่ในเกมที่ขายอยู่ ${fresh.count} รายการ (ยังไม่ได้เอาขึ้นขาย)`)
+      for (const f of fresh.sample) {
+        lines.push(`   • ${f.game} — ${f.pack} (ทุน ${baht(f.price)})`)
+      }
+      lines.push('   ถ้าจะขาย ให้เข้าหลังร้านกด "นำเข้าเกม" แล้วตั้งกำไร')
+    }
+
     const pub = r.published
     if (pub && pub.count > 0) {
       lines.push(`   🌐 ขึ้นหน้าเว็บให้แล้ว ${pub.count} แพ็ก — ลูกค้าเห็นราคาใหม่ทันที`)
