@@ -47,6 +47,22 @@ export type AppliedChanges = {
  * แพ็กที่ยังไม่ได้เอาขึ้นขาย ไม่ต้องไปดึงราคาให้และไม่ต้องรายงานถึง
  * เขียนไว้ที่เดียวเพราะทุกคิวรีในไฟล์นี้ต้องมองตรงกัน ใช้ชื่อตาราง p สำหรับ products
  */
+/**
+ * ขอบเขตของรอบดึงราคา
+ *  - 'site' = เฉพาะแพ็กที่แสดงอยู่บนหน้าเว็บลูกค้าจริง (ใช้กับรอบอัตโนมัติทุกวัน)
+ *    เร็ว ไม่ไปเบียดโควตาปลายทาง และไม่รายงานเรื่องของที่ไม่ได้ขาย
+ *  - 'all'  = ดึงทั้งหมดเท่าที่ปลายทางมี (ใช้เมื่อคนกดปุ่มเอง)
+ *    ช้ากว่าแต่ได้ครบ รวมของที่ปิดขายไว้และของที่ปลายทางเพิ่งเพิ่มเข้ามา
+ *
+ * เจ้าของร้านสั่งไว้ 22 ส.ค. 2569: อัตโนมัติให้แคบ กดเองให้ครบ
+ */
+export type Scope = 'site' | 'all'
+
+/** เงื่อนไข SQL ว่าแพ็กไหนอยู่ในขอบเขตของรอบนี้ (ตารางสินค้าต้องใช้ชื่อ p) */
+function inScope(scope: Scope) {
+  return scope === 'all' ? 'p.is_active' : ON_SITE
+}
+
 const ON_SITE = `p.is_published and p.is_active
         and p.game_id in (select gv.id from games gv
                            where gv.is_published and gv.is_active)`
@@ -129,7 +145,11 @@ export async function saveCatalog(providerId: number, entries: CatalogEntryRow[]
  *
  * ไม่แตะ ชื่อ รูป สถานะเปิดขาย สต๊อก หรือลำดับการแสดง — ของพวกนี้ร้านตั้งเอง
  */
-export async function applyCatalogToProducts(providerId: number): Promise<AppliedChanges> {
+export async function applyCatalogToProducts(
+  providerId: number,
+  scope: Scope = 'site'
+): Promise<AppliedChanges> {
+  const scoped = inScope(scope)
   /*
    * ซ่อม "ชนิดสินค้า" ของแพ็กที่เคยจับคู่ผิดตัวก่อนเป็นอันดับแรก
    *
@@ -209,7 +229,7 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
     `select p.name, p.cost_price::float8 as cost_price, p.sell_price::float8 as sell_price
        from products p
       where p.provider_id = $1 and p.sell_price < p.cost_price
-        and ${ON_SITE}
+        and ${scoped}
       order by (p.cost_price - p.sell_price) desc
       limit 5`,
     [providerId]
@@ -223,7 +243,7 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
     `select count(*)::int as n
        from products p
       where p.provider_id = $1 and p.provider_game_id is not null
-        and ${ON_SITE}
+        and ${scoped}
         and not exists (
           select 1 from provider_catalog c
            where c.provider_id = p.provider_id
@@ -254,7 +274,7 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
         and c.pack_code = p.provider_sku
         and c.product_type = coalesce(p.provider_product_type, '')
       where p.provider_id = $1
-        and ${ON_SITE}
+        and ${scoped}
         and lower(g.name) <> lower(c.game_name)
         and exists (
           select 1 from provider_catalog c2
@@ -398,13 +418,17 @@ export type Published = {
  * เพราะขายออกไปคือขาดทุนทุกบิลแน่นอน ไม่มีทางเป็นสิ่งที่ร้านตั้งใจ
  * ของพวกนี้จะค้างราคาเดิมไว้บนเว็บและถูกรายงานเข้า LINE ให้ไปแก้
  */
-export async function publishPrices(providerId: number): Promise<Published> {
+export async function publishPrices(
+  providerId: number,
+  scope: Scope = 'site'
+): Promise<Published> {
+  const scoped = inScope(scope)
   // ดูก่อนว่าอันไหนจะถูกกันไว้ ต้องอ่านก่อนอัปเดต ไม่งั้นมันจะหายไปจากเงื่อนไข
   const held = await q<{ name: string; cost: number; sell: number }>(
     `select p.name, p.cost_price::float8 as cost, p.sell_price::float8 as sell
        from products p
       where p.provider_id = $1
-        and ${ON_SITE}
+        and ${scoped}
         and (p.published_sell_price is distinct from p.sell_price
              or p.published_partner_price is distinct from p.partner_price)
         and (p.sell_price < p.cost_price
@@ -419,7 +443,7 @@ export async function publishPrices(providerId: number): Promise<Published> {
         set published_sell_price = p.sell_price,
             published_partner_price = p.partner_price
       where p.provider_id = $1
-        and ${ON_SITE}
+        and ${scoped}
         and (p.published_sell_price is distinct from p.sell_price
              or p.published_partner_price is distinct from p.partner_price)
         and p.sell_price >= p.cost_price
@@ -453,7 +477,10 @@ export type RefreshResult = {
  * ต่างจากการดึงทั้งร้านตรงที่ไม่ไปแตะเกมที่เราไม่ได้ขาย — ซึ่งเป็นส่วนใหญ่ของรายการ
  * ผลคือเร็วกว่ามาก ไม่ไปเบียดเพดานการยิงของปลายทาง และทำบ่อยได้โดยไม่เจ็บ
  */
-export async function refreshSellingPrices(provider: ProviderRow): Promise<RefreshResult> {
+export async function refreshSellingPrices(
+  provider: ProviderRow,
+  scope: Scope = 'site'
+): Promise<RefreshResult> {
   const base: RefreshResult = {
     provider: provider.name,
     ok: false,
@@ -472,51 +499,63 @@ export async function refreshSellingPrices(provider: ProviderRow): Promise<Refre
     return { ...base, error: `"${provider.name}" ยังไม่รองรับการดึงรายการอัตโนมัติ` }
   }
 
+  const scoped = inScope(scope)
+
   try {
-    // เกมที่ผูกกับเจ้านี้และยังเปิดขายอยู่ (ปิดขายไปแล้วไม่ต้องเสียเวลาดึง)
-    const selling = await q<{ game_id: string }>(
-      `select distinct p.provider_game_id as game_id
-         from products p
-        where p.provider_id = $1 and p.provider_game_id is not null
-          and ${ON_SITE}`,
-      [provider.id]
-    )
-    if (selling.length === 0) {
-      return {
-        ...base,
-        error: `ยังไม่มีแพ็กเกจของ "${provider.name}" ที่เปิดขายอยู่ — กดดึงทั้งร้านแล้วนำเข้าก่อน`,
+    /*
+     * รอบอัตโนมัติ: ขอเฉพาะเกมที่มีของแสดงอยู่บนหน้าเว็บ — เร็วและไม่เบียดโควตาปลายทาง
+     * กดเอง: ไม่ระบุรายชื่อ ปลายทางส่งมาทั้งหมดเท่าที่มี จะได้เห็นของที่เพิ่งเพิ่มมาด้วย
+     */
+    let only: Set<string> | null = null
+    if (scope === 'site') {
+      const selling = await q<{ game_id: string }>(
+        `select distinct p.provider_game_id as game_id
+           from products p
+          where p.provider_id = $1 and p.provider_game_id is not null
+            and ${scoped}`,
+        [provider.id]
+      )
+      if (selling.length === 0) {
+        return {
+          ...base,
+          error:
+            `ยังไม่มีแพ็กเกจของ "${provider.name}" ที่แสดงอยู่บนหน้าเว็บ — ` +
+            'กดดึงทั้งร้านแล้วนำเข้าและเปิดขายก่อน',
+        }
       }
+      only = new Set(selling.map((r) => r.game_id))
     }
-    const only = new Set(selling.map((r) => r.game_id))
 
     const startedAt = Date.now()
-    const result = await adapter.fetchCatalog(toConfig(provider), { only })
+    // ไม่ส่ง only ไป = ขอทั้งหมดเท่าที่ปลายทางมี
+    const result = await adapter.fetchCatalog(toConfig(provider), only ? { only } : {})
     const fetchMs = Date.now() - startedAt
     const all: CatalogEntry[] = Array.isArray(result) ? result : result.entries
     const adapterNote = Array.isArray(result) ? null : result.note
 
     // เจ้าที่ยิงครั้งเดียวได้ทั้งร้าน (24BUYM/OverTopup) จะไม่สนใจ only มาก่อน จึงกรองซ้ำที่นี่
-    const entries = all.filter((e) => only.has(e.gameId))
+    const entries = only ? all.filter((e) => only!.has(e.gameId)) : all
     if (entries.length === 0) {
       return {
         ...base,
-        games: only.size,
+        games: only?.size ?? 0,
         fetchMs,
-        error:
-          'ปลายทางไม่ได้ส่งราคาของเกมที่เปิดขายอยู่กลับมาเลย — ' +
-          'อาจถูกปิดขายที่ฝั่งผู้ให้บริการแล้ว ลองกดดึงทั้งร้านเพื่อตรวจสอบ',
+        error: only
+          ? 'ปลายทางไม่ได้ส่งราคาของเกมที่แสดงบนหน้าเว็บกลับมาเลย — ' +
+            'อาจถูกปิดขายที่ฝั่งผู้ให้บริการแล้ว ลองกดดึงทั้งร้านเพื่อตรวจสอบ'
+          : 'ปลายทางไม่ได้ส่งรายการสินค้ากลับมาเลย',
       }
     }
 
     const saved = await saveCatalog(provider.id, entries)
-    const applied = await applyCatalogToProducts(provider.id)
+    const applied = await applyCatalogToProducts(provider.id, scope)
     // ราคาที่คำนวณใหม่ต้องถึงมือลูกค้าเลย ไม่ต้องรอคนมากดปุ่มเผยแพร่
-    const published = await publishPrices(provider.id)
+    const published = await publishPrices(provider.id, scope)
 
     return {
       provider: provider.name,
       ok: true,
-      games: only.size,
+      games: only ? only.size : new Set(entries.map((e) => e.gameId)).size,
       packs: saved.saved,
       fetchMs,
       saveMs: Date.now() - startedAt - fetchMs,
@@ -602,7 +641,10 @@ export type DailyRunResult = {
   total: number
 }
 
-/** ผู้ให้บริการทุกเจ้าที่มีสินค้าเปิดขายอยู่บนเว็บจริง ๆ */
+/**
+ * ผู้ให้บริการทุกเจ้าที่มีสินค้าแสดงอยู่บนหน้าเว็บจริง ๆ
+ * ใช้กับรอบอัตโนมัติเท่านั้น (ตอนกดเองจะเลือกเจ้าจากดรอปดาวน์อยู่แล้ว)
+ */
 export async function providersInUse(): Promise<ProviderRow[]> {
   return q<ProviderRow>(
     `select distinct pr.id, pr.name, pr.base_url, pr.username, pr.api_key, pr.kind, pr.sandbox

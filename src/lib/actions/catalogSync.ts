@@ -275,10 +275,13 @@ export async function importGamesAction(formData: FormData): Promise<ActionState
 }
 
 /**
- * ดึงราคาเฉพาะสินค้าที่ร้าน "เปิดขายอยู่จริง" แล้วอัปเดตให้ในปุ่มเดียว
+ * กดเองเพื่อดึงราคา **ทั้งหมดเท่าที่ปลายทางมี** แล้วอัปเดตให้ในปุ่มเดียว
  *
- * ตัวงานจริงอยู่ที่ lib/priceRefresh.ts เพราะรอบอัตโนมัติประจำวัน
- * (/api/refresh-prices) ต้องใช้ตัวเดียวกันเป๊ะ ๆ ไม่งั้นกดเองกับปล่อยให้ทำเองจะได้ผลไม่ตรงกัน
+ * ต่างจากรอบอัตโนมัติประจำวันตรงขอบเขต — รอบอัตโนมัติแตะเฉพาะแพ็กที่แสดงบนหน้าเว็บ
+ * เพื่อความเร็วและไม่เบียดโควตาปลายทาง ส่วนตอนคนกดเองคือตั้งใจจะดูของครบ
+ * จึงขอมาทั้งหมด รวมของที่ปิดขายไว้และของที่ปลายทางเพิ่งเพิ่มเข้ามา
+ *
+ * ตัวงานจริงอยู่ที่ lib/priceRefresh.ts ใช้ร่วมกันทั้งสองทาง ต่างกันแค่ขอบเขตที่ส่งเข้าไป
  */
 export async function refreshSellingPricesAction(formData: FormData): Promise<ActionState> {
   await requireAdmin()
@@ -288,7 +291,7 @@ export async function refreshSellingPricesAction(formData: FormData): Promise<Ac
   const provider = await getProvider(providerId)
   if (!provider) return { error: 'ไม่พบผู้ให้บริการนี้' }
 
-  const result = await refreshSellingPrices(provider)
+  const result = await refreshSellingPrices(provider, 'all')
   if (!result.ok) return { error: result.error ?? 'ดึงราคาไม่สำเร็จ' }
 
   revalidatePath('/storefront')
@@ -305,7 +308,7 @@ export async function refreshSellingPricesAction(formData: FormData): Promise<Ac
         pub.held.map((h) => `${h.name} (ทุน ${h.cost} ขาย ${h.sell})`).join(' · ')
       : ''
   const head =
-    `ดึงราคาเฉพาะที่เปิดขายของ "${result.provider}" แล้ว — ` +
+    `ดึงราคาทั้งหมดของ "${result.provider}" แล้ว — ` +
     `${result.games} เกม ${result.packs} แพ็กเกจ · ` +
     `ใช้เวลา ${(result.fetchMs / 1000).toFixed(1)} + ${(result.saveMs / 1000).toFixed(1)} วินาที`
   const tail = (result.note ? ` · ⚠️ ${result.note}` : '') + web + heldNote

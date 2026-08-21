@@ -875,13 +875,13 @@ export default async function StorefrontPage({
                     ))}
                   </select>
                   <SubmitButton className="btn-primary" pendingLabel="กำลังดึงราคา...">
-                    ⚡ ดึงราคาเฉพาะที่เปิดขาย
+                    ⚡ ดึงราคาทั้งหมดแล้วอัปเดต
                   </SubmitButton>
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-mute">
-                  ดึงราคาล่าสุด<b className="text-slate-200">เฉพาะเกมที่ร้านเปิดขายอยู่</b>{' '}
+                  ดึงราคาล่าสุด<b className="text-slate-200">ทั้งหมดเท่าที่ผู้ให้บริการมี</b>{' '}
                   แล้วอัปเดตต้นทุนให้ในปุ่มเดียว (ทำงานเท่ากับกดสองปุ่มด้านบน) ·
-                  เร็วกว่าและไม่ไปเบียดเพดานการยิงของผู้ให้บริการ ·{' '}
+                  รวมของที่ปิดขายไว้และของที่ปลายทางเพิ่งเพิ่มมา ·{' '}
                   <b className="text-good">ถ้าราคาทุนเปลี่ยน ระบบจะแจ้งเข้า LINE ให้ด้วย</b>
                 </p>
               </ActionForm>
