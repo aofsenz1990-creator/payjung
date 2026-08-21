@@ -34,10 +34,22 @@ export type AppliedChanges = {
   unmatched: number
   /** แพ็กที่ยังน่าสงสัยว่าจับคู่ข้ามเกมอยู่ — ซ่อมอัตโนมัติให้ไม่ได้ ต้องมีคนดู */
   suspect: Array<{ name: string; our_game: string; their_game: string }>
-  /** แพ็กใหม่ที่ปลายทางเพิ่มมาในเกมที่เราขายอยู่ แต่ยังไม่ได้นำเข้ามาขาย */
-  newPacks: { count: number; sample: Array<{ game: string; pack: string; price: number }> }
   summary: string
 }
+
+/**
+ * เงื่อนไข SQL ของ "แพ็กนี้แสดงอยู่บนหน้าเว็บลูกค้าจริง"
+ *
+ * ต้องตรงกับที่หน้าเว็บลูกค้าใช้เป๊ะ ๆ (ดู app/shop/game/[id]/page.tsx)
+ * ไม่งั้นจะเจออาการ "รายงานบอกว่าอัปเดตแล้ว แต่ของที่ลูกค้าเห็นไม่เปลี่ยน"
+ *
+ * เจ้าของร้านสั่งไว้ (22 ส.ค. 2569): **ยึดของที่แสดงบนเว็บเป็นหลัก**
+ * แพ็กที่ยังไม่ได้เอาขึ้นขาย ไม่ต้องไปดึงราคาให้และไม่ต้องรายงานถึง
+ * เขียนไว้ที่เดียวเพราะทุกคิวรีในไฟล์นี้ต้องมองตรงกัน ใช้ชื่อตาราง p สำหรับ products
+ */
+const ON_SITE = `p.is_published and p.is_active
+        and p.game_id in (select gv.id from games gv
+                           where gv.is_published and gv.is_active)`
 
 /* ------------------------------ บันทึกลงตารางกลาง ------------------------------ */
 
@@ -194,10 +206,11 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
 
   // เตือนแพ็กที่ตอนนี้ขายต่ำกว่าทุน — เกิดได้กับแพ็กที่ตั้งราคาเองแล้วปลายทางขึ้นราคา
   const losing = await q<{ name: string; cost_price: number; sell_price: number }>(
-    `select name, cost_price::float8 as cost_price, sell_price::float8 as sell_price
-       from products
-      where provider_id = $1 and is_active and sell_price < cost_price
-      order by (cost_price - sell_price) desc
+    `select p.name, p.cost_price::float8 as cost_price, p.sell_price::float8 as sell_price
+       from products p
+      where p.provider_id = $1 and p.sell_price < p.cost_price
+        and ${ON_SITE}
+      order by (p.cost_price - p.sell_price) desc
       limit 5`,
     [providerId]
   )
@@ -209,7 +222,8 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
   const gap = await q1<{ n: number }>(
     `select count(*)::int as n
        from products p
-      where p.provider_id = $1 and p.is_active and p.provider_game_id is not null
+      where p.provider_id = $1 and p.provider_game_id is not null
+        and ${ON_SITE}
         and not exists (
           select 1 from provider_catalog c
            where c.provider_id = p.provider_id
@@ -239,7 +253,8 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
         and c.server_id = p.provider_server_id
         and c.pack_code = p.provider_sku
         and c.product_type = coalesce(p.provider_product_type, '')
-      where p.provider_id = $1 and p.is_active
+      where p.provider_id = $1
+        and ${ON_SITE}
         and lower(g.name) <> lower(c.game_name)
         and exists (
           select 1 from provider_catalog c2
@@ -277,38 +292,6 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
       ? ` ⚠ อีก ${unmatched} แพ็กที่เปิดขายอยู่หาคู่ในรายการของปลายทางไม่เจอ ` +
         `(ราคาทุนค้างของเก่า) — กด "ดึงรายการทั้งหมด" ของเจ้านี้เพื่อเติมรายการให้ครบ`
       : ''
-  /*
-   * แพ็กใหม่ที่ปลายทางเพิ่มเข้ามาในเกมที่เราขายอยู่
-   *
-   * รอบอัตโนมัติ "อัปเดตราคาของเดิม" อย่างเดียว ไม่เอาของใหม่ขึ้นขายให้เอง
-   * เพราะการเปิดขายต้องตั้งกำไรและตรวจก่อนเสมอ (ดู importGamesAction)
-   * แต่ต้องบอกให้รู้ว่ามีของใหม่รออยู่ ไม่งั้นจะไม่มีใครรู้เลยว่าพลาดของขายไป
-   */
-  const fresh = await q<{ game: string; pack: string; price: number }>(
-    `select c.game_name as game, c.pack_name as pack, c.pack_price::float8 as price
-       from provider_catalog c
-       join (select distinct provider_game_id as gid
-               from products
-              where provider_id = $1 and is_active and provider_game_id is not null) s
-         on s.gid = c.game_id
-       left join products p
-         on p.provider_id = c.provider_id
-        and p.provider_game_id = c.game_id
-        and p.provider_server_id = c.server_id
-        and p.provider_sku = c.pack_code
-        and coalesce(p.provider_product_type, '') = c.product_type
-      where c.provider_id = $1 and p.id is null
-      order by c.game_name, c.pack_price
-      limit 200`,
-    [providerId]
-  )
-
-  const brandNew =
-    fresh.length > 0
-      ? ` 🆕 ปลายทางมีแพ็กใหม่ในเกมที่เราขายอยู่ ${fresh.length} รายการที่ยังไม่ได้เอาขึ้นขาย — ` +
-        `กด "นำเข้าเกม" ถ้าต้องการ`
-      : ''
-
   const crossed =
     suspect.length > 0
       ? ` ❗ ตรวจด่วน ${suspect.length} แพ็กอาจจับคู่ข้ามเกมอยู่: ` +
@@ -324,18 +307,16 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
     repaired,
     unmatched,
     suspect,
-    newPacks: { count: fresh.length, sample: fresh.slice(0, 5) },
     summary:
       updated.length === 0
-        ? `ข้อมูลตรงกับผู้ให้บริการอยู่แล้ว${fixed}${missing}${crossed}${brandNew}`
+        ? `ข้อมูลตรงกับผู้ให้บริการอยู่แล้ว${fixed}${missing}${crossed}`
         : `อัปเดต ${updated.length} แพ็กเกจ — ราคาขายที่ตั้งเองไม่ถูกแตะ ` +
           `ส่วนแพ็กที่ตั้งกำไรเป็น % ไว้คิดราคาใหม่ให้แล้ว` +
           (detail ? ` · ต้นทุนที่เปลี่ยน: ${detail}` : '') +
           fixed +
           warn +
           missing +
-          crossed +
-          brandNew,
+          crossed,
   }
 }
 
@@ -420,28 +401,30 @@ export type Published = {
 export async function publishPrices(providerId: number): Promise<Published> {
   // ดูก่อนว่าอันไหนจะถูกกันไว้ ต้องอ่านก่อนอัปเดต ไม่งั้นมันจะหายไปจากเงื่อนไข
   const held = await q<{ name: string; cost: number; sell: number }>(
-    `select name, cost_price::float8 as cost, sell_price::float8 as sell
-       from products
-      where provider_id = $1 and is_active
-        and (published_sell_price is distinct from sell_price
-             or published_partner_price is distinct from partner_price)
-        and (sell_price < cost_price
-             or (partner_price is not null and partner_price < cost_price))
-      order by (cost_price - sell_price) desc
+    `select p.name, p.cost_price::float8 as cost, p.sell_price::float8 as sell
+       from products p
+      where p.provider_id = $1
+        and ${ON_SITE}
+        and (p.published_sell_price is distinct from p.sell_price
+             or p.published_partner_price is distinct from p.partner_price)
+        and (p.sell_price < p.cost_price
+             or (p.partner_price is not null and p.partner_price < p.cost_price))
+      order by (p.cost_price - p.sell_price) desc
       limit 10`,
     [providerId]
   )
 
   const updated = await q<{ id: number }>(
-    `update products
-        set published_sell_price = sell_price,
-            published_partner_price = partner_price
-      where provider_id = $1
-        and (published_sell_price is distinct from sell_price
-             or published_partner_price is distinct from partner_price)
-        and sell_price >= cost_price
-        and (partner_price is null or partner_price >= cost_price)
-     returning id`,
+    `update products p
+        set published_sell_price = p.sell_price,
+            published_partner_price = p.partner_price
+      where p.provider_id = $1
+        and ${ON_SITE}
+        and (p.published_sell_price is distinct from p.sell_price
+             or p.published_partner_price is distinct from p.partner_price)
+        and p.sell_price >= p.cost_price
+        and (p.partner_price is null or p.partner_price >= p.cost_price)
+     returning p.id`,
     [providerId]
   )
 
@@ -492,9 +475,10 @@ export async function refreshSellingPrices(provider: ProviderRow): Promise<Refre
   try {
     // เกมที่ผูกกับเจ้านี้และยังเปิดขายอยู่ (ปิดขายไปแล้วไม่ต้องเสียเวลาดึง)
     const selling = await q<{ game_id: string }>(
-      `select distinct provider_game_id as game_id
-         from products
-        where provider_id = $1 and is_active and provider_game_id is not null`,
+      `select distinct p.provider_game_id as game_id
+         from products p
+        where p.provider_id = $1 and p.provider_game_id is not null
+          and ${ON_SITE}`,
       [provider.id]
     )
     if (selling.length === 0) {
@@ -592,7 +576,7 @@ export async function coverageGaps(): Promise<CoverageGap[]> {
             and c.server_id = p.provider_server_id
             and c.pack_code = p.provider_sku
             and c.product_type = coalesce(p.provider_product_type, '')
-          where p.is_active and g.is_published
+          where g.is_published and g.is_active and p.is_published and p.is_active
           group by g.name
        ) t
        where t.manual > 0 or t.unmatched > 0
@@ -624,7 +608,8 @@ export async function providersInUse(): Promise<ProviderRow[]> {
     `select distinct pr.id, pr.name, pr.base_url, pr.username, pr.api_key, pr.kind, pr.sandbox
        from api_providers pr
        join products p on p.provider_id = pr.id
-      where p.is_active and p.provider_game_id is not null
+      where p.provider_game_id is not null
+        and ${ON_SITE}
       order by pr.id`
   )
 }

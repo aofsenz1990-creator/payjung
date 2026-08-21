@@ -891,8 +891,10 @@ export default async function StorefrontPage({
               <div className="mt-3 rounded-lg border border-ink-700/70 bg-ink-850/60 px-3 py-2 text-xs leading-relaxed">
                 <span className="font-medium text-slate-200">🕒 รอบอัตโนมัติ</span>{' '}
                 <span className="text-mute">
-                  ระบบดึงราคาของทุกเจ้าที่มีของขายอยู่ให้เองทุกวันตี 2 ครึ่ง
-                  แล้วเอาราคาขึ้นหน้าเว็บให้เลย (ยกเว้นแพ็กที่ขายต่ำกว่าทุน)
+                  ระบบดึงราคาให้เองทุกวันตี 2 ครึ่ง โดยดูจาก{' '}
+                  <b className="text-slate-200">แพ็กที่แสดงอยู่บนหน้าเว็บลูกค้าจริง</b>{' '}
+                  แล้วเอาราคาขึ้นหน้าเว็บให้เลย (ยกเว้นแพ็กที่ขายต่ำกว่าทุน) ·
+                  แพ็กที่ยังไม่ได้เปิดขาย ระบบไม่แตะและไม่รายงานถึง
                 </span>
                 {lastRefresh ? (
                   <>

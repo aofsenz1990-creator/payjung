@@ -19,7 +19,6 @@ function applied(over = {}) {
     repaired: [],
     unmatched: 0,
     suspect: [],
-    newPacks: { count: 0, sample: [] },
     summary: '',
     ...over,
   }
@@ -183,26 +182,6 @@ check('แพ็กที่ขายต่ำกว่าทุนต้อง�
   assert.match(text, /⛔ ไม่ขึ้นให้ 1 แพ็ก เพราะราคาขายต่ำกว่าทุน/)
   assert.match(text, /RoV 6,200 คูปอง — ทุน 4,700 ขาย 226/)
   assert.match(text, /รวม 1 แพ็กที่ยังไม่ขึ้นเว็บเพราะขายต่ำกว่าทุน/)
-})
-
-check('แพ็กใหม่ที่ปลายทางเพิ่มมา ต้องบอกให้รู้ว่ามีของรออยู่', () => {
-  const text = buildRunReport(
-    run({
-      results: [
-        result({
-          applied: applied({
-            newPacks: {
-              count: 7,
-              sample: [{ game: 'RoV Mobile', pack: '9,300 คูปอง', price: 7050 }],
-            },
-          }),
-        }),
-      ],
-    })
-  )
-  assert.match(text, /🆕 ปลายทางมีแพ็กใหม่ในเกมที่ขายอยู่ 7 รายการ/)
-  assert.ok(text.includes('RoV Mobile — 9,300 คูปอง (ทุน 7,050)'), 'ต้องมีตัวอย่างแพ็กใหม่พร้อมราคาทุน')
-  assert.match(text, /นำเข้าเกม/)
 })
 
 console.log(`\nผ่านทั้งหมด ${pass} ข้อ`)
