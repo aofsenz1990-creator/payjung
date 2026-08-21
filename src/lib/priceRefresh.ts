@@ -7,6 +7,9 @@ import { ProviderError, type CatalogEntry } from '@/lib/providers/types'
 import { notifyLine } from '@/lib/line'
 import { friendlyError } from '@/lib/form'
 import { dedupeEntries, dedupeNote, type CatalogEntryRow } from '@/lib/catalogDedupe'
+import { buildRunReport } from '@/lib/priceReport'
+
+export { buildRunReport } from '@/lib/priceReport'
 
 export type { CatalogEntryRow } from '@/lib/catalogDedupe'
 
@@ -21,8 +24,8 @@ export type { CatalogEntryRow } from '@/lib/catalogDedupe'
 
 export type AppliedChanges = {
   updated: number
-  /** ตัวอย่างต้นทุนที่เปลี่ยน (มากสุดก่อน) ไว้รายงานให้เห็นว่ากระทบอะไร */
-  changes: Array<{ name: string; old_cost: number; new_cost: number }>
+  /** ต้นทุนที่เปลี่ยน (มากสุดก่อน) พร้อมชื่อเกม ไว้รายงานให้เห็นว่ากระทบอะไร */
+  changes: Array<{ game: string; name: string; old_cost: number; new_cost: number }>
   /** แพ็กที่ตอนนี้ขายต่ำกว่าทุน — เกิดกับแพ็กที่ตั้งราคาเองแล้วปลายทางขึ้นราคา */
   losing: Array<{ name: string; cost_price: number; sell_price: number }>
   /** แพ็กที่ถูกซ่อม "ชนิดสินค้า" ให้ตรงกับปลายทาง (เคยจับคู่ผิดตัวอยู่) */
@@ -141,9 +144,11 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
   )
 
   // ดูก่อนว่าต้นทุนของแพ็กไหนเปลี่ยนบ้าง จะได้รายงานให้เห็นว่ากระทบอะไร
-  const changes = await q<{ name: string; old_cost: number; new_cost: number }>(
-    `select p.name, p.cost_price::float8 as old_cost, c.pack_price::float8 as new_cost
+  const changes = await q<{ game: string; name: string; old_cost: number; new_cost: number }>(
+    `select coalesce(g.name, '(ไม่ทราบเกม)') as game, p.name,
+            p.cost_price::float8 as old_cost, c.pack_price::float8 as new_cost
        from products p
+       left join games g on g.id = p.game_id
        join provider_catalog c
          on c.provider_id = p.provider_id
         and c.game_id = p.provider_game_id
@@ -152,7 +157,7 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
         and c.product_type = coalesce(p.provider_product_type, '')
       where p.provider_id = $1 and p.cost_price is distinct from c.pack_price
       order by abs(c.pack_price - p.cost_price) desc
-      limit 5`,
+      limit 40`,
     [providerId]
   )
 
@@ -246,11 +251,12 @@ export async function applyCatalogToProducts(providerId: number): Promise<Applie
   )
 
   const detail = changes
+    .slice(0, 5)
     .map(
       (c) =>
         `${c.name} ${c.old_cost.toLocaleString('th-TH')}→${c.new_cost.toLocaleString('th-TH')}`
     )
-    .join(' · ')
+    .join(' · ') + (changes.length > 5 ? ` และอีก ${changes.length - 5} รายการ` : '')
 
   const warn =
     losing.length > 0
@@ -566,92 +572,14 @@ export async function lastRefreshRun(): Promise<LastRefreshRun | null> {
 }
 
 /**
- * ส่งรายงานรอบอัตโนมัติเข้า LINE
+ * ส่งรายงานรอบอัตโนมัติเข้า LINE — ส่งทุกวันเสมอ ไม่ว่าจะมีอะไรเปลี่ยนหรือไม่
  *
- * เงียบเมื่อ "ทำครบทุกเจ้าและไม่มีอะไรเปลี่ยน" เพราะถ้าส่งทุกวันทั้งที่ไม่มีอะไร
- * คนจะเลิกอ่าน แล้ววันที่มีเรื่องจริง ๆ ก็จะถูกกวาดผ่านไปด้วย
+ * กลืน error ไว้ ส่งไม่สำเร็จไม่ควรทำให้รอบอัตโนมัติล้ม เพราะราคาอัปเดตไปเรียบร้อยแล้ว
  */
 export async function notifyRun(run: DailyRunResult, opts?: { chained?: boolean }) {
-  const bad = run.results.filter((r) => !r.ok)
-  const changed = run.results.filter((r) => (r.applied?.updated ?? 0) > 0)
-  const noted = run.results.filter((r) => r.note)
-  const odd = run.results.filter(
-    (r) =>
-      (r.applied?.repaired.length ?? 0) > 0 ||
-      (r.applied?.unmatched ?? 0) > 0 ||
-      (r.applied?.suspect.length ?? 0) > 0
-  )
-  const quiet =
-    bad.length === 0 &&
-    changed.length === 0 &&
-    noted.length === 0 &&
-    odd.length === 0 &&
-    run.pending.length === 0
-  if (quiet) return
-
-  const lines: string[] = ['🕒 อัปเดตราคาทุนอัตโนมัติประจำวัน']
-
-  for (const r of run.results) {
-    if (!r.ok) {
-      lines.push(`❌ ${r.provider}: ${r.error}`)
-      continue
-    }
-    const n = r.applied?.updated ?? 0
-    lines.push(
-      n > 0
-        ? `✅ ${r.provider}: อัปเดต ${n} แพ็กเกจ (${r.games} เกม)`
-        : `• ${r.provider}: ราคาตรงอยู่แล้ว (${r.games} เกม)`
-    )
-    if (r.note) lines.push(`   ⚠️ ${r.note}`)
-    if ((r.applied?.repaired.length ?? 0) > 0) {
-      lines.push(`   🔧 ซ่อมชนิดสินค้าที่จับคู่ผิดตัว ${r.applied!.repaired.length} แพ็ก`)
-    }
-    if ((r.applied?.unmatched ?? 0) > 0) {
-      lines.push(`   ⚠️ อีก ${r.applied!.unmatched} แพ็กหาคู่ในรายการปลายทางไม่เจอ ราคาทุนค้างของเก่า`)
-    }
-    for (const x of r.applied?.suspect ?? []) {
-      lines.push(`   ❗ ${x.name} อาจจับคู่ข้ามเกม — เกมเรา "${x.our_game}" ไปคว้าของ "${x.their_game}"`)
-    }
-  }
-
-  if (run.pendingNames.length > 0) {
-    lines.push(
-      '',
-      opts?.chained
-        ? `⏳ ยังไม่ได้ทำในรอบนี้: ${run.pendingNames.join(', ')} — ระบบจุดรอบถัดไปให้ทำต่อแล้ว`
-        : `❗ ยังไม่ได้อัปเดต: ${run.pendingNames.join(', ')} — เวลาหมดและต่อรอบถัดไปไม่ได้ ` +
-          `ต้องเข้าหลังร้านกดปุ่ม "ดึงราคาเฉพาะที่เปิดขาย" ของเจ้านี้เอง`
-    )
-  }
-
-  // รายละเอียดราคาที่เปลี่ยนกับแพ็กที่ขายต่ำกว่าทุน คือส่วนที่ต้องลงมือแก้จริง
-  for (const r of changed) {
-    const applied = r.applied!
-    if (applied.changes.length > 0) {
-      lines.push('', `💰 ${r.provider} — ต้นทุนที่เปลี่ยน:`)
-      for (const c of applied.changes) {
-        const arrow = c.new_cost > c.old_cost ? '▲' : '▼'
-        lines.push(
-          `${arrow} ${c.name}: ${c.old_cost.toLocaleString('th-TH')} → ` +
-            `${c.new_cost.toLocaleString('th-TH')} บาท`
-        )
-      }
-    }
-    if (applied.losing.length > 0) {
-      lines.push('', `⚠️ ${r.provider} — ขายต่ำกว่าทุน ${applied.losing.length} แพ็ก ต้องรีบแก้:`)
-      for (const l of applied.losing) {
-        lines.push(`• ${l.name} — ทุน ${l.cost_price} ขาย ${l.sell_price}`)
-      }
-    }
-  }
-
-  if (changed.length > 0) {
-    lines.push('', 'อย่าลืมกด "อัปเดตราคาขึ้นหน้าเว็บ" ให้ลูกค้าเห็นราคาใหม่')
-  }
-
   try {
-    await notifyLine(lines.join('\n'))
+    await notifyLine(buildRunReport(run, opts))
   } catch {
-    // แจ้งเตือนไม่สำเร็จไม่ควรทำให้รอบอัตโนมัติล้ม ราคาอัปเดตไปแล้ว
+    // ส่งไม่ได้ก็ไม่เป็นไร ผลรอบล่าสุดยังดูได้จากหน้าหลังร้าน
   }
 }
